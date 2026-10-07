@@ -12,8 +12,21 @@
     background-color: var(--bg-dark);
     color: #c9d1d9;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-    user-select: none;
     overflow: hidden;
+    margin: 0;
+    padding: 0;
+    width: 100vw;
+    height: 100vh;
+  }
+
+  button, input, select, textarea, [role="button"] {
+    -webkit-app-region: no-drag !important;
+    pointer-events: auto !important;
+  }
+
+  input, textarea {
+    cursor: text !important;
+    user-select: text !important;
   }
 
   /* Custom subtle scrollbars */

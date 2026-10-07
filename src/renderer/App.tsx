@@ -5,6 +5,7 @@ import { JulesPanel } from './components/layout/JulesPanel';
 import { ChatStream } from './components/chat/ChatStream';
 import { ChatInput } from './components/chat/ChatInput';
 import { SettingsModal } from './components/settings/SettingsModal';
+import { api } from './api';
 import type { AppSettings, ChatSession, AppMode, StreamTokenPayload, ToolCallPayload } from '@/shared/types';
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -22,7 +23,13 @@ const DEFAULT_SETTINGS: AppSettings = {
 
 export const App: React.FC = () => {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
-  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [availableModels, setAvailableModels] = useState<string[]>([
+    'gpt-4o',
+    'gpt-4o-mini',
+    'claude-3-5-sonnet',
+    'gemini-2.5-pro',
+    'gemini-2.5-flash',
+  ]);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [workspaceName, setWorkspaceName] = useState<string>('');
@@ -34,48 +41,62 @@ export const App: React.FC = () => {
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
 
-  // Load initial settings, models & sessions
+  // Load initial settings, workspace & sessions concurrently
   useEffect(() => {
+    let isMounted = true;
+
     const init = async () => {
       try {
-        const s = await window.electronAPI.getSettings();
-        setSettings(s);
+        const [s, ws, sessList] = await Promise.all([
+          api.getSettings().catch(() => DEFAULT_SETTINGS),
+          api.getWorkspaceInfo().catch(() => null),
+          api.listSessions().catch(() => []),
+        ]);
 
-        const ws = await window.electronAPI.getWorkspaceInfo();
+        if (!isMounted) return;
+
+        if (s) setSettings(s);
         if (ws) setWorkspaceName(ws.name);
 
-        const models = await window.electronAPI.getAvailableModels();
-        setAvailableModels(models);
-
-        const sessList = await window.electronAPI.listSessions(s.activeWorkspacePath || undefined);
-        setSessions(sessList);
-
-        if (sessList.length > 0) {
+        if (sessList && sessList.length > 0) {
+          setSessions(sessList);
           setActiveSessionId(sessList[0].id);
         } else {
-          // Create initial session
-          const newSess = await window.electronAPI.createSession('Initial Task', s.mode);
-          setSessions([newSess]);
-          setActiveSessionId(newSess.id);
+          const newSess = await api.createSession('Initial Task', s?.mode || 'standard');
+          if (isMounted) {
+            setSessions([newSess]);
+            setActiveSessionId(newSess.id);
+          }
         }
+
+        // Fetch models non-blockingly
+        api.getAvailableModels().then((models) => {
+          if (isMounted && models && models.length > 0) {
+            setAvailableModels(models);
+          }
+        }).catch(() => {});
       } catch (err) {
         console.error('Initialization error:', err);
       }
     };
 
     init();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // Listen for IPC streaming tokens and tool calls
   useEffect(() => {
-    const unsubToken = window.electronAPI.onStreamToken((payload: StreamTokenPayload) => {
+    const unsubToken = api.onStreamToken((payload: StreamTokenPayload) => {
       if (payload.sessionId === activeSessionId) {
         setIsStreaming(true);
         setStreamingContent((prev) => prev + payload.delta);
       }
     });
 
-    const unsubTool = window.electronAPI.onToolCallUpdate((payload: ToolCallPayload) => {
+    const unsubTool = api.onToolCallUpdate((payload: ToolCallPayload) => {
       if (payload.sessionId === activeSessionId) {
         setSessions((prev) =>
           prev.map((s) => {
@@ -98,12 +119,11 @@ export const App: React.FC = () => {
       }
     });
 
-    const unsubCompleted = window.electronAPI.onExecutionCompleted((sessId: string) => {
+    const unsubCompleted = api.onExecutionCompleted((sessId: string) => {
       if (sessId === activeSessionId) {
         setIsStreaming(false);
         setStreamingContent('');
-        // Refresh session messages
-        window.electronAPI.listSessions().then((list: ChatSession[]) => setSessions(list));
+        api.listSessions().then((list: ChatSession[]) => setSessions(list));
       }
     });
 
@@ -117,12 +137,12 @@ export const App: React.FC = () => {
   const activeSession = sessions.find((s) => s.id === activeSessionId);
 
   const handleSelectWorkspace = async () => {
-    const selected = await window.electronAPI.selectDirectory();
+    const selected = await api.selectDirectory();
     if (selected) {
       setSettings((prev) => ({ ...prev, activeWorkspacePath: selected }));
-      const ws = await window.electronAPI.getWorkspaceInfo();
+      const ws = await api.getWorkspaceInfo();
       if (ws) setWorkspaceName(ws.name);
-      const list = await window.electronAPI.listSessions(selected);
+      const list = await api.listSessions(selected);
       setSessions(list);
       if (list.length > 0) setActiveSessionId(list[0].id);
     }
@@ -130,7 +150,7 @@ export const App: React.FC = () => {
 
   const handleToggleMode = async (mode: AppMode) => {
     setSettings((prev) => ({ ...prev, mode }));
-    await window.electronAPI.saveSettings({ mode });
+    await api.saveSettings({ mode });
     if (activeSession) {
       activeSession.mode = mode;
     }
@@ -138,17 +158,17 @@ export const App: React.FC = () => {
 
   const handleChangeModel = async (model: string, isAuto: boolean) => {
     setSettings((prev) => ({ ...prev, selectedModel: model, isAutoModel: isAuto }));
-    await window.electronAPI.saveSettings({ selectedModel: model, isAutoModel: isAuto });
+    await api.saveSettings({ selectedModel: model, isAutoModel: isAuto });
   };
 
   const handleCreateSession = async () => {
-    const newSession = await window.electronAPI.createSession('New Task', settings.mode);
+    const newSession = await api.createSession('New Task', settings.mode);
     setSessions((prev) => [newSession, ...prev]);
     setActiveSessionId(newSession.id);
   };
 
   const handleDeleteSession = async (id: string) => {
-    await window.electronAPI.deleteSession(id);
+    await api.deleteSession(id);
     setSessions((prev) => prev.filter((s) => s.id !== id));
     if (activeSessionId === id) {
       const remaining = sessions.filter((s) => s.id !== id);
@@ -159,7 +179,6 @@ export const App: React.FC = () => {
   const handleSendMessage = async (text: string) => {
     if (!activeSessionId) return;
 
-    // Optimistically add user message to local state
     const userMsg = {
       id: `temp_${Date.now()}`,
       sessionId: activeSessionId,
@@ -175,23 +194,23 @@ export const App: React.FC = () => {
     setIsStreaming(true);
     setStreamingContent('');
 
-    await window.electronAPI.sendMessage(activeSessionId, text);
+    await api.sendMessage(activeSessionId, text);
   };
 
   const handleCancelExecution = async () => {
     if (!activeSessionId) return;
-    await window.electronAPI.cancelExecution(activeSessionId);
+    await api.cancelExecution(activeSessionId);
     setIsStreaming(false);
   };
 
   const handleSaveSettings = async (partial: Partial<AppSettings>) => {
     const updated = { ...settings, ...partial };
     setSettings(updated);
-    await window.electronAPI.saveSettings(partial);
+    await api.saveSettings(partial);
   };
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-[#0d1117] text-[#c9d1d9] overflow-hidden font-sans">
+    <div className="flex flex-col h-screen w-full bg-[#0d1117] text-[#c9d1d9] overflow-hidden font-sans">
       <Header
         settings={settings}
         availableModels={availableModels}

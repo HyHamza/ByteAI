@@ -35,6 +35,11 @@ export class LLMClient {
 
   public async fetchAvailableModels(): Promise<string[]> {
     const settings = DataStore.getInstance().getSettings();
+    const defaults = ['gpt-4o', 'gpt-4o-mini', 'claude-3-5-sonnet', 'gemini-2.5-pro', 'gemini-2.5-flash'];
+    if (!settings.apiKey) {
+      return defaults;
+    }
+
     const baseUrl = settings.apiBaseUrl.replace(/\/+$/, '');
     const url = `${baseUrl}/models`;
 
@@ -49,10 +54,9 @@ export class LLMClient {
       if (resp && Array.isArray(resp.data)) {
         return resp.data.map((m: any) => m.id || m.name);
       }
-      return ['gpt-4o', 'gpt-4o-mini', 'claude-3-5-sonnet', 'gemini-2.5-pro', 'gemini-2.5-flash'];
+      return defaults;
     } catch (err) {
-      console.warn('Could not auto-fetch models, returning defaults:', err);
-      return ['gpt-4o', 'gpt-4o-mini', 'claude-3-5-sonnet', 'gemini-2.5-pro', 'gemini-2.5-flash'];
+      return defaults;
     }
   }
 
@@ -196,6 +200,9 @@ export class LLMClient {
             reject(new Error(`Failed to parse response: ${body}`));
           }
         });
+      });
+      req.setTimeout(3500, () => {
+        req.destroy(new Error('Request timed out after 3.5s'));
       });
       req.on('error', reject);
       req.end();

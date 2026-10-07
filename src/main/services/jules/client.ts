@@ -56,6 +56,10 @@ export class JulesClient {
         });
       });
 
+      req.setTimeout(4000, () => {
+        req.destroy(new Error('Jules request timed out after 4s'));
+      });
+
       req.on('error', (err) => reject(err));
 
       if (options.body) {
@@ -66,20 +70,28 @@ export class JulesClient {
   }
 
   public async listSessions(): Promise<JulesSessionSummary[]> {
-    const resp = await this.request<{ sessions?: any[] }>('/sessions?pageSize=30');
-    if (!resp.sessions) return [];
+    const settings = DataStore.getInstance().getSettings();
+    if (!settings.julesApiKey && !process.env.JULES_API_KEY) {
+      return [];
+    }
+    try {
+      const resp = await this.request<{ sessions?: any[] }>('/sessions?pageSize=30');
+      if (!resp.sessions) return [];
 
-    return resp.sessions.map((s) => ({
-      id: s.name ? s.name.replace('sessions/', '') : s.id,
-      title: s.title || s.name,
-      state: s.state || 'STATE_UNSPECIFIED',
-      repo: s.sourceContext?.github?.repo || '',
-      branch: s.sourceContext?.github?.startingBranch || 'main',
-      createdAt: s.createTime || new Date().toISOString(),
-      updatedAt: s.updateTime || new Date().toISOString(),
-      prUrl: s.outputs?.pullRequest?.url,
-      prNumber: s.outputs?.pullRequest?.number,
-    }));
+      return resp.sessions.map((s) => ({
+        id: s.name ? s.name.replace('sessions/', '') : s.id,
+        title: s.title || s.name,
+        state: s.state || 'STATE_UNSPECIFIED',
+        repo: s.sourceContext?.github?.repo || '',
+        branch: s.sourceContext?.github?.startingBranch || 'main',
+        createdAt: s.createTime || new Date().toISOString(),
+        updatedAt: s.updateTime || new Date().toISOString(),
+        prUrl: s.outputs?.pullRequest?.url,
+        prNumber: s.outputs?.pullRequest?.number,
+      }));
+    } catch (_) {
+      return [];
+    }
   }
 
   public async getSession(sessionId: string): Promise<any> {

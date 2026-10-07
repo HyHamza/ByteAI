@@ -9,23 +9,26 @@ import type { AppMode, ChatSession } from '../shared/types';
 let mainWindow: BrowserWindow | null = null;
 
 function createWindow() {
+  const preloadPath = path.join(__dirname, '../preload/preload.js');
+
   mainWindow = new BrowserWindow({
     width: 1360,
     height: 900,
     minWidth: 1024,
     minHeight: 700,
     backgroundColor: '#0d1117',
-    titleBarStyle: 'hidden',
-    titleBarOverlay: {
-      color: '#0d1117',
-      symbolColor: '#c9d1d9',
-      height: 38,
-    },
+    autoHideMenuBar: true,
+    show: false,
     webPreferences: {
-      preload: path.join(__dirname, '../preload/preload.js'),
+      preload: preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
+      backgroundThrottling: false,
     },
+  });
+
+  mainWindow.once('ready-to-show', () => {
+    mainWindow?.show();
   });
 
   if (process.env.VITE_DEV_SERVER_URL) {

@@ -10,6 +10,7 @@ import {
   AlertCircle 
 } from 'lucide-react';
 import type { JulesSessionSummary, JulesActivity } from '@/shared/types';
+import { api } from '../../api';
 
 interface JulesPanelProps {
   onClose: () => void;
@@ -24,7 +25,7 @@ export const JulesPanel: React.FC<JulesPanelProps> = ({ onClose }) => {
   const fetchSessions = async () => {
     setIsLoading(true);
     try {
-      const list = await window.electronAPI.getJulesSessions();
+      const list = await api.getJulesSessions().catch(() => []);
       setSessions(list);
       if (list.length > 0 && !selectedSessionId) {
         setSelectedSessionId(list[0].id);
@@ -38,7 +39,7 @@ export const JulesPanel: React.FC<JulesPanelProps> = ({ onClose }) => {
 
   const fetchActivities = async (id: string) => {
     try {
-      const acts = await window.electronAPI.getJulesActivities(id);
+      const acts = await api.getJulesActivities(id).catch(() => []);
       setActivities(acts);
     } catch (err) {
       console.error('Failed to load Jules activities:', err);
@@ -49,7 +50,7 @@ export const JulesPanel: React.FC<JulesPanelProps> = ({ onClose }) => {
     fetchSessions();
 
     // Listen for live updates
-    const cleanup = window.electronAPI.onJulesUpdate((update: JulesSessionSummary) => {
+    const cleanup = api.onJulesUpdate((update: JulesSessionSummary) => {
       setSessions((prev) => {
         const idx = prev.findIndex((s) => s.id === update.id);
         if (idx !== -1) {
