@@ -33,26 +33,50 @@ export class LLMClient {
     return LLMClient.instance;
   }
 
-  public async fetchAvailableModels(): Promise<string[]> {
+  private getNormalizedConfig() {
     const settings = DataStore.getInstance().getSettings();
-    const defaults = ['gpt-4o', 'gpt-4o-mini', 'claude-3-5-sonnet', 'gemini-2.5-pro', 'gemini-2.5-flash'];
-    if (!settings.apiKey) {
+    let baseUrl = (settings.apiBaseUrl || 'https://api.openai.com/v1').trim().replace(/\/+$/, '');
+    if (!baseUrl.endsWith('/v1')) {
+      baseUrl = `${baseUrl}/v1`;
+    }
+
+    let apiKey = (settings.apiKey || '').trim();
+    if (apiKey.startsWith('reellmapi-')) {
+      apiKey = 'f' + apiKey;
+    }
+
+    let modelToUse = settings.selectedModel;
+    if (settings.isAutoModel) {
+      if (baseUrl.includes('31415') || baseUrl.includes('freellm')) {
+        modelToUse = 'auto';
+      } else {
+        modelToUse = 'gpt-4o';
+      }
+    }
+
+    return { baseUrl, apiKey, modelToUse, isAutoModel: settings.isAutoModel };
+  }
+
+  public async fetchAvailableModels(): Promise<string[]> {
+    const { baseUrl, apiKey } = this.getNormalizedConfig();
+    const defaults = ['auto', 'gpt-4o', 'gpt-4o-mini', 'claude-3-5-sonnet', 'gemini-2.5-pro', 'gemini-2.5-flash'];
+    if (!apiKey) {
       return defaults;
     }
 
-    const baseUrl = settings.apiBaseUrl.replace(/\/+$/, '');
     const url = `${baseUrl}/models`;
 
     try {
       const resp = await this.rawRequest<any>(url, {
         method: 'GET',
         headers: {
-          Authorization: `Bearer ${settings.apiKey}`,
+          Authorization: `Bearer ${apiKey}`,
         },
       });
 
       if (resp && Array.isArray(resp.data)) {
-        return resp.data.map((m: any) => m.id || m.name);
+        const models = resp.data.map((m: any) => m.id || m.name);
+        return Array.from(new Set(['auto', ...models]));
       }
       return defaults;
     } catch (err) {
@@ -65,15 +89,8 @@ export class LLMClient {
     tools: LLMToolDefinition[] | undefined,
     callbacks: LLMStreamCallbacks
   ): Promise<{ content: string; toolCalls: any[] }> {
-    const settings = DataStore.getInstance().getSettings();
-    const baseUrl = settings.apiBaseUrl.replace(/\/+$/, '');
+    const { baseUrl, apiKey, modelToUse } = this.getNormalizedConfig();
     const url = `${baseUrl}/chat/completions`;
-
-    // Smart Auto Router selection
-    let modelToUse = settings.selectedModel;
-    if (settings.isAutoModel) {
-      modelToUse = 'gpt-4o'; // Default smart model for autonomous reasoning
-    }
 
     const payload: any = {
       model: modelToUse,
@@ -99,7 +116,7 @@ export class LLMClient {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${settings.apiKey || 'dummy-key'}`,
+          Authorization: `Bearer ${apiKey || 'dummy-key'}`,
         },
       };
 

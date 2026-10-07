@@ -90,16 +90,38 @@ export class AgentOrchestrator {
       let streamedContent = '';
 
       // Stream assistant response
-      const result = await llmClient.chatStream(
-        llmMessages,
-        toolDefs,
-        {
-          onToken: (token) => {
-            streamedContent += token;
-            this.emitToken(sessionId, token, assistantMsgId);
-          },
-        }
-      );
+      let result: { content: string; toolCalls: any[] };
+      try {
+        result = await llmClient.chatStream(
+          llmMessages,
+          toolDefs,
+          {
+            onToken: (token) => {
+              streamedContent += token;
+              this.emitToken(sessionId, token, assistantMsgId);
+            },
+          }
+        );
+      } catch (err: any) {
+        const errorText = `⚠️ LLM Error: ${err?.message || String(err)}\n\nPlease check your API Base URL, API Key, or Model in Settings.`;
+        this.emitToken(sessionId, errorText, assistantMsgId);
+
+        const errorMsg: ChatMessage = {
+          id: assistantMsgId,
+          sessionId,
+          role: 'assistant',
+          content: errorText,
+          timestamp: Date.now(),
+          toolCalls: [],
+        };
+        store.addMessage(sessionId, errorMsg);
+        break;
+      }
+
+      if (!result.content && (!result.toolCalls || result.toolCalls.length === 0)) {
+        result.content = '(No response text returned by model)';
+        this.emitToken(sessionId, result.content, assistantMsgId);
+      }
 
       // Save assistant message
       const assistantMsg: ChatMessage = {
