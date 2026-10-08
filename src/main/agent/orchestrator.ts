@@ -74,6 +74,7 @@ export class AgentOrchestrator {
     this.runningSessions.add(sessionId);
     this.emitAgentStatus(sessionId, 'running');
 
+    const turnStartTime = Date.now();
     try {
 
     // Save user message
@@ -252,6 +253,7 @@ Git Repository: ${activeRepo} (${activeBranch})`;
           role: 'assistant',
           content: result.content || '',
           timestamp: Date.now(),
+          executionDuration: Math.max(1, Math.round((Date.now() - turnStartTime) / 1000)),
         };
         store.addMessage(sessionId, finalMsg);
         this.emitSessionsUpdated();
@@ -309,6 +311,7 @@ Git Repository: ${activeRepo} (${activeBranch})`;
         content: result.content || '',
         timestamp: Date.now(),
         toolCalls: stepToolRecords,
+        executionDuration: Math.max(1, Math.round((Date.now() - turnStartTime) / 1000)),
       };
       store.addMessage(sessionId, stepMsg);
       this.emitSessionsUpdated();

@@ -32,6 +32,7 @@ export interface ChatMessage {
   timestamp: number;
   toolCalls?: ToolExecutionRecord[];
   isStreaming?: boolean;
+  executionDuration?: number;
 }
 
 export interface ToolExecutionRecord {
