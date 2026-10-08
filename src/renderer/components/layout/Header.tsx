@@ -49,7 +49,7 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Top Application Menu Bar (Antigravity | File | View | Window) */}
       <div className="h-6 flex items-center justify-between px-3 text-[11px] text-[#8e9196] border-b border-[#1a1b1e]">
         <div className="flex items-center space-x-4">
-          <span className="font-medium text-[#c4c7cf]">Antigravity</span>
+          <span className="font-semibold text-white tracking-wide">Byte</span>
           <button 
             onClick={onSelectWorkspace} 
             className="hover:text-white transition-colors"

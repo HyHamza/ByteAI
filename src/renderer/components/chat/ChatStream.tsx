@@ -61,7 +61,7 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
             <div className="flex-1 overflow-hidden space-y-2">
               <div className="flex items-center space-x-2">
                 <span className="font-medium text-[12px] text-[#c4c7cf]">
-                  {mode === 'jules' ? 'Jules Lead' : 'Antigravity'}
+                  Byte
                 </span>
                 <span className="text-[10px] text-[#60646c]">
                   {new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -147,7 +147,7 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
           <div className="flex-1 space-y-2">
             <div className="flex items-center space-x-2 text-[12px] text-[#8e9196]">
               <span className="font-medium text-[#c4c7cf]">
-                {mode === 'jules' ? 'Jules Lead' : 'Antigravity'}
+                Byte
               </span>
               <span className="text-[11px] text-[#60646c] italic">Thinking...</span>
             </div>
