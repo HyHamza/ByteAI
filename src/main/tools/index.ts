@@ -61,6 +61,40 @@ export const STANDARD_TOOL_DEFS: LLMToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'replace_file_content',
+      description: 'Replace content in a file. You can either specify target_content to match and replace, or specify start_line and end_line with replacement_content to replace specific lines.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Target file path' },
+          target_content: { type: 'string', description: 'Exact text segment to find and replace' },
+          replacement_content: { type: 'string', description: 'The replacement text' },
+          start_line: { type: 'number', description: 'Optional 1-indexed start line to replace' },
+          end_line: { type: 'number', description: 'Optional 1-indexed end line to replace' },
+        },
+        required: ['path', 'replacement_content'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'search_codebase',
+      description: 'Search for a string or regex pattern across all files in the local codebase, returning matching file paths, line numbers, and contents.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'The text snippet or pattern to search for' },
+          file_pattern: { type: 'string', description: 'Optional filename filter (e.g. *.ts or src/)' },
+          max_results: { type: 'number', description: 'Maximum number of results to return (default: 30)' },
+        },
+        required: ['query'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'run_terminal_command',
       description: 'Execute a shell command in the current workspace directory and capture stdout and stderr.',
       parameters: {
@@ -235,6 +269,40 @@ export const JULES_TOOL_DEFS: LLMToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'replace_file_content',
+      description: 'Replace content in a local file. You can either specify target_content to match and replace, or specify start_line and end_line with replacement_content to replace specific lines.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Target file path' },
+          target_content: { type: 'string', description: 'Exact text segment to find and replace' },
+          replacement_content: { type: 'string', description: 'The replacement text' },
+          start_line: { type: 'number', description: 'Optional 1-indexed start line to replace' },
+          end_line: { type: 'number', description: 'Optional 1-indexed end line to replace' },
+        },
+        required: ['path', 'replacement_content'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'search_codebase',
+      description: 'Search for a string or regex pattern across all files in the local codebase, returning matching file paths, line numbers, and contents.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'The text snippet or pattern to search for' },
+          file_pattern: { type: 'string', description: 'Optional filename filter (e.g. *.ts or src/)' },
+          max_results: { type: 'number', description: 'Maximum number of results to return (default: 30)' },
+        },
+        required: ['query'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'run_terminal_command',
       description: 'Execute a shell command in the current workspace directory.',
       parameters: {
@@ -247,6 +315,75 @@ export const JULES_TOOL_DEFS: LLMToolDefinition[] = [
     },
   },
 ];
+
+function searchCodebase(
+  workspaceDir: string,
+  query: string,
+  patternStr?: string,
+  maxResults: number = 30
+): string {
+  const results: Array<{ file: string; line: number; content: string }> = [];
+  const fileRegex = patternStr ? new RegExp(patternStr.replace(/\*/g, '.*')) : null;
+
+  function traverse(dir: string) {
+    if (results.length >= maxResults) return;
+    let entries: fs.Dirent[] = [];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch (_) {
+      return;
+    }
+
+    for (const e of entries) {
+      if (results.length >= maxResults) break;
+      const name = e.name;
+      if (
+        name === 'node_modules' ||
+        name === '.git' ||
+        name === 'dist' ||
+        name === 'build' ||
+        name === '.seniorengineer' ||
+        name === '.next' ||
+        name === '.turbo'
+      ) {
+        continue;
+      }
+
+      const full = path.join(dir, name);
+      if (e.isDirectory()) {
+        traverse(full);
+      } else if (e.isFile()) {
+        if (fileRegex && !fileRegex.test(name)) continue;
+        const ext = path.extname(name).toLowerCase();
+        if (['.png', '.jpg', '.jpeg', '.gif', '.ico', '.pdf', '.zip', '.exe', '.dll', '.woff', '.woff2', '.ttf'].includes(ext)) {
+          continue;
+        }
+        try {
+          const content = fs.readFileSync(full, 'utf-8');
+          const lines = content.split('\n');
+          const lowerQ = query.toLowerCase();
+          for (let i = 0; i < lines.length; i++) {
+            if (results.length >= maxResults) break;
+            if (lines[i].toLowerCase().includes(lowerQ)) {
+              results.push({
+                file: path.relative(workspaceDir, full),
+                line: i + 1,
+                content: lines[i].trim(),
+              });
+            }
+          }
+        } catch (_) {}
+      }
+    }
+  }
+
+  traverse(workspaceDir);
+
+  if (results.length === 0) {
+    return `No matches found for "${query}" across the codebase.`;
+  }
+  return results.map((r) => `${r.file}:${r.line}: ${r.content}`).join('\n');
+}
 
 export async function executeToolCall(
   name: string,
@@ -271,8 +408,13 @@ export async function executeToolCall(
 
         const start = args.start_line ? Math.max(1, args.start_line) - 1 : 0;
         const end = args.end_line ? Math.min(lines.length, args.end_line) : lines.length;
+        const sliced = lines.slice(start, end);
 
-        return lines.slice(start, end).join('\n');
+        return sliced.map((line, idx) => `${start + idx + 1}: ${line}`).join('\n');
+      }
+
+      case 'search_codebase': {
+        return searchCodebase(workspaceDir, args.query, args.file_pattern, args.max_results || 30);
       }
 
       case 'write_file': {
@@ -282,16 +424,32 @@ export async function executeToolCall(
         return `Successfully wrote ${args.content.length} characters to ${args.path}`;
       }
 
+      case 'replace_file_content':
       case 'edit_file_content': {
         const fullPath = resolvePath(args.path);
         if (!fs.existsSync(fullPath)) {
           return `Error: File not found: ${args.path}`;
         }
         const content = fs.readFileSync(fullPath, 'utf-8');
-        if (!content.includes(args.target_content)) {
+
+        // Mode 1: By line numbers
+        if (args.start_line && args.end_line !== undefined && args.replacement_content !== undefined) {
+          const lines = content.split('\n');
+          const startIdx = Math.max(1, args.start_line) - 1;
+          const endIdx = Math.min(lines.length, args.end_line);
+          const replacementLines = args.replacement_content.split('\n');
+          lines.splice(startIdx, endIdx - startIdx, ...replacementLines);
+          fs.writeFileSync(fullPath, lines.join('\n'), 'utf-8');
+          return `Successfully replaced lines ${args.start_line}-${args.end_line} in ${args.path}`;
+        }
+
+        // Mode 2: By exact target content
+        const target = args.target_content;
+        const replacement = args.replacement_content !== undefined ? args.replacement_content : (args.new_content || '');
+        if (!target || !content.includes(target)) {
           return `Error: target_content not found in ${args.path}. Ensure exact whitespace and content match.`;
         }
-        const updated = content.replace(args.target_content, args.replacement_content);
+        const updated = content.replace(target, replacement);
         fs.writeFileSync(fullPath, updated, 'utf-8');
         return `Successfully replaced content in ${args.path}`;
       }
