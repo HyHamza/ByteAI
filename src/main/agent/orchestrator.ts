@@ -2,7 +2,7 @@ import { BrowserWindow } from 'electron';
 import type { AppMode, ChatMessage, ToolExecutionRecord } from '../../shared/types';
 import { LLMClient, type LLMMessage } from '../services/llm/client';
 import { STANDARD_TOOL_DEFS, JULES_TOOL_DEFS, executeToolCall } from '../tools';
-import { DataStore } from '../services/db/store';
+import { DataStore, isSubstantiveMessage } from '../services/db/store';
 import { detectGitRepo } from '../services/git/detector';
 
 const STANDARD_SYSTEM_PROMPT = `You are SeniorEngineer, a powerful autonomous software engineering AI assistant.
@@ -59,17 +59,31 @@ export class AgentOrchestrator {
     };
     store.addMessage(sessionId, userMsg);
 
-    // Auto-generate title if currently generic
-    const isGenericTitle = !session.title || session.title === 'New Task' || session.title === 'Initial Task' || session.title === 'New Conversation';
-    if (isGenericTitle && userText.trim()) {
-      const clean = userText.replace(/[#*`_~\[\]]/g, '').split('\n')[0].trim();
-      const fallbackTitle = clean.split(/\s+/).slice(0, 6).join(' ');
-      session.title = fallbackTitle.length > 36 ? fallbackTitle.slice(0, 36) + '...' : fallbackTitle;
-      store.saveSession(session);
-      this.emitTitleUpdated(sessionId, session.title);
+    // Auto-generate title if currently generic or placeholder
+    const isGenericTitle = !session.title || 
+      session.title === 'New Task' || 
+      session.title === 'Initial Task' || 
+      session.title === 'New Conversation' ||
+      session.title.toLowerCase() === 'hi' ||
+      session.title.toLowerCase() === 'hello' ||
+      session.title.toLowerCase().startsWith('hello! how can i assist') ||
+      session.title === 'Implement AI Chatbot';
 
-      // Concurrently generate high quality AI title in background
-      this.generateAiTitle(sessionId, userText);
+    if (isGenericTitle && userText.trim()) {
+      if (!isSubstantiveMessage(userText)) {
+        session.title = 'New Conversation';
+        store.saveSession(session);
+        this.emitTitleUpdated(sessionId, 'New Conversation');
+      } else {
+        const clean = userText.replace(/[#*`_~\[\]]/g, '').split('\n')[0].trim();
+        const fallbackTitle = clean.split(/\s+/).slice(0, 6).join(' ');
+        session.title = fallbackTitle.length > 36 ? fallbackTitle.slice(0, 36) + '...' : fallbackTitle;
+        store.saveSession(session);
+        this.emitTitleUpdated(sessionId, session.title);
+
+        // Concurrently generate high quality AI title in background
+        this.generateAiTitle(sessionId, userText);
+      }
     }
 
     const settings = store.getSettings();
@@ -275,6 +289,8 @@ Git Repository: ${activeRepo} (${activeBranch})`;
   }
 
   private async generateAiTitle(sessionId: string, userText: string) {
+    if (!isSubstantiveMessage(userText)) return;
+
     try {
       const llmClient = LLMClient.getInstance();
       const store = DataStore.getInstance();
@@ -282,22 +298,34 @@ Git Repository: ${activeRepo} (${activeBranch})`;
         [
           {
             role: 'system',
-            content: 'Generate a short, clean, descriptive 3 to 5 word task title for this coding conversation. Do NOT use quotes, brackets, or punctuation. Example titles: "Fix POS Order Editing", "Implement Auth Token Refresh", "Autonomous AI Setup". Output only the title text.',
+            content: 'You are a task title generator. Respond ONLY with a 3 to 5 word title summarizing the user\'s coding objective. Do NOT greet. Do NOT answer the question. Do NOT include quotes or punctuation. Example: "POS Order Editing Bug", "Auth Token Refresh Fix".',
           },
           {
             role: 'user',
-            content: userText.slice(0, 400),
+            content: `Task to summarize into a 3-5 word title:\n"""\n${userText.slice(0, 300)}\n"""`,
           },
         ],
         undefined,
         { onToken: () => {} }
       );
 
-      let cleanTitle = result.content
-        ? result.content.trim().replace(/^["'`]|["'`]$/g, '').replace(/[#*`_]/g, '').trim()
-        : '';
+      let cleanTitle = result.content ? result.content.trim() : '';
+
+      cleanTitle = cleanTitle
+        .split('\n')[0]
+        .replace(/^(Title:|Task:|Subject:)/i, '')
+        .replace(/^["'`]|["'`]$/g, '')
+        .replace(/[#*`_.]/g, '')
+        .trim();
+
+      // Guard against the model answering conversationally
+      const isConversational = /^(hello|hi|hey|sure|here is|as an ai|i can help|i will|how can i)/i.test(cleanTitle);
+      if (isConversational) {
+        return; // Retain the clean heuristic fallback
+      }
+
       if (cleanTitle && cleanTitle.length >= 3) {
-        if (cleanTitle.length > 40) cleanTitle = cleanTitle.slice(0, 40).trim();
+        if (cleanTitle.length > 38) cleanTitle = cleanTitle.slice(0, 38).trim();
         store.updateSession(sessionId, { title: cleanTitle });
         this.emitTitleUpdated(sessionId, cleanTitle);
       }

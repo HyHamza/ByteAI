@@ -19,6 +19,20 @@ const DEFAULT_SETTINGS: AppSettings = {
   activeWorkspacePath: null,
 };
 
+const GREETINGS = new Set([
+  'hi', 'hello', 'hey', 'yo', 'sup', 'test', 'testing',
+  'good morning', 'good evening', 'good afternoon',
+  'hi there', 'hello there', 'help', 'start', 'ok', 'okay', 'thanks', 'thank you'
+]);
+
+export function isSubstantiveMessage(text: string): boolean {
+  if (!text) return false;
+  const clean = text.trim().toLowerCase().replace(/[!.,?]/g, '');
+  if (clean.length < 3) return false;
+  if (GREETINGS.has(clean)) return false;
+  return true;
+}
+
 interface AppDatabase {
   settings: AppSettings;
   sessions: Record<string, ChatSession>;
@@ -120,11 +134,18 @@ export class DataStore {
     const list = Object.values(this.db.sessions);
     let changed = false;
     for (const s of list) {
-      const isGeneric = !s.title || s.title === 'New Task' || s.title === 'Initial Task' || s.title === 'New Conversation';
-      if (isGeneric && s.messages && s.messages.length > 0) {
-        const firstUser = s.messages.find((m) => m.role === 'user');
-        if (firstUser && firstUser.content) {
-          const clean = firstUser.content
+      const isBadTitle = !s.title || 
+        s.title === 'New Task' || 
+        s.title === 'Initial Task' || 
+        s.title.toLowerCase() === 'hi' || 
+        s.title.toLowerCase() === 'hello' || 
+        s.title.toLowerCase().startsWith('hello! how can i assist') ||
+        s.title === 'Implement AI Chatbot';
+
+      if (isBadTitle && s.messages && s.messages.length > 0) {
+        const substantiveMsg = s.messages.find((m) => m.role === 'user' && isSubstantiveMessage(m.content));
+        if (substantiveMsg && substantiveMsg.content) {
+          const clean = substantiveMsg.content
             .replace(/[#*`_~\[\]]/g, '')
             .split('\n')[0]
             .trim();
@@ -133,6 +154,9 @@ export class DataStore {
             s.title = words.length > 36 ? words.slice(0, 36) + '...' : words;
             changed = true;
           }
+        } else {
+          s.title = 'New Conversation';
+          changed = true;
         }
       }
     }

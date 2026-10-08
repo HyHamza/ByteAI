@@ -204,10 +204,27 @@ export const App: React.FC = () => {
     setSessions((prev) =>
       prev.map((s) => {
         if (s.id !== activeSessionId) return s;
-        const isGeneric = !s.title || s.title === 'New Task' || s.title === 'Initial Task' || s.title === 'New Conversation';
-        const clean = text.replace(/[#*`_~\[\]]/g, '').split('\n')[0].trim();
-        const shortTitle = clean.split(/\s+/).slice(0, 6).join(' ');
-        const newTitle = isGeneric && shortTitle ? (shortTitle.length > 36 ? shortTitle.slice(0, 36) + '...' : shortTitle) : s.title;
+        const isGeneric = !s.title || 
+          s.title === 'New Task' || 
+          s.title === 'Initial Task' || 
+          s.title === 'New Conversation' ||
+          s.title.toLowerCase() === 'hi' ||
+          s.title.toLowerCase() === 'hello' ||
+          s.title.toLowerCase().startsWith('hello! how can i assist') ||
+          s.title === 'Implement AI Chatbot';
+
+        let newTitle = s.title;
+        if (isGeneric) {
+          const lower = text.trim().toLowerCase().replace(/[!.,?]/g, '');
+          const isGreeting = ['hi', 'hello', 'hey', 'yo', 'sup', 'test'].includes(lower) || lower.length < 3;
+          if (isGreeting) {
+            newTitle = 'New Conversation';
+          } else {
+            const clean = text.replace(/[#*`_~\[\]]/g, '').split('\n')[0].trim();
+            const shortTitle = clean.split(/\s+/).slice(0, 6).join(' ');
+            newTitle = shortTitle.length > 36 ? shortTitle.slice(0, 36) + '...' : shortTitle;
+          }
+        }
         return { ...s, title: newTitle, messages: [...s.messages, userMsg] };
       })
     );
