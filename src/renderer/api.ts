@@ -140,6 +140,9 @@ const mockAPI: ElectronAPI = {
   julesCreateTask: async () => ({ sessionId: `ses_${Date.now()}` }),
   julesSendFollowup: async () => true,
   julesMergeSession: async () => ({ success: true, message: 'Merged successfully' }),
+  getRunningSessions: async () => [],
+  onAgentStatus: () => () => {},
+  onJulesAllSessions: () => () => {},
   onJulesUpdate: () => () => {},
 };
 

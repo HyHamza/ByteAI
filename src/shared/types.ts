@@ -44,6 +44,8 @@ export interface ToolExecutionRecord {
   completedAt?: number;
 }
 
+export type TaskState = 'idle' | 'running_agent' | 'waiting_jules' | 'awaiting_feedback' | 'completed';
+
 export interface ChatSession {
   id: string;
   workspacePath: string;
@@ -52,6 +54,8 @@ export interface ChatSession {
   createdAt: number;
   updatedAt: number;
   messages: ChatMessage[];
+  julesSessionId?: string;
+  taskState?: TaskState;
 }
 
 export interface JulesSessionSummary {
@@ -102,6 +106,9 @@ export interface ElectronAPI {
   onToolCallUpdate: (callback: (payload: ToolCallPayload) => void) => () => void;
   onExecutionCompleted: (callback: (sessionId: string) => void) => () => void;
   onTitleUpdated?: (callback: (payload: { sessionId: string; title: string }) => void) => () => void;
+  getRunningSessions?: () => Promise<string[]>;
+  onAgentStatus?: (callback: (payload: { sessionId: string; status: 'running' | 'idle' }) => void) => () => void;
+  onJulesAllSessions?: (callback: (sessions: JulesSessionSummary[]) => void) => () => void;
 
   // Sessions
   listSessions: (workspacePath?: string) => Promise<ChatSession[]>;

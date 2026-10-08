@@ -30,6 +30,20 @@ const api: ElectronAPI = {
     return () => ipcRenderer.removeListener('chat:title-updated', handler);
   },
 
+  getRunningSessions: () => ipcRenderer.invoke('chat:get-running-sessions'),
+
+  onAgentStatus: (callback) => {
+    const handler = (_: any, payload: { sessionId: string; status: 'running' | 'idle' }) => callback(payload);
+    ipcRenderer.on('chat:agent-status', handler);
+    return () => ipcRenderer.removeListener('chat:agent-status', handler);
+  },
+
+  onJulesAllSessions: (callback) => {
+    const handler = (_: any, sessions: JulesSessionSummary[]) => callback(sessions);
+    ipcRenderer.on('jules:all-sessions', handler);
+    return () => ipcRenderer.removeListener('jules:all-sessions', handler);
+  },
+
   // Sessions
   listSessions: (workspacePath) => ipcRenderer.invoke('sessions:list', { workspacePath }),
   createSession: (title, mode) => ipcRenderer.invoke('sessions:create', { title, mode }),

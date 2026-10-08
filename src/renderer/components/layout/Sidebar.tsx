@@ -12,14 +12,18 @@ import {
   Settings as SettingsIcon,
   Trash2,
   Sparkles,
-  Bot
+  Bot,
+  Loader2,
+  Clock3
 } from 'lucide-react';
-import type { ChatSession } from '@/shared/types';
+import type { ChatSession, JulesSessionSummary, TaskState } from '@/shared/types';
 
 interface SidebarProps {
   sessions: ChatSession[];
   activeSessionId: string | null;
   workspaceName: string;
+  runningAgentSessionIds: Set<string>;
+  julesSessions: JulesSessionSummary[];
   onSelectSession: (sessionId: string) => void;
   onCreateSession: () => void;
   onDeleteSession: (sessionId: string) => void;
@@ -38,10 +42,56 @@ function formatRelativeTime(timestamp: number): string {
   return `${days}d`;
 }
 
+function getSessionTaskState(
+  s: ChatSession,
+  runningAgentSessionIds: Set<string>,
+  julesSessions: JulesSessionSummary[]
+): {
+  state: TaskState;
+  julesSession?: JulesSessionSummary;
+} {
+  if (runningAgentSessionIds.has(s.id)) {
+    return { state: 'running_agent' };
+  }
+
+  // Find matching Jules session
+  const matched = julesSessions.find((js) => {
+    if (s.julesSessionId && s.julesSessionId === js.id) return true;
+    if (s.title && js.title && s.title.trim().toLowerCase() === js.title.trim().toLowerCase()) return true;
+    if (s.title && js.title && (s.title.includes(js.title.slice(0, 20)) || js.title.includes(s.title.slice(0, 20)))) return true;
+    return s.messages?.some((m) => m.content && m.content.includes(js.id));
+  });
+
+  if (matched) {
+    if (
+      matched.state === 'AWAITING_USER_FEEDBACK' ||
+      matched.state === 'AWAITING_USER_INPUT' ||
+      matched.state === 'PAUSED'
+    ) {
+      return { state: 'awaiting_feedback', julesSession: matched };
+    }
+    if (
+      matched.state === 'IN_PROGRESS' ||
+      matched.state === 'PLANNING' ||
+      matched.state === 'CODING' ||
+      matched.state === 'INITIALIZING'
+    ) {
+      return { state: 'waiting_jules', julesSession: matched };
+    }
+    if (matched.state === 'COMPLETED') {
+      return { state: 'completed', julesSession: matched };
+    }
+  }
+
+  return { state: 'idle' };
+}
+
 export const Sidebar: React.FC<SidebarProps> = ({
   sessions,
   activeSessionId,
   workspaceName,
+  runningAgentSessionIds,
+  julesSessions,
   onSelectSession,
   onCreateSession,
   onDeleteSession,
@@ -138,24 +188,61 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 sessions.map((s) => {
                   const isActive = s.id === activeSessionId;
                   const timeStr = formatRelativeTime(s.updatedAt || s.createdAt);
+                  const taskInfo = getSessionTaskState(s, runningAgentSessionIds, julesSessions);
+                  const isAgentRunning = taskInfo.state === 'running_agent';
+                  const isWaitingJules = taskInfo.state === 'waiting_jules';
+                  const isFeedback = taskInfo.state === 'awaiting_feedback';
+
+                  let itemStyle = 'text-[#8e9196] hover:bg-[#1a1b1f] hover:text-[#d1d4dc] border border-transparent';
+                  if (isActive) {
+                    itemStyle = 'bg-[#202227] text-white font-medium border border-[#2c2e35] shadow-sm';
+                  }
+                  if (isAgentRunning) {
+                    itemStyle = isActive 
+                      ? 'bg-[#14202e] text-white font-medium border border-cyan-500/50 shadow-sm shadow-cyan-950/30' 
+                      : 'bg-[#101924] text-cyan-200 hover:bg-[#14202e] border border-cyan-600/30';
+                  } else if (isWaitingJules) {
+                    itemStyle = isActive 
+                      ? 'bg-[#1f162e] text-white font-medium border border-purple-500/50 shadow-sm shadow-purple-950/30' 
+                      : 'bg-[#191226] text-purple-200 hover:bg-[#1f162e] border border-purple-600/30';
+                  } else if (isFeedback) {
+                    itemStyle = isActive
+                      ? 'bg-[#291e14] text-white font-medium border border-amber-500/50 shadow-sm shadow-amber-950/30'
+                      : 'bg-[#20170f] text-amber-200 hover:bg-[#291e14] border border-amber-600/40';
+                  }
+
                   return (
                     <div
                       key={s.id}
                       onClick={() => onSelectSession(s.id)}
-                      className={`group flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs cursor-pointer transition-colors ${
-                        isActive
-                          ? 'bg-[#202227] text-white font-medium'
-                          : 'text-[#8e9196] hover:bg-[#1a1b1f] hover:text-[#d1d4dc]'
-                      }`}
+                      className={`group relative flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs cursor-pointer transition-all overflow-hidden ${itemStyle}`}
                     >
                       <span className="truncate flex-1 mr-2 text-[11.5px]">
                         {s.title || 'Conversation'}
                       </span>
 
-                      <div className="flex items-center space-x-1 shrink-0">
-                        <span className="text-[10px] text-[#5e616a] group-hover:hidden">
-                          {timeStr}
-                        </span>
+                      <div className="flex items-center space-x-1.5 shrink-0">
+                        {isAgentRunning ? (
+                          <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-cyan-950/80 border border-cyan-700/60 text-[9px] font-semibold text-cyan-300">
+                            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping" />
+                            <span>Running</span>
+                          </div>
+                        ) : isWaitingJules ? (
+                          <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-purple-950/80 border border-purple-700/60 text-[9px] font-semibold text-purple-300">
+                            <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />
+                            <span>Jules</span>
+                          </div>
+                        ) : isFeedback ? (
+                          <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-amber-950/80 border border-amber-700/60 text-[9px] font-semibold text-amber-300">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-bounce" />
+                            <span>Needs Input</span>
+                          </div>
+                        ) : (
+                          <span className="text-[10px] text-[#5e616a] group-hover:hidden">
+                            {timeStr}
+                          </span>
+                        )}
+
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -167,6 +254,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           <Trash2 className="w-3 h-3" />
                         </button>
                       </div>
+
+                      {/* Antigravity Loading Bar: Agent Running */}
+                      {isAgentRunning && (
+                        <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#121c27] overflow-hidden">
+                          <div className="h-full w-full bg-gradient-to-r from-transparent via-cyan-400 to-blue-500 animate-shimmer-fast" />
+                        </div>
+                      )}
+
+                      {/* Antigravity Loading Bar: Waiting for Jules */}
+                      {isWaitingJules && (
+                        <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#1a1226] overflow-hidden">
+                          <div className="h-full w-full bg-gradient-to-r from-transparent via-fuchsia-400 to-purple-500 animate-shimmer-medium" />
+                        </div>
+                      )}
+
+                      {/* Antigravity Loading Bar: Jules Awaiting Direction */}
+                      {isFeedback && (
+                        <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#24170d] overflow-hidden">
+                          <div className="h-full w-full bg-amber-400 animate-pulse" />
+                        </div>
+                      )}
                     </div>
                   );
                 })

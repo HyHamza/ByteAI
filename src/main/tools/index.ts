@@ -153,7 +153,8 @@ export const JULES_TOOL_DEFS: LLMToolDefinition[] = [
 export async function executeToolCall(
   name: string,
   args: any,
-  workspaceDir: string
+  workspaceDir: string,
+  sessionId?: string
 ): Promise<string> {
   const resolvePath = (p: string) => {
     return path.isAbsolute(p) ? p : path.join(workspaceDir, p);
@@ -231,6 +232,13 @@ export async function executeToolCall(
           repo,
           branch,
         });
+
+        // Automatically associate Jules Session ID with this Chat Session
+        if (sessionId) {
+          try {
+            DataStore.getInstance().updateSession(sessionId, { julesSessionId: res.sessionId });
+          } catch (_) {}
+        }
 
         // Automatically track session in native background poller!
         JulesPoller.getInstance().trackSession(res.sessionId);

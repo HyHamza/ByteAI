@@ -95,12 +95,44 @@ export class JulesPoller {
       const sessions = await client.listSessions();
       if (!sessions || sessions.length === 0) return;
 
-      // Broadcast all session updates to UI windows
+      // Broadcast full sessions list to UI windows
       const windows = BrowserWindow.getAllWindows();
-      for (const summary of sessions) {
+      for (const win of windows) {
+        if (!win.isDestroyed()) {
+          win.webContents.send('jules:all-sessions', sessions);
+        }
+      }
+
+      // Auto-link existing chat sessions with matching Jules session IDs
+      const chatSessions = store.getSessions();
+      let sessionsUpdated = false;
+      for (const s of sessions) {
         for (const win of windows) {
           if (!win.isDestroyed()) {
-            win.webContents.send('jules:update', summary);
+            win.webContents.send('jules:update', s);
+          }
+        }
+
+        const matching = chatSessions.find(
+          (cs) => !cs.julesSessionId && (
+            (cs.title && s.title && (
+              cs.title.toLowerCase().includes(s.title.slice(0, 25).toLowerCase()) ||
+              s.title.toLowerCase().includes(cs.title.slice(0, 25).toLowerCase())
+            )) ||
+            cs.messages.some((m) => m.content && m.content.includes(s.id))
+          )
+        );
+        if (matching) {
+          matching.julesSessionId = s.id;
+          store.saveSession(matching);
+          sessionsUpdated = true;
+        }
+      }
+
+      if (sessionsUpdated) {
+        for (const win of windows) {
+          if (!win.isDestroyed()) {
+            win.webContents.send('sessions:updated', store.getSessions());
           }
         }
       }
@@ -167,6 +199,7 @@ export class JulesPoller {
     const existing = store.getSessions();
     let chatSession = existing.find(
       (cs) =>
+        (cs.julesSessionId && cs.julesSessionId === s.id) ||
         cs.messages.some((m) => m.content && m.content.includes(s.id)) ||
         (cs.title && cs.title.toLowerCase().includes((s.title || '').toLowerCase()))
     );
@@ -177,16 +210,20 @@ export class JulesPoller {
         workspacePath: store.getSettings().activeWorkspacePath || process.cwd(),
         title: s.title || `Jules: ${s.id.slice(0, 8)}`,
         mode: 'jules',
+        julesSessionId: s.id,
         createdAt: Date.now(),
         updatedAt: Date.now(),
         messages: [],
       });
+    } else if (!chatSession.julesSessionId) {
+      chatSession.julesSessionId = s.id;
+      store.saveSession(chatSession);
+    }
 
-      const windows = BrowserWindow.getAllWindows();
-      for (const win of windows) {
-        if (!win.isDestroyed()) {
-          win.webContents.send('sessions:updated', store.getSessions());
-        }
+    const windows = BrowserWindow.getAllWindows();
+    for (const win of windows) {
+      if (!win.isDestroyed()) {
+        win.webContents.send('sessions:updated', store.getSessions());
       }
     }
 

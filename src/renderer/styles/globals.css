@@ -165,3 +165,41 @@
   border-top: 1px solid #282a2f;
   margin: 1rem 0;
 }
+
+/* Antigravity Loading & Progress Bar Shimmer Keyframes */
+@keyframes antigravity-shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(30%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes antigravity-pulse-glow {
+  0%, 100% {
+    opacity: 0.9;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.animate-shimmer-fast {
+  animation: antigravity-shimmer 1.4s ease-in-out infinite;
+}
+
+.animate-shimmer-medium {
+  animation: antigravity-shimmer 2s ease-in-out infinite;
+}
+
+.animate-shimmer-slow {
+  animation: antigravity-shimmer 2.8s ease-in-out infinite;
+}
+
+.animate-pulse-glow {
+  animation: antigravity-pulse-glow 1.8s ease-in-out infinite;
+}

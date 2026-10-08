@@ -145,6 +145,10 @@ function setupIpcHandlers() {
     orchestrator.cancel(sessionId);
   });
 
+  ipcMain.handle('chat:get-running-sessions', async () => {
+    return orchestrator.getRunningSessions();
+  });
+
   // ── Jules IPC
   ipcMain.handle('jules:list-sessions', async () => {
     try {

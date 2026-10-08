@@ -30,12 +30,17 @@ CORE INSTRUCTIONS:
 export class AgentOrchestrator {
   private static instance: AgentOrchestrator;
   private activeCancellations: Set<string> = new Set();
+  private runningSessions: Set<string> = new Set();
 
   public static getInstance(): AgentOrchestrator {
     if (!AgentOrchestrator.instance) {
       AgentOrchestrator.instance = new AgentOrchestrator();
     }
     return AgentOrchestrator.instance;
+  }
+
+  public getRunningSessions(): string[] {
+    return Array.from(this.runningSessions);
   }
 
   public cancel(sessionId: string) {
@@ -48,6 +53,10 @@ export class AgentOrchestrator {
     if (!session) throw new Error(`Session ${sessionId} not found`);
 
     this.activeCancellations.delete(sessionId);
+    this.runningSessions.add(sessionId);
+    this.emitAgentStatus(sessionId, 'running');
+
+    try {
 
     // Save user message
     const userMsg: ChatMessage = {
@@ -228,7 +237,7 @@ Git Repository: ${activeRepo} (${activeBranch})`;
         this.emitToolCall(sessionId, assistantMsgId, toolRecord);
 
         // Execute tool
-        const output = await executeToolCall(toolName, toolArgs, workspaceDir);
+        const output = await executeToolCall(toolName, toolArgs, workspaceDir, sessionId);
 
         toolRecord.status = output.startsWith('Error:') ? 'error' : 'completed';
         toolRecord.output = output;
@@ -248,8 +257,20 @@ Git Repository: ${activeRepo} (${activeBranch})`;
       assistantMsg.toolCalls = toolRecords;
       store.addMessage(sessionId, assistantMsg);
     }
+    } finally {
+      this.runningSessions.delete(sessionId);
+      this.emitAgentStatus(sessionId, 'idle');
+      this.emitCompleted(sessionId);
+    }
+  }
 
-    this.emitCompleted(sessionId);
+  private emitAgentStatus(sessionId: string, status: 'running' | 'idle') {
+    const windows = BrowserWindow.getAllWindows();
+    for (const win of windows) {
+      if (!win.isDestroyed()) {
+        win.webContents.send('chat:agent-status', { sessionId, status });
+      }
+    }
   }
 
   private emitToken(sessionId: string, delta: string, messageId = '') {
