@@ -57,7 +57,7 @@ export interface ChatSession {
 export interface JulesSessionSummary {
   id: string;
   title?: string;
-  state: 'STATE_UNSPECIFIED' | 'INITIALIZING' | 'PLANNING' | 'AWAITING_USER_INPUT' | 'CODING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+  state: 'STATE_UNSPECIFIED' | 'INITIALIZING' | 'PLANNING' | 'AWAITING_USER_INPUT' | 'AWAITING_USER_FEEDBACK' | 'CODING' | 'IN_PROGRESS' | 'PAUSED' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
   repo: string;
   branch: string;
   createdAt: string;
@@ -108,6 +108,7 @@ export interface ElectronAPI {
   createSession: (title: string, mode?: AppMode) => Promise<ChatSession>;
   updateSession: (sessionId: string, updates: Partial<ChatSession>) => Promise<ChatSession | null>;
   deleteSession: (sessionId: string) => Promise<boolean>;
+  onSessionsUpdated?: (callback: (sessions: ChatSession[]) => void) => () => void;
 
   // Workspace
   selectDirectory: () => Promise<string | null>;

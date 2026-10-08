@@ -133,11 +133,16 @@ export const App: React.FC = () => {
       );
     });
 
+    const unsubSessions = api.onSessionsUpdated?.((newList: ChatSession[]) => {
+      setSessions(newList);
+    });
+
     return () => {
       unsubToken();
       unsubTool();
       unsubCompleted();
       unsubTitle?.();
+      unsubSessions?.();
     };
   }, [activeSessionId]);
 

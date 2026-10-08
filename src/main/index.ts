@@ -3,6 +3,7 @@ import path from 'path';
 import { DataStore } from './services/db/store';
 import { LLMClient } from './services/llm/client';
 import { JulesClient } from './services/jules/client';
+import { JulesPoller } from './services/jules/poller';
 import { AgentOrchestrator } from './agent/orchestrator';
 import { detectGitRepo } from './services/git/detector';
 import type { AppMode, ChatSession } from '../shared/types';
@@ -17,7 +18,8 @@ function createWindow() {
     height: 900,
     minWidth: 1024,
     minHeight: 700,
-    backgroundColor: '#0d1117',
+    backgroundColor: '#131314',
+    title: 'Byte',
     autoHideMenuBar: true,
     show: false,
     webPreferences: {
@@ -42,6 +44,7 @@ function createWindow() {
 app.whenReady().then(() => {
   setupIpcHandlers();
   createWindow();
+  JulesPoller.getInstance().startPolling(10000);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

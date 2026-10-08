@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { ElectronAPI, StreamTokenPayload, ToolCallPayload, JulesSessionSummary } from '../shared/types';
+import type { ElectronAPI, StreamTokenPayload, ToolCallPayload, JulesSessionSummary, ChatSession } from '../shared/types';
 
 const api: ElectronAPI = {
   // Chat
@@ -35,6 +35,11 @@ const api: ElectronAPI = {
   createSession: (title, mode) => ipcRenderer.invoke('sessions:create', { title, mode }),
   updateSession: (sessionId, updates) => ipcRenderer.invoke('sessions:update', { sessionId, updates }),
   deleteSession: (sessionId) => ipcRenderer.invoke('sessions:delete', { sessionId }),
+  onSessionsUpdated: (callback) => {
+    const handler = (_: any, sessions: ChatSession[]) => callback(sessions);
+    ipcRenderer.on('sessions:updated', handler);
+    return () => ipcRenderer.removeListener('sessions:updated', handler);
+  },
 
   // Workspace
   selectDirectory: () => ipcRenderer.invoke('workspace:select-dir'),

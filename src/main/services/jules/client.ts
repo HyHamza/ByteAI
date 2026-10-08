@@ -117,13 +117,29 @@ export class JulesClient {
     const resp = await this.request<{ activities?: any[] }>(`/sessions/${cleanId}/activities?pageSize=50`);
     if (!resp.activities) return [];
 
-    return resp.activities.map((a, idx) => ({
-      id: a.name || `act_${idx}`,
-      type: a.type || 'ACTIVITY',
-      description: a.description || a.message || JSON.stringify(a),
-      timestamp: a.createTime || new Date().toISOString(),
-      metadata: a,
-    }));
+    return resp.activities.map((a, idx) => {
+      let desc = a.description || a.message;
+      if (!desc && a.agentMessaged) {
+        desc = a.agentMessaged.agentMessage || a.agentMessaged.message;
+      }
+      if (!desc && a.progressUpdated) {
+        desc = a.progressUpdated.title || a.progressUpdated.description;
+      }
+      if (!desc && a.planGenerated?.plan?.steps) {
+        desc = `Generated plan with ${a.planGenerated.plan.steps.length} steps.`;
+      }
+      if (!desc && a.userMessaged) {
+        desc = a.userMessaged.message || a.userMessaged.prompt;
+      }
+
+      return {
+        id: a.name || `act_${idx}`,
+        type: a.type || (a.agentMessaged ? 'AGENT_MESSAGE' : a.userMessaged ? 'USER_MESSAGE' : 'ACTIVITY'),
+        description: desc || JSON.stringify(a),
+        timestamp: a.createTime || new Date().toISOString(),
+        metadata: a,
+      };
+    });
   }
 
   public async createSession(params: {
