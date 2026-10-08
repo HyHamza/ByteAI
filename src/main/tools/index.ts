@@ -148,6 +148,7 @@ export const JULES_TOOL_DEFS: LLMToolDefinition[] = [
       },
     },
   },
+  ...STANDARD_TOOL_DEFS,
 ];
 
 export async function executeToolCall(

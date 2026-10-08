@@ -159,6 +159,17 @@ export class DataStore {
           changed = true;
         }
       }
+
+      // Filter out empty ghost messages
+      if (s.messages && s.messages.length > 0) {
+        const origLen = s.messages.length;
+        s.messages = s.messages.filter(
+          (m) => (m.content && m.content.trim()) || (m.toolCalls && m.toolCalls.length > 0)
+        );
+        if (s.messages.length !== origLen) {
+          changed = true;
+        }
+      }
     }
     if (changed) this.save();
 

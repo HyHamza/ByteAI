@@ -14,19 +14,17 @@ When given an objective:
 3. Test and verify your work with terminal commands when relevant.
 4. Keep the user informed with clear, concise progress.`;
 
-const JULES_SYSTEM_PROMPT = `You are Byte operating in JULES SUPERVISOR MODE.
-You are the Lead Senior Staff Software Engineer and Architect.
-You have direct native programmatic access to Google Labs Jules AI via your built-in tool 'jules_create_task'.
+const JULES_SYSTEM_PROMPT = `You are Byte, the Lead Senior Staff Software Engineer and Architect.
+You have direct native access to Google Labs Jules AI to delegate large tasks, bug audits, or refactors, AND you have local tools (read_file, list_directory, edit_file_content, run_terminal_command) to inspect and investigate the workspace locally.
 
-CORE INSTRUCTIONS:
-1. YOU CAN AND MUST USE JULES: Whenever the user asks "can you use Jules?" or asks to implement, fix, refactor, or audit any code, your answer is YES!
-2. HOW TO USE JULES:
-   - Call the 'jules_create_task' tool immediately with detailed technical instructions, task title, and repo.
+CORE CAPABILITIES & DIRECTIVES:
+1. FULL AUTONOMY: When asked to investigate, audit, or inspect files locally while Jules is working, USE YOUR LOCAL TOOLS ('list_directory', 'read_file', 'run_terminal_command') immediately! Never say you don't have tools to inspect files.
+2. DELEGATING TO JULES:
+   - When asked to use Jules or dispatch a remote task, call the 'jules_create_task' tool immediately with detailed technical instructions and repo.
    - ASYNCHRONOUS CLOUD EXECUTION & NO POLLING: Once you call 'jules_create_task', STOP CALLING TOOLS IMMEDIATELY! Do NOT call 'jules_inspect_diff'. Do NOT poll. Jules runs remotely in Google Cloud.
    - Our system runs an autonomous native background supervisor engine ('JulesPoller') that continuously monitors Jules, and will automatically wake you up and send native desktop notifications the moment Jules completes or asks an architectural question.
    - Conclude your turn with a clear, concise confirmation to the user that the task was dispatched to Jules and you are supervising it in the background.
-3. YOU DO NOT WRITE CODE LOCALLY: Direct local code editing is disabled. Implementation is executed remotely by Jules AI workers.
-4. SUPERVISION: Answer Jules' architectural questions via 'jules_reply_question' and inspect final completed results via 'jules_inspect_diff'.`;
+3. SUPERVISION: Answer Jules' architectural questions via 'jules_reply_question' and inspect final completed results via 'jules_inspect_diff'.`;
 
 export class AgentOrchestrator {
   private static instance: AgentOrchestrator;
@@ -140,14 +138,45 @@ Git Repository: ${activeRepo} (${activeBranch})`;
     ];
 
     for (const m of session.messages) {
-      llmMessages.push({
-        role: m.role,
-        content: m.content || '',
-      });
+      if (m.role === 'assistant') {
+        if (m.toolCalls && m.toolCalls.length > 0) {
+          llmMessages.push({
+            role: 'assistant',
+            content: m.content || null,
+            tool_calls: m.toolCalls.map((tc) => ({
+              id: tc.id,
+              type: 'function',
+              function: {
+                name: tc.toolName,
+                arguments: JSON.stringify(tc.args || {}),
+              },
+            })),
+          });
+          for (const tc of m.toolCalls) {
+            llmMessages.push({
+              role: 'tool',
+              tool_call_id: tc.id,
+              content: tc.output || '',
+            });
+          }
+        } else if (m.content && m.content.trim()) {
+          llmMessages.push({
+            role: 'assistant',
+            content: m.content,
+          });
+        }
+      } else if (m.content && m.content.trim()) {
+        llmMessages.push({
+          role: m.role,
+          content: m.content,
+        });
+      }
     }
 
     let turnCount = 0;
     const llmClient = LLMClient.getInstance();
+    const accumulatedToolRecords: ToolExecutionRecord[] = [];
+    const mainAssistantMsgId = `msg_${Date.now()}_assistant`;
 
     while (turnCount < maxTurns) {
       if (this.activeCancellations.has(sessionId)) {
@@ -213,12 +242,13 @@ Git Repository: ${activeRepo} (${activeBranch})`;
 
       // If no tool calls were requested, the turn is complete!
       if (!result.toolCalls || result.toolCalls.length === 0) {
+        assistantMsg.id = mainAssistantMsgId;
+        assistantMsg.toolCalls = accumulatedToolRecords.length > 0 ? accumulatedToolRecords : undefined;
         store.addMessage(sessionId, assistantMsg);
         break;
       }
 
       // Execute each tool call
-      const toolRecords: ToolExecutionRecord[] = [];
       let hasDispatchedJules = false;
 
       for (const tc of result.toolCalls) {
@@ -250,7 +280,7 @@ Git Repository: ${activeRepo} (${activeBranch})`;
         toolRecord.completedAt = Date.now();
 
         this.emitToolCall(sessionId, assistantMsgId, toolRecord);
-        toolRecords.push(toolRecord);
+        accumulatedToolRecords.push(toolRecord);
 
         // Append tool result for next LLM turn
         llmMessages.push({
@@ -265,9 +295,6 @@ Git Repository: ${activeRepo} (${activeBranch})`;
         // Disable tools for next LLM turn so Byte cleanly yields after reporting to user without manual polling!
         currentToolDefs = [];
       }
-
-      assistantMsg.toolCalls = toolRecords;
-      store.addMessage(sessionId, assistantMsg);
     }
     } finally {
       this.runningSessions.delete(sessionId);
