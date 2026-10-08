@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Plus, 
   History, 
@@ -29,6 +29,22 @@ interface SidebarProps {
   onDeleteSession: (sessionId: string) => void;
   onOpenSettings: () => void;
   onSelectWorkspace: () => void;
+}
+
+const FOLDERS_STORAGE_KEY = 'seniorengineer:folders_expanded';
+
+function loadFolderExpandedState(): Record<string, boolean> {
+  try {
+    const raw = localStorage.getItem(FOLDERS_STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return {};
+}
+
+function saveFolderExpandedState(state: Record<string, boolean>) {
+  try {
+    localStorage.setItem(FOLDERS_STORAGE_KEY, JSON.stringify(state));
+  } catch {}
 }
 
 function formatRelativeTime(timestamp: number): string {
@@ -98,18 +114,75 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenSettings,
   onSelectWorkspace,
 }) => {
-  const [isProjectsExpanded, setIsProjectsExpanded] = useState<Record<string, boolean>>({
-    [workspaceName || 'Default']: true,
-  });
+  // Folder expanded state: default is always open (true) unless explicitly set to false
+  const [isProjectsExpanded, setIsProjectsExpanded] = useState<Record<string, boolean>>(() => loadFolderExpandedState());
+  const [showAllFolders, setShowAllFolders] = useState<Record<string, boolean>>({});
 
   const toggleFolder = (folderName: string) => {
-    setIsProjectsExpanded((prev) => ({
+    setIsProjectsExpanded((prev) => {
+      const current = prev[folderName] !== false; // default true if undefined
+      const next = {
+        ...prev,
+        [folderName]: !current,
+      };
+      saveFolderExpandedState(next);
+      return next;
+    });
+  };
+
+  const toggleShowAll = (folderName: string) => {
+    setShowAllFolders((prev) => ({
       ...prev,
       [folderName]: !prev[folderName],
     }));
   };
 
-  const currentFolder = workspaceName || 'SeniorEngineer';
+  // Group sessions by their workspace folder, ensuring current workspace is always included first
+  const { groups, sortedFolderNames } = useMemo(() => {
+    const current = workspaceName || 'SeniorEngineer';
+    const map: Record<string, ChatSession[]> = {
+      [current]: [],
+    };
+
+    for (const s of sessions) {
+      let folder = current;
+      if (s.workspacePath) {
+        const parts = s.workspacePath.replace(/\\/g, '/').split('/').filter(Boolean);
+        if (parts.length > 0) {
+          folder = parts[parts.length - 1];
+        }
+      }
+      if (!map[folder]) {
+        map[folder] = [];
+      }
+      map[folder].push(s);
+    }
+
+    const sortedFolders = Object.keys(map).sort((a, b) => {
+      if (a === current) return -1;
+      if (b === current) return 1;
+      return a.localeCompare(b);
+    });
+
+    return { groups: map, sortedFolderNames: sortedFolders };
+  }, [sessions, workspaceName]);
+
+  // Keep folder containing the active session opened automatically
+  useEffect(() => {
+    if (!activeSessionId) return;
+    for (const [folderName, fSessions] of Object.entries(groups)) {
+      if (fSessions.some((s) => s.id === activeSessionId)) {
+        if (isProjectsExpanded[folderName] === false) {
+          setIsProjectsExpanded((prev) => {
+            const next = { ...prev, [folderName]: true };
+            saveFolderExpandedState(next);
+            return next;
+          });
+        }
+        break;
+      }
+    }
+  }, [activeSessionId, groups]);
 
   return (
     <aside className="w-64 bg-[#141517] border-r border-[#202226] flex flex-col h-full shrink-0 select-none text-[12px] text-[#8e9196]">
@@ -157,131 +230,154 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Projects Folder Tree */}
-      <div className="flex-1 overflow-y-auto px-2 py-1 space-y-1">
-        {/* Active Project Folder */}
-        <div className="space-y-0.5">
-          <div
-            onClick={() => toggleFolder(currentFolder)}
-            className="flex items-center space-x-2 px-2.5 py-1.5 rounded-lg text-[#c4c7cf] hover:bg-[#1c1d21] cursor-pointer transition-colors font-medium text-xs"
-          >
-            {isProjectsExpanded[currentFolder] ? (
-              <FolderOpen className="w-3.5 h-3.5 text-[#8e9196]" />
-            ) : (
-              <Folder className="w-3.5 h-3.5 text-[#8e9196]" />
-            )}
-            <span className="truncate flex-1">{currentFolder}</span>
-            {isProjectsExpanded[currentFolder] ? (
-              <ChevronDown className="w-3 h-3 text-[#5e616a]" />
-            ) : (
-              <ChevronRight className="w-3 h-3 text-[#5e616a]" />
-            )}
-          </div>
+      <div className="flex-1 overflow-y-auto px-2 py-1 space-y-1.5">
+        {sortedFolderNames.map((folderName) => {
+          const folderSessions = groups[folderName] || [];
+          const isExpanded = isProjectsExpanded[folderName] !== false;
+          const isShowAll = !!showAllFolders[folderName];
+          const visibleSessions = isShowAll ? folderSessions : folderSessions.slice(0, 6);
+          const hasMore = folderSessions.length > 6;
 
-          {/* Sessions indented under active project */}
-          {isProjectsExpanded[currentFolder] && (
-            <div className="pl-4 space-y-0.5 border-l border-[#24262b] ml-4 my-1">
-              {sessions.length === 0 ? (
-                <div className="px-2 py-2 text-[11px] text-[#5e616a] italic">
-                  No conversations yet
-                </div>
-              ) : (
-                sessions.map((s) => {
-                  const isActive = s.id === activeSessionId;
-                  const timeStr = formatRelativeTime(s.updatedAt || s.createdAt);
-                  const taskInfo = getSessionTaskState(s, runningAgentSessionIds, julesSessions);
-                  const isAgentRunning = taskInfo.state === 'running_agent';
-                  const isWaitingJules = taskInfo.state === 'waiting_jules';
-                  const isFeedback = taskInfo.state === 'awaiting_feedback';
+          return (
+            <div key={folderName} className="space-y-0.5">
+              <div
+                onClick={() => toggleFolder(folderName)}
+                className="flex items-center space-x-2 px-2.5 py-1.5 rounded-lg text-[#c4c7cf] hover:bg-[#1c1d21] cursor-pointer transition-colors font-medium text-xs"
+              >
+                {isExpanded ? (
+                  <FolderOpen className="w-3.5 h-3.5 text-[#8e9196]" />
+                ) : (
+                  <Folder className="w-3.5 h-3.5 text-[#8e9196]" />
+                )}
+                <span className="truncate flex-1">{folderName}</span>
+                {isExpanded ? (
+                  <ChevronDown className="w-3 h-3 text-[#5e616a]" />
+                ) : (
+                  <ChevronRight className="w-3 h-3 text-[#5e616a]" />
+                )}
+              </div>
 
-                  let itemStyle = 'text-[#8e9196] hover:bg-[#1a1b1f] hover:text-[#d1d4dc] border border-transparent';
-                  if (isActive) {
-                    itemStyle = 'bg-[#202227] text-white font-medium border border-[#2c2e35] shadow-sm';
-                  }
-                  if (isAgentRunning) {
-                    itemStyle = isActive 
-                      ? 'bg-[#14202e] text-white font-medium border border-cyan-500/50 shadow-sm shadow-cyan-950/30' 
-                      : 'bg-[#101924] text-cyan-200 hover:bg-[#14202e] border border-cyan-600/30';
-                  } else if (isWaitingJules) {
-                    itemStyle = isActive 
-                      ? 'bg-[#1f162e] text-white font-medium border border-purple-500/50 shadow-sm shadow-purple-950/30' 
-                      : 'bg-[#191226] text-purple-200 hover:bg-[#1f162e] border border-purple-600/30';
-                  } else if (isFeedback) {
-                    itemStyle = isActive
-                      ? 'bg-[#291e14] text-white font-medium border border-amber-500/50 shadow-sm shadow-amber-950/30'
-                      : 'bg-[#20170f] text-amber-200 hover:bg-[#291e14] border border-amber-600/40';
-                  }
+              {/* Sessions indented under project */}
+              {isExpanded && (
+                <div className="pl-4 space-y-0.5 border-l border-[#24262b] ml-4 my-1">
+                  {folderSessions.length === 0 ? (
+                    <div className="px-2 py-2 text-[11px] text-[#5e616a] italic">
+                      No conversations yet
+                    </div>
+                  ) : (
+                    <>
+                      {visibleSessions.map((s) => {
+                        const isActive = s.id === activeSessionId;
+                        const timeStr = formatRelativeTime(s.updatedAt || s.createdAt);
+                        const taskInfo = getSessionTaskState(s, runningAgentSessionIds, julesSessions);
+                        const isAgentRunning = taskInfo.state === 'running_agent';
+                        const isWaitingJules = taskInfo.state === 'waiting_jules';
+                        const isFeedback = taskInfo.state === 'awaiting_feedback';
 
-                  return (
-                    <div
-                      key={s.id}
-                      onClick={() => onSelectSession(s.id)}
-                      className={`group relative flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs cursor-pointer transition-all overflow-hidden ${itemStyle}`}
-                    >
-                      <span className="truncate flex-1 mr-2 text-[11.5px]">
-                        {s.title || 'Conversation'}
-                      </span>
+                        let itemStyle = 'text-[#8e9196] hover:bg-[#1a1b1f] hover:text-[#d1d4dc] border border-transparent';
+                        if (isActive) {
+                          itemStyle = 'bg-[#202227] text-white font-medium border border-[#2c2e35] shadow-sm';
+                        }
+                        if (isAgentRunning) {
+                          itemStyle = isActive 
+                            ? 'bg-[#14202e] text-white font-medium border border-cyan-500/50 shadow-sm shadow-cyan-950/30' 
+                            : 'bg-[#101924] text-cyan-200 hover:bg-[#14202e] border border-cyan-600/30';
+                        } else if (isWaitingJules) {
+                          itemStyle = isActive 
+                            ? 'bg-[#1f162e] text-white font-medium border border-purple-500/50 shadow-sm shadow-purple-950/30' 
+                            : 'bg-[#191226] text-purple-200 hover:bg-[#1f162e] border border-purple-600/30';
+                        } else if (isFeedback) {
+                          itemStyle = isActive
+                            ? 'bg-[#291e14] text-white font-medium border border-amber-500/50 shadow-sm shadow-amber-950/30'
+                            : 'bg-[#20170f] text-amber-200 hover:bg-[#291e14] border border-amber-600/40';
+                        }
 
-                      <div className="flex items-center space-x-1.5 shrink-0">
-                        {isAgentRunning ? (
-                          <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-cyan-950/80 border border-cyan-700/60 text-[9px] font-semibold text-cyan-300">
-                            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping" />
-                            <span>Running</span>
+                        return (
+                          <div
+                            key={s.id}
+                            onClick={() => onSelectSession(s.id)}
+                            className={`group relative flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs cursor-pointer transition-all overflow-hidden ${itemStyle}`}
+                          >
+                            <span className="truncate flex-1 mr-2 text-[11.5px]">
+                              {s.title || 'Conversation'}
+                            </span>
+
+                            <div className="flex items-center space-x-1.5 shrink-0">
+                              {isAgentRunning ? (
+                                <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-cyan-950/80 border border-cyan-700/60 text-[9px] font-semibold text-cyan-300">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping" />
+                                  <span>Running</span>
+                                </div>
+                              ) : isWaitingJules ? (
+                                <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-purple-950/80 border border-purple-700/60 text-[9px] font-semibold text-purple-300">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />
+                                  <span>Jules</span>
+                                </div>
+                              ) : isFeedback ? (
+                                <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-amber-950/80 border border-amber-700/60 text-[9px] font-semibold text-amber-300">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-bounce" />
+                                  <span>Needs Input</span>
+                                </div>
+                              ) : (
+                                <span className="text-[10px] text-[#5e616a] group-hover:hidden">
+                                  {timeStr}
+                                </span>
+                              )}
+
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onDeleteSession(s.id);
+                                }}
+                                className="hidden group-hover:block text-[#5e616a] hover:text-red-400 p-0.5 rounded transition-colors"
+                                title="Delete Conversation"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+
+                            {/* Antigravity Loading Bar: Agent Running */}
+                            {isAgentRunning && (
+                              <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#121c27] overflow-hidden">
+                                <div className="h-full w-full bg-gradient-to-r from-transparent via-cyan-400 to-blue-500 animate-shimmer-fast" />
+                              </div>
+                            )}
+
+                            {/* Antigravity Loading Bar: Waiting for Jules */}
+                            {isWaitingJules && (
+                              <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#1a1226] overflow-hidden">
+                                <div className="h-full w-full bg-gradient-to-r from-transparent via-fuchsia-400 to-purple-500 animate-shimmer-medium" />
+                              </div>
+                            )}
+
+                            {/* Antigravity Loading Bar: Jules Awaiting Direction */}
+                            {isFeedback && (
+                              <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#24170d] overflow-hidden">
+                                <div className="h-full w-full bg-amber-400 animate-pulse" />
+                              </div>
+                            )}
                           </div>
-                        ) : isWaitingJules ? (
-                          <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-purple-950/80 border border-purple-700/60 text-[9px] font-semibold text-purple-300">
-                            <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />
-                            <span>Jules</span>
-                          </div>
-                        ) : isFeedback ? (
-                          <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-amber-950/80 border border-amber-700/60 text-[9px] font-semibold text-amber-300">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-bounce" />
-                            <span>Needs Input</span>
-                          </div>
-                        ) : (
-                          <span className="text-[10px] text-[#5e616a] group-hover:hidden">
-                            {timeStr}
-                          </span>
-                        )}
+                        );
+                      })}
 
+                      {hasMore && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            onDeleteSession(s.id);
+                            toggleShowAll(folderName);
                           }}
-                          className="hidden group-hover:block text-[#5e616a] hover:text-red-400 p-0.5 rounded transition-colors"
-                          title="Delete Conversation"
+                          className="w-full text-left px-2.5 py-1.5 text-[11.5px] text-[#737680] hover:text-[#c4c7cf] hover:bg-[#1a1b1f] rounded-lg transition-colors cursor-pointer"
                         >
-                          <Trash2 className="w-3 h-3" />
+                          {isShowAll ? 'Show less' : `See all (${folderSessions.length})`}
                         </button>
-                      </div>
-
-                      {/* Antigravity Loading Bar: Agent Running */}
-                      {isAgentRunning && (
-                        <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#121c27] overflow-hidden">
-                          <div className="h-full w-full bg-gradient-to-r from-transparent via-cyan-400 to-blue-500 animate-shimmer-fast" />
-                        </div>
                       )}
-
-                      {/* Antigravity Loading Bar: Waiting for Jules */}
-                      {isWaitingJules && (
-                        <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#1a1226] overflow-hidden">
-                          <div className="h-full w-full bg-gradient-to-r from-transparent via-fuchsia-400 to-purple-500 animate-shimmer-medium" />
-                        </div>
-                      )}
-
-                      {/* Antigravity Loading Bar: Jules Awaiting Direction */}
-                      {isFeedback && (
-                        <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#24170d] overflow-hidden">
-                          <div className="h-full w-full bg-amber-400 animate-pulse" />
-                        </div>
-                      )}
-                    </div>
-                  );
-                })
+                    </>
+                  )}
+                </div>
               )}
             </div>
-          )}
-        </div>
+          );
+        })}
       </div>
 
       {/* Pinned Bottom: Settings */}
