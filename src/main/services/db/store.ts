@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import type { AppSettings, ChatSession, ChatMessage } from '@/shared/types';
+import type { AppSettings, ChatSession, ChatMessage, ProjectInfo } from '@/shared/types';
 
 const DATA_DIR = path.join(os.homedir(), '.seniorengineer');
 const STORE_PATH = path.join(DATA_DIR, 'store.json');
@@ -36,6 +36,7 @@ export function isSubstantiveMessage(text: string): boolean {
 interface AppDatabase {
   settings: AppSettings;
   sessions: Record<string, ChatSession>;
+  projects?: Record<string, ProjectInfo>;
 }
 
 export class DataStore {
@@ -69,6 +70,7 @@ export class DataStore {
         return {
           settings: { ...DEFAULT_SETTINGS, ...parsed.settings },
           sessions: parsed.sessions || {},
+          projects: parsed.projects || {},
         };
       } catch (err) {
         console.error('Failed to parse database, initializing fresh store:', err);
@@ -77,6 +79,7 @@ export class DataStore {
     return {
       settings: { ...DEFAULT_SETTINGS },
       sessions: {},
+      projects: {},
     };
   }
 
@@ -128,6 +131,61 @@ export class DataStore {
     this.db.settings = { ...this.db.settings, ...partial };
     this.save();
     return this.getSettings();
+  }
+
+  public getProjects(): ProjectInfo[] {
+    const map = new Map<string, ProjectInfo>();
+    if (this.db.projects) {
+      for (const p of Object.values(this.db.projects)) {
+        map.set(p.path, p);
+      }
+    }
+    // Automatically include workspaces from existing sessions
+    for (const s of Object.values(this.db.sessions)) {
+      if (s.workspacePath && !map.has(s.workspacePath)) {
+        const normPath = s.workspacePath;
+        const name = path.basename(normPath);
+        map.set(normPath, {
+          id: normPath,
+          name,
+          path: normPath,
+          createdAt: s.createdAt || Date.now(),
+        });
+      }
+    }
+    return Array.from(map.values());
+  }
+
+  public addProject(projectPath: string, name?: string): ProjectInfo {
+    if (!this.db.projects) this.db.projects = {};
+    const pName = name || path.basename(projectPath);
+    const info: ProjectInfo = {
+      id: projectPath,
+      name: pName,
+      path: projectPath,
+      createdAt: Date.now(),
+    };
+    this.db.projects[projectPath] = info;
+    this.save();
+    return info;
+  }
+
+  public deleteProject(projectPath: string): { success: boolean; deletedSessionsCount: number } {
+    let deletedCount = 0;
+    if (this.db.projects && this.db.projects[projectPath]) {
+      delete this.db.projects[projectPath];
+    }
+    const pBase = path.basename(projectPath).toLowerCase();
+    for (const [id, s] of Object.entries(this.db.sessions)) {
+      const sPath = s.workspacePath || '';
+      const sBase = path.basename(sPath).toLowerCase();
+      if (sPath === projectPath || sBase === pBase) {
+        delete this.db.sessions[id];
+        deletedCount++;
+      }
+    }
+    this.save();
+    return { success: true, deletedSessionsCount: deletedCount };
   }
 
   public getSessions(workspacePath?: string): ChatSession[] {

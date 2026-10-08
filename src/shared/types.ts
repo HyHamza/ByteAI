@@ -98,6 +98,15 @@ export interface WorkspaceFolderInfo {
   gitBranch?: string | null;
 }
 
+export interface ProjectInfo {
+  id: string;
+  name: string;
+  path: string;
+  gitRepo?: string | null;
+  gitBranch?: string | null;
+  createdAt: number;
+}
+
 export interface ElectronAPI {
   // Chat & Stream
   sendMessage: (sessionId: string, text: string) => Promise<void>;
@@ -112,14 +121,18 @@ export interface ElectronAPI {
 
   // Sessions
   listSessions: (workspacePath?: string) => Promise<ChatSession[]>;
-  createSession: (title: string, mode?: AppMode) => Promise<ChatSession>;
+  createSession: (title: string, mode?: AppMode, workspacePath?: string) => Promise<ChatSession>;
   updateSession: (sessionId: string, updates: Partial<ChatSession>) => Promise<ChatSession | null>;
   deleteSession: (sessionId: string) => Promise<boolean>;
   onSessionsUpdated?: (callback: (sessions: ChatSession[]) => void) => () => void;
 
-  // Workspace
+  // Workspace & Projects
   selectDirectory: () => Promise<string | null>;
   getWorkspaceInfo: () => Promise<WorkspaceFolderInfo | null>;
+  showInExplorer: (folderPath: string) => Promise<boolean>;
+  getProjects: () => Promise<ProjectInfo[]>;
+  addProject: (folderPath?: string) => Promise<ProjectInfo | null>;
+  deleteProject: (projectPath: string) => Promise<{ success: boolean; deletedSessionsCount: number }>;
 
   // Settings
   getSettings: () => Promise<AppSettings>;

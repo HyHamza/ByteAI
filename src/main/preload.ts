@@ -46,7 +46,7 @@ const api: ElectronAPI = {
 
   // Sessions
   listSessions: (workspacePath) => ipcRenderer.invoke('sessions:list', { workspacePath }),
-  createSession: (title, mode) => ipcRenderer.invoke('sessions:create', { title, mode }),
+  createSession: (title, mode, workspacePath) => ipcRenderer.invoke('sessions:create', { title, mode, workspacePath }),
   updateSession: (sessionId, updates) => ipcRenderer.invoke('sessions:update', { sessionId, updates }),
   deleteSession: (sessionId) => ipcRenderer.invoke('sessions:delete', { sessionId }),
   onSessionsUpdated: (callback) => {
@@ -55,9 +55,13 @@ const api: ElectronAPI = {
     return () => ipcRenderer.removeListener('sessions:updated', handler);
   },
 
-  // Workspace
+  // Workspace & Projects
   selectDirectory: () => ipcRenderer.invoke('workspace:select-dir'),
   getWorkspaceInfo: () => ipcRenderer.invoke('workspace:get-info'),
+  showInExplorer: (folderPath) => ipcRenderer.invoke('workspace:show-in-explorer', { folderPath }),
+  getProjects: () => ipcRenderer.invoke('projects:get'),
+  addProject: (folderPath) => ipcRenderer.invoke('projects:add', { folderPath }),
+  deleteProject: (projectPath) => ipcRenderer.invoke('projects:delete', { projectPath }),
 
   // Settings
   getSettings: () => ipcRenderer.invoke('settings:get'),

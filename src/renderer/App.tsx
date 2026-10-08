@@ -6,7 +6,7 @@ import { ChatStream } from './components/chat/ChatStream';
 import { ChatInput } from './components/chat/ChatInput';
 import { SettingsModal } from './components/settings/SettingsModal';
 import { api } from './api';
-import type { AppSettings, ChatSession, AppMode, StreamTokenPayload, ToolCallPayload, ToolExecutionRecord, JulesSessionSummary } from '@/shared/types';
+import type { AppSettings, ChatSession, AppMode, StreamTokenPayload, ToolCallPayload, ToolExecutionRecord, JulesSessionSummary, ProjectInfo } from '@/shared/types';
 
 const DEFAULT_SETTINGS: AppSettings = {
   mode: 'standard',
@@ -31,6 +31,7 @@ export const App: React.FC = () => {
     'gemini-2.5-flash',
   ]);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [projects, setProjects] = useState<ProjectInfo[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [workspaceName, setWorkspaceName] = useState<string>('');
   const [gitRepo, setGitRepo] = useState<string | null>(null);
@@ -95,6 +96,10 @@ export const App: React.FC = () => {
 
         api.getJulesSessions?.().then((jsList) => {
           if (isMounted && jsList) setJulesSessions(jsList);
+        }).catch(() => {});
+
+        api.getProjects?.().then((projs) => {
+          if (isMounted && projs) setProjects(projs);
         }).catch(() => {});
       } catch (err) {
         console.error('Initialization error:', err);
@@ -223,10 +228,45 @@ export const App: React.FC = () => {
     await api.saveSettings({ selectedModel: model, isAutoModel: isAuto });
   };
 
-  const handleCreateSession = async () => {
-    const newSession = await api.createSession('New Task', settings.mode);
+  const handleCreateSession = async (workspacePath?: string) => {
+    const newSession = await api.createSession('New Task', settings.mode, workspacePath);
     setSessions((prev) => [newSession, ...prev]);
     setActiveSessionId(newSession.id);
+  };
+
+  const handleCreateSessionInProject = async (folderPath: string, projectName: string) => {
+    const newSession = await api.createSession('New Conversation', settings.mode, folderPath);
+    setSessions((prev) => [newSession, ...prev]);
+    setActiveSessionId(newSession.id);
+    setWorkspaceName(projectName);
+  };
+
+  const handleAddProject = async (folderPath?: string) => {
+    const proj = await api.addProject(folderPath);
+    if (proj) {
+      setProjects((prev) => {
+        const filtered = prev.filter((p) => p.path !== proj.path);
+        return [proj, ...filtered];
+      });
+      setWorkspaceName(proj.name);
+      if (proj.gitRepo) setGitRepo(proj.gitRepo);
+      if (proj.gitBranch) setGitBranch(proj.gitBranch);
+      const newSession = await api.createSession('New Conversation', settings.mode, proj.path);
+      setSessions((prev) => [newSession, ...prev]);
+      setActiveSessionId(newSession.id);
+    }
+  };
+
+  const handleDeleteProject = async (projectPath: string) => {
+    await api.deleteProject(projectPath);
+    setProjects((prev) => prev.filter((p) => p.path !== projectPath));
+    const refreshed = await api.listSessions();
+    setSessions(refreshed);
+    if (refreshed.length > 0) {
+      setActiveSessionId(refreshed[0].id);
+    } else {
+      setActiveSessionId(null);
+    }
   };
 
   const handleDeleteSession = async (id: string) => {
@@ -352,9 +392,14 @@ export const App: React.FC = () => {
             workspaceName={workspaceName}
             runningAgentSessionIds={runningAgentSessionIds}
             julesSessions={julesSessions}
+            projects={projects}
+            activeWorkspacePath={settings.activeWorkspacePath}
             onSelectSession={setActiveSessionId}
-            onCreateSession={handleCreateSession}
+            onCreateSession={() => handleCreateSession()}
+            onCreateSessionInProject={handleCreateSessionInProject}
             onDeleteSession={handleDeleteSession}
+            onAddProject={handleAddProject}
+            onDeleteProject={handleDeleteProject}
             onOpenSettings={() => setIsSettingsOpen(true)}
             onSelectWorkspace={handleSelectWorkspace}
           />

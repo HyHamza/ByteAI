@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, Menu, MenuItem } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, Menu, MenuItem, shell } from 'electron';
 import path from 'path';
 import { DataStore } from './services/db/store';
 import { LLMClient } from './services/llm/client';
@@ -98,7 +98,7 @@ function setupIpcHandlers() {
     return llmClient.fetchAvailableModels();
   });
 
-  // ── Workspace IPC
+  // ── Workspace & Projects IPC
   ipcMain.handle('workspace:select-dir', async () => {
     if (!mainWindow) return null;
     const result = await dialog.showOpenDialog(mainWindow, {
@@ -114,6 +114,7 @@ function setupIpcHandlers() {
       if (gitInfo.branch) updates.julesDefaultBranch = gitInfo.branch;
     }
     store.saveSettings(updates);
+    store.addProject(selected);
     return selected;
   });
 
@@ -129,16 +130,64 @@ function setupIpcHandlers() {
     };
   });
 
+  ipcMain.handle('workspace:show-in-explorer', async (_, { folderPath }: { folderPath: string }) => {
+    try {
+      if (folderPath) {
+        await shell.openPath(folderPath);
+        return true;
+      }
+    } catch (e) {
+      console.error('Failed to open path in explorer:', e);
+    }
+    return false;
+  });
+
+  ipcMain.handle('projects:get', async () => {
+    return store.getProjects();
+  });
+
+  ipcMain.handle('projects:add', async (_, { folderPath }: { folderPath?: string }) => {
+    let targetPath = folderPath;
+    if (!targetPath) {
+      if (!mainWindow) return null;
+      const result = await dialog.showOpenDialog(mainWindow, {
+        properties: ['openDirectory', 'createDirectory'],
+        title: 'Select or Create Project Folder',
+      });
+      if (result.canceled || result.filePaths.length === 0) return null;
+      targetPath = result.filePaths[0];
+    }
+
+    const gitInfo = detectGitRepo(targetPath);
+    const project = store.addProject(targetPath);
+    project.gitRepo = gitInfo.repo;
+    project.gitBranch = gitInfo.branch;
+
+    // Also activate it as current workspace
+    store.saveSettings({
+      activeWorkspacePath: targetPath,
+      ...(gitInfo.repo ? { julesDefaultRepo: gitInfo.repo } : {}),
+      ...(gitInfo.branch ? { julesDefaultBranch: gitInfo.branch } : {}),
+    });
+
+    return project;
+  });
+
+  ipcMain.handle('projects:delete', async (_, { projectPath }: { projectPath: string }) => {
+    return store.deleteProject(projectPath);
+  });
+
   // ── Sessions IPC
   ipcMain.handle('sessions:list', async (_, { workspacePath }) => {
     return store.getSessions(workspacePath);
   });
 
-  ipcMain.handle('sessions:create', async (_, { title, mode }: { title: string; mode?: AppMode }) => {
+  ipcMain.handle('sessions:create', async (_, { title, mode, workspacePath }: { title: string; mode?: AppMode; workspacePath?: string }) => {
     const settings = store.getSettings();
+    const effectiveWs = workspacePath || settings.activeWorkspacePath || process.cwd();
     const newSession: ChatSession = {
       id: `ses_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-      workspacePath: settings.activeWorkspacePath || process.cwd(),
+      workspacePath: effectiveWs,
       title: title || 'New Task',
       mode: mode || settings.mode,
       createdAt: Date.now(),

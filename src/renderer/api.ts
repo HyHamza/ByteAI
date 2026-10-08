@@ -104,6 +104,15 @@ const mockAPI: ElectronAPI = {
     gitRepo: 'sources/github/HyHamza/SeniorEngineer',
     gitBranch: 'main',
   }),
+  showInExplorer: async () => true,
+  getProjects: async () => [],
+  addProject: async (folderPath?: string) => ({
+    id: folderPath || 'proj',
+    name: folderPath ? folderPath.split('\\').pop() || 'Project' : 'Project',
+    path: folderPath || 'E:\\CODE',
+    createdAt: Date.now(),
+  }),
+  deleteProject: async () => ({ success: true, deletedSessionsCount: 0 }),
 
   getSettings: async () => ({ ...mockSettings }),
   saveSettings: async (settings) => {
