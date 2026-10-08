@@ -23,6 +23,7 @@ interface ChatStreamProps {
   currentStreamContent: string;
   streamingTools?: ToolExecutionRecord[];
   isStreaming: boolean;
+  retryStatus?: { attempt: number; maxRetries: number; delayMs: number; reason: string } | null;
   mode: AppMode;
 }
 
@@ -44,6 +45,7 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
   currentStreamContent,
   streamingTools = [],
   isStreaming,
+  retryStatus,
   mode,
 }) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -340,13 +342,23 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
                   {(allToolCalls.length > 0 || duration > 0 || isLiveInThisTurn) && (
                     <div 
                       onClick={() => toggleTrajectory(turn.id, defaultExpanded)}
-                      className="flex items-center space-x-1.5 text-xs text-[#8e9196] hover:text-[#c4c7cf] cursor-pointer select-none py-1 transition-colors w-fit group/trajectory font-medium"
+                      className="flex items-center space-x-2 text-xs text-[#8e9196] hover:text-[#c4c7cf] cursor-pointer select-none py-1 transition-colors w-fit group/trajectory font-medium"
                     >
                       {isLiveInThisTurn ? (
-                        <div className="flex items-center space-x-1.5 text-cyan-400">
-                          <Loader2 className="w-3 h-3 animate-spin" />
-                          <span>Working for {formatDuration(duration || 1)}...</span>
-                        </div>
+                        retryStatus ? (
+                          <div className="flex items-center space-x-2 text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md animate-pulse">
+                            <Loader2 className="w-3 h-3 animate-spin text-amber-400" />
+                            <span>Retrying connection ({retryStatus.attempt}/{retryStatus.maxRetries})...</span>
+                            <span className="text-[10px] text-amber-300/80 font-mono">
+                              {Math.round(retryStatus.delayMs / 1000)}s backoff
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center space-x-1.5 text-cyan-400">
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                            <span>Working for {formatDuration(duration || 1)}...</span>
+                          </div>
+                        )
                       ) : (
                         <span>Worked for {formatDuration(duration || 1)}</span>
                       )}
@@ -482,10 +494,20 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
         {/* If live streaming and no turn exists yet */}
         {isStreaming && turns.length === 0 && (
           <div className="w-full space-y-2 text-xs leading-relaxed pt-1">
-            <div className="flex items-center space-x-1.5 text-cyan-400 py-1 font-medium">
-              <Loader2 className="w-3 h-3 animate-spin" />
-              <span>Working for {formatDuration(streamingSeconds)}...</span>
-            </div>
+            {retryStatus ? (
+              <div className="flex items-center space-x-2 text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md animate-pulse w-fit">
+                <Loader2 className="w-3 h-3 animate-spin text-amber-400" />
+                <span>Retrying connection ({retryStatus.attempt}/{retryStatus.maxRetries})...</span>
+                <span className="text-[10px] text-amber-300/80 font-mono">
+                  {Math.round(retryStatus.delayMs / 1000)}s backoff
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-center space-x-1.5 text-cyan-400 py-1 font-medium">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                <span>Working for {formatDuration(streamingSeconds)}...</span>
+              </div>
+            )}
             {streamingTools && streamingTools.length > 0 && (
               <div className="space-y-1.5 py-1.5 pl-2 border-l border-[#272930] ml-1">
                 {streamingTools.map((tc) => (

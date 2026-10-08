@@ -49,6 +49,7 @@ export const App: React.FC = () => {
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
   const [streamingTools, setStreamingTools] = useState<ToolExecutionRecord[]>([]);
+  const [retryStatus, setRetryStatus] = useState<{ attempt: number; maxRetries: number; delayMs: number; reason: string } | null>(null);
 
   // Load initial settings, workspace & sessions concurrently
   useEffect(() => {
@@ -118,12 +119,25 @@ export const App: React.FC = () => {
     const unsubToken = api.onStreamToken((payload: StreamTokenPayload) => {
       if (payload.sessionId === activeSessionId) {
         setIsStreaming(true);
+        setRetryStatus(null);
         setStreamingContent((prev) => prev + payload.delta);
+      }
+    });
+
+    const unsubRetry = api.onStreamRetry?.((payload) => {
+      if (payload.sessionId === activeSessionId) {
+        setRetryStatus({
+          attempt: payload.attempt,
+          maxRetries: payload.maxRetries,
+          delayMs: payload.delayMs,
+          reason: payload.reason,
+        });
       }
     });
 
     const unsubTool = api.onToolCallUpdate((payload: ToolCallPayload) => {
       if (payload.sessionId === activeSessionId) {
+        setRetryStatus(null);
         setStreamingTools((prev) => {
           const idx = prev.findIndex((t) => t.id === payload.toolCall.id);
           if (idx !== -1) {
@@ -139,6 +153,7 @@ export const App: React.FC = () => {
     const unsubCompleted = api.onExecutionCompleted((sessId: string) => {
       if (sessId === activeSessionId) {
         setIsStreaming(false);
+        setRetryStatus(null);
         setStreamingContent('');
         setStreamingTools([]);
         api.listSessions().then((list: ChatSession[]) => setSessions(list));
@@ -184,6 +199,7 @@ export const App: React.FC = () => {
 
     return () => {
       unsubToken();
+      unsubRetry?.();
       unsubTool();
       unsubCompleted();
       unsubTitle?.();
@@ -499,6 +515,7 @@ export const App: React.FC = () => {
                 currentStreamContent={streamingContent}
                 streamingTools={streamingTools}
                 isStreaming={isStreaming}
+                retryStatus={retryStatus}
                 mode={activeSession?.mode || settings.mode}
               />
               <ChatInput

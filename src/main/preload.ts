@@ -12,6 +12,12 @@ const api: ElectronAPI = {
     return () => ipcRenderer.removeListener('chat:stream-token', handler);
   },
 
+  onStreamRetry: (callback) => {
+    const handler = (_: any, payload: any) => callback(payload);
+    ipcRenderer.on('chat:stream-retry', handler);
+    return () => ipcRenderer.removeListener('chat:stream-retry', handler);
+  },
+
   onToolCallUpdate: (callback) => {
     const handler = (_: any, payload: ToolCallPayload) => callback(payload);
     ipcRenderer.on('chat:tool-call', handler);

@@ -21,6 +21,7 @@ export interface LLMToolDefinition {
 export interface LLMStreamCallbacks {
   onToken: (token: string) => void;
   onToolCallDelta?: (toolCall: any) => void;
+  onRetry?: (attempt: number, maxRetries: number, delayMs: number, reason: string) => void;
 }
 
 export class LLMClient {
@@ -84,7 +85,105 @@ export class LLMClient {
     }
   }
 
+  /**
+   * Determine whether an error is retriable (up to 9 times, Antigravity style)
+   */
+  private isRetriableError(error: any): { isRetriable: boolean; reason: string } {
+    const msg = String(error?.message || error || '').toLowerCase();
+    
+    // HTTP Status codes that are retriable:
+    // 502 (Bad Gateway / upstream error), 503 (Service Unavailable), 504 (Gateway Timeout),
+    // 500 (Internal Server Error), 429 (Rate Limit / Quota), 408 (Request Timeout),
+    // 404 (When upstream model routing is temporarily updating)
+    if (
+      msg.includes('status 502') || 
+      msg.includes('status 503') || 
+      msg.includes('status 504') || 
+      msg.includes('status 500') ||
+      msg.includes('status 429') ||
+      msg.includes('status 408')
+    ) {
+      return { isRetriable: true, reason: 'Server or upstream gateway temporarily unavailable' };
+    }
+
+    // Common upstream provider error strings
+    if (
+      msg.includes('temporarily unavailable') ||
+      msg.includes('update its routing') ||
+      msg.includes('upstream_failed') ||
+      msg.includes('provider_error') ||
+      msg.includes('rate limit') ||
+      msg.includes('too many requests') ||
+      msg.includes('daily_quota_exhausted') ||
+      msg.includes('overloaded') ||
+      msg.includes('capacity') ||
+      msg.includes('try again')
+    ) {
+      return { isRetriable: true, reason: 'Provider capacity or routing update in progress' };
+    }
+
+    // Network / Socket errors
+    if (
+      msg.includes('econnreset') ||
+      msg.includes('etimedout') ||
+      msg.includes('econnrefused') ||
+      msg.includes('enotfound') ||
+      msg.includes('socket hang up') ||
+      msg.includes('network error') ||
+      msg.includes('timed out') ||
+      msg.includes('aborterror')
+    ) {
+      return { isRetriable: true, reason: 'Network connection interrupted' };
+    }
+
+    return { isRetriable: false, reason: '' };
+  }
+
+  /**
+   * Streams chat completion with Antigravity-style 9-attempt retry mechanism.
+   */
   public async chatStream(
+    messages: LLMMessage[],
+    tools: LLMToolDefinition[] | undefined,
+    callbacks: LLMStreamCallbacks
+  ): Promise<{ content: string; toolCalls: any[] }> {
+    const MAX_RETRIES = 9;
+    let attempt = 0;
+
+    while (attempt <= MAX_RETRIES) {
+      try {
+        return await this.chatStreamOnce(messages, tools, callbacks);
+      } catch (err: any) {
+        attempt++;
+        const { isRetriable, reason } = this.isRetriableError(err);
+
+        if (attempt > MAX_RETRIES || !isRetriable) {
+          console.error(`[LLMClient] Request failed permanently after ${attempt - 1} retries. Error:`, err?.message);
+          throw err;
+        }
+
+        // Exponential backoff with jitter: 1.5s * 1.6^(attempt-1) + jitter, capped at 16s
+        const baseDelay = Math.min(16000, Math.floor(1500 * Math.pow(1.6, attempt - 1)));
+        const jitter = Math.floor(Math.random() * 800);
+        const delayMs = baseDelay + jitter;
+
+        console.warn(
+          `[LLMClient] Request encountered retriable error (${err?.message}). Retrying attempt ${attempt}/${MAX_RETRIES} in ${Math.round(delayMs / 1000)}s...`
+        );
+
+        if (callbacks.onRetry) {
+          callbacks.onRetry(attempt, MAX_RETRIES, delayMs, reason || err?.message || 'Upstream retry');
+        }
+
+        // Wait before next attempt
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+
+    throw new Error(`LLM Request failed after ${MAX_RETRIES} attempts.`);
+  }
+
+  private chatStreamOnce(
     messages: LLMMessage[],
     tools: LLMToolDefinition[] | undefined,
     callbacks: LLMStreamCallbacks

@@ -79,6 +79,14 @@ export interface JulesActivity {
   metadata?: Record<string, any>;
 }
 
+export interface StreamRetryPayload {
+  sessionId: string;
+  attempt: number;
+  maxRetries: number;
+  delayMs: number;
+  reason: string;
+}
+
 export interface StreamTokenPayload {
   sessionId: string;
   messageId: string;
@@ -113,6 +121,7 @@ export interface ElectronAPI {
   sendMessage: (sessionId: string, text: string) => Promise<void>;
   cancelExecution: (sessionId: string) => Promise<void>;
   onStreamToken: (callback: (payload: StreamTokenPayload) => void) => () => void;
+  onStreamRetry?: (callback: (payload: StreamRetryPayload) => void) => () => void;
   onToolCallUpdate: (callback: (payload: ToolCallPayload) => void) => () => void;
   onExecutionCompleted: (callback: (sessionId: string) => void) => () => void;
   onTitleUpdated?: (callback: (payload: { sessionId: string; title: string }) => void) => () => void;

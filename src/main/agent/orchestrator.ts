@@ -221,6 +221,9 @@ Git Repository: ${activeRepo} (${activeBranch})`;
               streamedContent += token;
               this.emitToken(sessionId, token, assistantMsgId);
             },
+            onRetry: (attempt, maxRetries, delayMs, reason) => {
+              this.emitRetry(sessionId, attempt, maxRetries, delayMs, reason);
+            },
           }
         );
       } catch (err: any) {
@@ -361,6 +364,15 @@ Git Repository: ${activeRepo} (${activeBranch})`;
     for (const win of windows) {
       if (!win.isDestroyed()) {
         win.webContents.send('chat:stream-token', { sessionId, messageId, delta });
+      }
+    }
+  }
+
+  private emitRetry(sessionId: string, attempt: number, maxRetries: number, delayMs: number, reason: string) {
+    const windows = BrowserWindow.getAllWindows();
+    for (const win of windows) {
+      if (!win.isDestroyed()) {
+        win.webContents.send('chat:stream-retry', { sessionId, attempt, maxRetries, delayMs, reason });
       }
     }
   }
