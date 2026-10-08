@@ -6,7 +6,7 @@ import { ChatStream } from './components/chat/ChatStream';
 import { ChatInput } from './components/chat/ChatInput';
 import { SettingsModal } from './components/settings/SettingsModal';
 import { api } from './api';
-import type { AppSettings, ChatSession, AppMode, StreamTokenPayload, ToolCallPayload, ToolExecutionRecord, JulesSessionSummary, ProjectInfo } from '@/shared/types';
+import type { AppSettings, ChatSession, ChatMessage, AppMode, StreamTokenPayload, ToolCallPayload, ToolExecutionRecord, JulesSessionSummary, ProjectInfo, AttachmentFile } from '@/shared/types';
 
 const DEFAULT_SETTINGS: AppSettings = {
   mode: 'standard',
@@ -294,14 +294,15 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleSendMessage = async (text: string) => {
+  const handleSendMessage = async (text: string, attachments?: AttachmentFile[]) => {
     if (!activeSessionId) return;
 
-    const userMsg = {
+    const userMsg: ChatMessage = {
       id: `temp_${Date.now()}`,
       sessionId: activeSessionId,
       role: 'user' as const,
       content: text,
+      attachments: attachments && attachments.length > 0 ? attachments : undefined,
       timestamp: Date.now(),
     };
 
@@ -337,7 +338,7 @@ export const App: React.FC = () => {
     setStreamingContent('');
     setStreamingTools([]);
 
-    await api.sendMessage(activeSessionId, text);
+    await api.sendMessage(activeSessionId, text, attachments);
   };
 
   const handleCancelExecution = async () => {

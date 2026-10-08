@@ -13,9 +13,11 @@ import {
   ArrowDown,
   ThumbsUp,
   ThumbsDown,
-  Clock
+  Clock,
+  Image as ImageIcon,
+  FileText
 } from 'lucide-react';
-import type { ChatMessage, ToolExecutionRecord, AppMode } from '@/shared/types';
+import type { ChatMessage, ToolExecutionRecord, AppMode, AttachmentFile } from '@/shared/types';
 import { ToolCard } from './ToolCard';
 
 interface ChatStreamProps {
@@ -316,8 +318,42 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
                   ref={isLatestTurn ? latestUserMsgRef : undefined}
                   className="w-full relative group/user pt-1"
                 >
-                  <div className="w-full bg-[#1e2025] border border-[#2b2d35] text-[#f0f1f4] px-4 py-3 rounded-2xl text-[13px] leading-relaxed shadow-sm select-text cursor-text relative">
-                    <div className="whitespace-pre-wrap select-text pr-8">{turn.userMessage.content}</div>
+                  <div className="w-full bg-[#1e2025] border border-[#2b2d35] text-[#f0f1f4] px-4 py-3 rounded-2xl text-[13px] leading-relaxed shadow-sm select-text cursor-text relative space-y-2.5">
+                    {/* Render message attachments if present */}
+                    {turn.userMessage.attachments && turn.userMessage.attachments.length > 0 && (
+                      <div className="flex flex-wrap gap-2 pt-0.5">
+                        {turn.userMessage.attachments.map((att) => (
+                          <div
+                            key={att.id}
+                            className="flex items-center space-x-2 bg-[#262830] border border-[#373a45] rounded-xl p-1.5 pr-3 text-xs text-[#d1d5db] shadow-sm max-w-[280px]"
+                          >
+                            {att.type === 'image' && att.dataUrl ? (
+                              <img
+                                src={att.dataUrl}
+                                alt={att.name}
+                                className="w-8 h-8 rounded-lg object-cover border border-white/10 shrink-0"
+                              />
+                            ) : att.type === 'image' ? (
+                              <div className="w-8 h-8 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center shrink-0">
+                                <ImageIcon className="w-4 h-4 text-sky-400" />
+                              </div>
+                            ) : (
+                              <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0">
+                                <FileText className="w-4 h-4 text-amber-400" />
+                              </div>
+                            )}
+                            <div className="flex flex-col min-w-0">
+                              <span className="font-mono text-[11px] text-[#f3f4f6] truncate font-medium">{att.name}</span>
+                              <span className="text-[10px] text-[#8e9196] font-mono">{Math.max(1, Math.round(att.size / 1024))} KB</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {turn.userMessage.content && (
+                      <div className="whitespace-pre-wrap select-text pr-8">{turn.userMessage.content}</div>
+                    )}
 
                     <button
                       type="button"

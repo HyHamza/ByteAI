@@ -3,8 +3,9 @@ import type { ElectronAPI, StreamTokenPayload, ToolCallPayload, JulesSessionSumm
 
 const api: ElectronAPI = {
   // Chat
-  sendMessage: (sessionId, text) => ipcRenderer.invoke('chat:send-message', { sessionId, text }),
+  sendMessage: (sessionId, text, attachments) => ipcRenderer.invoke('chat:send-message', { sessionId, text, attachments }),
   cancelExecution: (sessionId) => ipcRenderer.invoke('chat:cancel', { sessionId }),
+  pickFiles: (types) => ipcRenderer.invoke('chat:pick-files', { types }),
   
   onStreamToken: (callback) => {
     const handler = (_: any, payload: StreamTokenPayload) => callback(payload);

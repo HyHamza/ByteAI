@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, dialog, Menu, MenuItem, shell } from 'electron';
 import path from 'path';
+import fs from 'fs';
 import { DataStore } from './services/db/store';
 import { LLMClient } from './services/llm/client';
 import { JulesClient } from './services/jules/client';
@@ -7,7 +8,7 @@ import { JulesPoller } from './services/jules/poller';
 import { AgentOrchestrator } from './agent/orchestrator';
 import { detectGitRepo } from './services/git/detector';
 import { syncAndMergeJulesSession } from './services/git/merger';
-import type { AppMode, ChatSession } from '../shared/types';
+import type { AppMode, ChatSession, AttachmentFile } from '../shared/types';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -206,9 +207,69 @@ function setupIpcHandlers() {
   });
 
   // ── Chat & Orchestrator IPC
-  ipcMain.handle('chat:send-message', async (_, { sessionId, text }) => {
+  ipcMain.handle('chat:pick-files', async (_, { types }: { types?: 'all' | 'images' | 'code' }) => {
+    if (!mainWindow) return [];
+
+    let filters = [
+      { name: 'All Files', extensions: ['*'] }
+    ];
+
+    if (types === 'images') {
+      filters = [
+        { name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg'] }
+      ];
+    } else if (types === 'code') {
+      filters = [
+        { name: 'Code & Text', extensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'py', 'html', 'css', 'md', 'txt', 'rs', 'go', 'yaml', 'yml'] },
+        { name: 'All Files', extensions: ['*'] }
+      ];
+    }
+
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Attach Files or Images',
+      properties: ['openFile', 'multiSelections'],
+      filters,
+    });
+
+    if (result.canceled || !result.filePaths || result.filePaths.length === 0) {
+      return [];
+    }
+
+    const attachments: AttachmentFile[] = [];
+
+    for (const filePath of result.filePaths) {
+      try {
+        const stat = fs.statSync(filePath);
+        const name = path.basename(filePath);
+        const ext = path.extname(filePath).toLowerCase();
+        const isImage = ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.svg'].includes(ext);
+
+        let dataUrl: string | undefined = undefined;
+        if (isImage) {
+          const mime = ext === '.svg' ? 'image/svg+xml' : ext === '.png' ? 'image/png' : ext === '.gif' ? 'image/gif' : ext === '.webp' ? 'image/webp' : 'image/jpeg';
+          const buffer = fs.readFileSync(filePath);
+          dataUrl = `data:${mime};base64,${buffer.toString('base64')}`;
+        }
+
+        attachments.push({
+          id: `att_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          name,
+          path: filePath,
+          size: stat.size,
+          type: isImage ? 'image' : 'file',
+          dataUrl,
+        });
+      } catch (err) {
+        console.error('Failed reading attachment:', filePath, err);
+      }
+    }
+
+    return attachments;
+  });
+
+  ipcMain.handle('chat:send-message', async (_, { sessionId, text, attachments }: { sessionId: string; text: string; attachments?: AttachmentFile[] }) => {
     // Run the autonomous agent loop in the background!
-    orchestrator.runAutonomousTurn(sessionId, text).catch((err) => {
+    orchestrator.runAutonomousTurn(sessionId, text, attachments).catch((err) => {
       console.error('Error during autonomous agent turn:', err);
     });
   });

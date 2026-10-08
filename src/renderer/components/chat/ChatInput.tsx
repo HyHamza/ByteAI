@@ -9,12 +9,18 @@ import {
   Sparkles, 
   Bot, 
   ShieldCheck,
-  Check
+  Check,
+  Image as ImageIcon,
+  FileText,
+  X,
+  Paperclip,
+  Code
 } from 'lucide-react';
-import type { AppMode } from '@/shared/types';
+import type { AppMode, AttachmentFile } from '@/shared/types';
+import { api } from '../../api';
 
 interface ChatInputProps {
-  onSendMessage: (text: string) => void;
+  onSendMessage: (text: string, attachments?: AttachmentFile[]) => void;
   onCancel: () => void;
   isStreaming: boolean;
   mode: AppMode;
@@ -76,21 +82,145 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   isCenteredLayout = false,
 }) => {
   const [text, setText] = useState('');
+  const [attachments, setAttachments] = useState<AttachmentFile[]>([]);
+  const [isAttachMenuOpen, setIsAttachMenuOpen] = useState(false);
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [isModeDropdownOpen, setIsModeDropdownOpen] = useState(false);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const hiddenFileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!text.trim() || isStreaming || disabled) return;
-    onSendMessage(text.trim());
+    if ((!text.trim() && attachments.length === 0) || isStreaming || disabled) return;
+    onSendMessage(text.trim(), attachments);
     setText('');
+    setAttachments([]);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSubmit();
+    }
+  };
+
+  const handlePickFiles = async (types: 'all' | 'images' | 'code' = 'all') => {
+    setIsAttachMenuOpen(false);
+    try {
+      if (api.pickFiles) {
+        const picked = await api.pickFiles(types);
+        if (picked && picked.length > 0) {
+          setAttachments((prev) => [...prev, ...picked]);
+        }
+      } else if (hiddenFileInputRef.current) {
+        hiddenFileInputRef.current.click();
+      }
+    } catch (err) {
+      console.error('File pick failed:', err);
+    }
+  };
+
+  const handleNativeFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const isImg = file.type.startsWith('image/');
+      const reader = new FileReader();
+
+      reader.onload = (event) => {
+        const dataUrl = event.target?.result as string;
+        setAttachments((prev) => [
+          ...prev,
+          {
+            id: `att_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+            name: file.name,
+            path: (file as any).path || file.name,
+            size: file.size,
+            type: isImg ? 'image' : 'file',
+            dataUrl: isImg ? dataUrl : undefined,
+          },
+        ]);
+      };
+
+      if (isImg) {
+        reader.readAsDataURL(file);
+      } else {
+        setAttachments((prev) => [
+          ...prev,
+          {
+            id: `att_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+            name: file.name,
+            path: (file as any).path || file.name,
+            size: file.size,
+            type: 'file',
+          },
+        ]);
+      }
+    }
+    e.target.value = '';
+  };
+
+  const handleRemoveAttachment = (id: string) => {
+    setAttachments((prev) => prev.filter((a) => a.id !== id));
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOver(false);
+
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const files = e.dataTransfer.files;
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const isImg = file.type.startsWith('image/') || /\.(png|jpe?g|webp|gif|svg)$/i.test(file.name);
+        const reader = new FileReader();
+
+        reader.onload = (event) => {
+          const dataUrl = event.target?.result as string;
+          setAttachments((prev) => [
+            ...prev,
+            {
+              id: `att_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+              name: file.name,
+              path: (file as any).path || file.name,
+              size: file.size,
+              type: isImg ? 'image' : 'file',
+              dataUrl: isImg ? dataUrl : undefined,
+            },
+          ]);
+        };
+
+        if (isImg) {
+          reader.readAsDataURL(file);
+        } else {
+          setAttachments((prev) => [
+            ...prev,
+            {
+              id: `att_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+              name: file.name,
+              path: (file as any).path || file.name,
+              size: file.size,
+              type: 'file',
+            },
+          ]);
+        }
+      }
     }
   };
 
@@ -110,8 +240,19 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     ? Array.from(new Set(availableModels))
     : ['auto'];
 
+  const canSubmit = (text.trim().length > 0 || attachments.length > 0) && !disabled;
+
   return (
     <div className={`w-full flex flex-col items-center ${isCenteredLayout ? 'px-4 py-8' : 'px-4 pb-4 pt-1 bg-gradient-to-t from-[#131314] to-transparent'}`}>
+      {/* Hidden File Input fallback */}
+      <input
+        ref={hiddenFileInputRef}
+        type="file"
+        multiple
+        className="hidden"
+        onChange={handleNativeFileInputChange}
+      />
+
       {/* If Centered Layout: Top Workspace Chip */}
       {isCenteredLayout && (
         <button
@@ -125,15 +266,53 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       )}
 
       {/* Floating Prompt Card (The Antigravity input box) */}
-      <div className={`w-full ${isCenteredLayout ? 'max-w-2xl' : 'max-w-3xl'} bg-[#1c1d21] border border-[#2c2e35] rounded-2xl p-3 shadow-2xl transition-all focus-within:border-[#3d404a]`}>
+      <div 
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        className={`w-full ${isCenteredLayout ? 'max-w-2xl' : 'max-w-3xl'} bg-[#1c1d21] border ${isDraggingOver ? 'border-[#38bdf8] bg-[#1e232d]' : 'border-[#2c2e35]'} rounded-2xl p-3 shadow-2xl transition-all focus-within:border-[#3d404a] relative`}
+      >
         <form onSubmit={handleSubmit} className="flex flex-col">
+          {/* Attachment Preview Chips */}
+          {attachments.length > 0 && (
+            <div className="flex flex-wrap gap-2 pb-2 mb-1.5 border-b border-[#26282f] animate-in fade-in duration-150">
+              {attachments.map((att) => (
+                <div 
+                  key={att.id}
+                  className="flex items-center space-x-2 bg-[#25272e] border border-[#343740] hover:border-[#444754] text-[#d1d5db] px-2.5 py-1 rounded-xl text-xs group/att transition-all shadow-sm max-w-[220px]"
+                >
+                  {att.type === 'image' && att.dataUrl ? (
+                    <img 
+                      src={att.dataUrl} 
+                      alt={att.name} 
+                      className="w-5 h-5 rounded object-cover shrink-0 border border-white/10" 
+                    />
+                  ) : att.type === 'image' ? (
+                    <ImageIcon className="w-4 h-4 text-sky-400 shrink-0" />
+                  ) : (
+                    <FileText className="w-4 h-4 text-amber-400 shrink-0" />
+                  )}
+                  <span className="truncate font-mono text-[11px] text-[#e2e8f0]">{att.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveAttachment(att.id)}
+                    className="text-[#8e9196] hover:text-white hover:bg-white/10 p-0.5 rounded-full transition-colors cursor-pointer"
+                    title="Remove attachment"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* Text input area */}
           <textarea
             ref={textareaRef}
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask anything, @ to mention, / for actions"
+            placeholder={attachments.length > 0 ? "Add instructions or press Enter to analyze attachments..." : "Ask anything, @ to mention, / for actions"}
             disabled={disabled || isStreaming}
             rows={isCenteredLayout ? 2 : 1}
             className="w-full bg-transparent text-[#e3e3e3] placeholder-[#6c707a] text-[13px] resize-none focus:outline-none p-1 font-sans leading-relaxed min-h-[44px]"
@@ -143,14 +322,60 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           <div className="flex items-center justify-between pt-2 mt-1 border-t border-[#25272e]/60">
             {/* Left Tools: + attachment & Model Selector Pill */}
             <div className="flex items-center space-x-2 relative">
-              {/* Context Attachment Button (+) */}
-              <button
-                type="button"
-                className="w-7 h-7 rounded-full flex items-center justify-center text-[#8e9196] hover:text-white hover:bg-[#26282e] transition-colors cursor-pointer"
-                title="Add context or files"
-              >
-                <Plus className="w-4 h-4" />
-              </button>
+              {/* Context Attachment Button (+) with Popover Menu */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setIsAttachMenuOpen(!isAttachMenuOpen)}
+                  className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors cursor-pointer ${
+                    isAttachMenuOpen || attachments.length > 0
+                      ? 'text-[#38bdf8] bg-[#38bdf8]/10 border border-[#38bdf8]/30'
+                      : 'text-[#8e9196] hover:text-white hover:bg-[#26282e]'
+                  }`}
+                  title="Attach files, images, or code"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+
+                {/* Attachment Type Menu Popover */}
+                {isAttachMenuOpen && (
+                  <div 
+                    className="absolute bottom-9 left-0 w-48 bg-[#1a1b20] border border-[#2d2f38] rounded-2xl shadow-2xl py-1 text-xs text-[#c4c7cf] z-50 animate-in fade-in zoom-in-95 duration-100"
+                    onMouseLeave={() => setIsAttachMenuOpen(false)}
+                  >
+                    <div className="px-3 py-1.5 text-[10px] font-semibold text-[#6c707a] uppercase tracking-wider border-b border-[#25272e]">
+                      Add Attachment
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handlePickFiles('images')}
+                      className="w-full flex items-center space-x-2.5 px-3 py-2 text-left hover:bg-[#26282f] hover:text-white transition-colors cursor-pointer"
+                    >
+                      <ImageIcon className="w-4 h-4 text-sky-400" />
+                      <span>Upload Images</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handlePickFiles('code')}
+                      className="w-full flex items-center space-x-2.5 px-3 py-2 text-left hover:bg-[#26282f] hover:text-white transition-colors cursor-pointer"
+                    >
+                      <Code className="w-4 h-4 text-emerald-400" />
+                      <span>Code & Text Files</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handlePickFiles('all')}
+                      className="w-full flex items-center space-x-2.5 px-3 py-2 text-left hover:bg-[#26282f] hover:text-white transition-colors cursor-pointer border-t border-[#25272e]"
+                    >
+                      <Paperclip className="w-4 h-4 text-amber-400" />
+                      <span>Browse All Files...</span>
+                    </button>
+                  </div>
+                )}
+              </div>
 
               {/* Model Pill showing active real model */}
               <div className="relative">
@@ -237,9 +462,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               ) : (
                 <button
                   type="submit"
-                  disabled={!text.trim() || disabled}
+                  disabled={!canSubmit}
                   className={`w-7 h-7 rounded-full flex items-center justify-center transition-all cursor-pointer ${
-                    text.trim() && !disabled
+                    canSubmit
                       ? 'bg-[#1a73e8] text-white hover:bg-[#165ec2] shadow-md'
                       : 'bg-[#282a30] text-[#5e626a] cursor-not-allowed'
                   }`}

@@ -1,5 +1,5 @@
 import { BrowserWindow } from 'electron';
-import type { AppMode, ChatMessage, ToolExecutionRecord } from '../../shared/types';
+import type { AppMode, ChatMessage, ToolExecutionRecord, AttachmentFile } from '../../shared/types';
 import { LLMClient, type LLMMessage } from '../services/llm/client';
 import { STANDARD_TOOL_DEFS, JULES_TOOL_DEFS, executeToolCall } from '../tools';
 import { DataStore, isSubstantiveMessage } from '../services/db/store';
@@ -72,7 +72,7 @@ export class AgentOrchestrator {
     this.activeCancellations.add(sessionId);
   }
 
-  public async runAutonomousTurn(sessionId: string, userText: string): Promise<void> {
+  public async runAutonomousTurn(sessionId: string, userText: string, attachments?: AttachmentFile[]): Promise<void> {
     const store = DataStore.getInstance();
     const session = store.getSession(sessionId);
     if (!session) throw new Error(`Session ${sessionId} not found`);
@@ -90,6 +90,7 @@ export class AgentOrchestrator {
       sessionId,
       role: 'user',
       content: userText,
+      attachments: attachments && attachments.length > 0 ? attachments : undefined,
       timestamp: Date.now(),
     };
     store.addMessage(sessionId, userMsg);
@@ -186,6 +187,25 @@ Git Repository: ${activeRepo} (${activeBranch})`;
           llmMessages.push({
             role: 'assistant',
             content: m.content,
+          });
+        }
+      } else if (m.role === 'user') {
+        let contentWithAttachments = m.content || '';
+        if (m.attachments && m.attachments.length > 0) {
+          const attDesc = m.attachments.map((a) => {
+            if (a.type === 'image') {
+              return `[Attached Image: "${a.name}" (Local path: ${a.path})]`;
+            }
+            return `[Attached File: "${a.name}" (Local path: ${a.path}, Size: ${Math.round(a.size / 1024)} KB)]`;
+          }).join('\n');
+          contentWithAttachments = contentWithAttachments 
+            ? `${contentWithAttachments}\n\nATTACHED FILES/IMAGES:\n${attDesc}`
+            : `ATTACHED FILES/IMAGES:\n${attDesc}`;
+        }
+        if (contentWithAttachments.trim()) {
+          llmMessages.push({
+            role: 'user',
+            content: contentWithAttachments,
           });
         }
       } else if (m.content && m.content.trim()) {

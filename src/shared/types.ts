@@ -24,12 +24,22 @@ export interface AppSettings {
   activeWorkspacePath: string | null;
 }
 
+export interface AttachmentFile {
+  id: string;
+  name: string;
+  path: string;
+  size: number;
+  type: 'image' | 'file';
+  dataUrl?: string; // base64 thumbnail for images or preview
+}
+
 export interface ChatMessage {
   id: string;
   sessionId: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: number;
+  attachments?: AttachmentFile[];
   toolCalls?: ToolExecutionRecord[];
   isStreaming?: boolean;
   executionDuration?: number;
@@ -118,8 +128,9 @@ export interface ProjectInfo {
 
 export interface ElectronAPI {
   // Chat & Stream
-  sendMessage: (sessionId: string, text: string) => Promise<void>;
+  sendMessage: (sessionId: string, text: string, attachments?: AttachmentFile[]) => Promise<void>;
   cancelExecution: (sessionId: string) => Promise<void>;
+  pickFiles?: (types?: 'all' | 'images' | 'code') => Promise<AttachmentFile[]>;
   onStreamToken: (callback: (payload: StreamTokenPayload) => void) => () => void;
   onStreamRetry?: (callback: (payload: StreamRetryPayload) => void) => () => void;
   onToolCallUpdate: (callback: (payload: ToolCallPayload) => void) => () => void;
