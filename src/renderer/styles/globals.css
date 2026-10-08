@@ -37,6 +37,25 @@
     user-select: text !important;
   }
 
+  ::selection {
+    background-color: #1a73e8 !important;
+    color: #ffffff !important;
+  }
+
+  ::-moz-selection {
+    background-color: #1a73e8 !important;
+    color: #ffffff !important;
+  }
+
+  /* Universal text selection for chat content */
+  .select-text,
+  .select-text *,
+  .prose-antigravity,
+  .prose-antigravity * {
+    -webkit-user-select: text !important;
+    user-select: text !important;
+  }
+
   /* Custom minimal Antigravity scrollbars */
   ::-webkit-scrollbar {
     width: 5px;

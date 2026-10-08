@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, Menu, MenuItem } from 'electron';
 import path from 'path';
 import { DataStore } from './services/db/store';
 import { LLMClient } from './services/llm/client';
@@ -28,6 +28,28 @@ function createWindow() {
       nodeIntegration: false,
       backgroundThrottling: false,
     },
+  });
+
+  mainWindow.webContents.on('context-menu', (_event, params) => {
+    const menu = new Menu();
+
+    if (params.selectionText && params.selectionText.trim().length > 0) {
+      menu.append(new MenuItem({ label: 'Copy', role: 'copy' }));
+    }
+
+    if (params.isEditable) {
+      menu.append(new MenuItem({ label: 'Cut', role: 'cut' }));
+      menu.append(new MenuItem({ label: 'Paste', role: 'paste' }));
+    }
+
+    if (!params.selectionText && !params.isEditable) {
+      menu.append(new MenuItem({ label: 'Copy', role: 'copy', enabled: false }));
+    }
+
+    menu.append(new MenuItem({ type: 'separator' }));
+    menu.append(new MenuItem({ label: 'Select All', role: 'selectAll' }));
+
+    menu.popup();
   });
 
   mainWindow.once('ready-to-show', () => {

@@ -22,6 +22,7 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
 }) => {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
+  const [copiedFullChat, setCopiedFullChat] = useState(false);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -33,25 +34,92 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
     setTimeout(() => setCopiedCodeId(null), 2000);
   };
 
+  const handleCopyFullChat = () => {
+    if (messages.length === 0) return;
+    const fullText = messages
+      .map((m) => {
+        const roleName = m.role === 'user' ? 'USER' : 'BYTE';
+        const time = new Date(m.timestamp).toLocaleTimeString();
+        let section = `### ${roleName} [${time}]\n${m.content || ''}`;
+        if (m.toolCalls && m.toolCalls.length > 0) {
+          const toolCallsFormatted = m.toolCalls
+            .map((tc) => {
+              const argStr = tc.args ? JSON.stringify(tc.args, null, 2) : '{}';
+              const outStr = tc.output || '(no output)';
+              return `\n> **Tool Call:** \`${tc.toolName}\` [Status: ${tc.status}]\n> **Args:**\n\`\`\`json\n${argStr}\n\`\`\`\n> **Output:**\n\`\`\`\n${outStr}\n\`\`\``;
+            })
+            .join('\n');
+          section += `\n${toolCallsFormatted}`;
+        }
+        return section;
+      })
+      .join('\n\n---\n\n');
+
+    navigator.clipboard.writeText(fullText);
+    setCopiedFullChat(true);
+    setTimeout(() => setCopiedFullChat(false), 2000);
+  };
+
   return (
-    <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6 max-w-4xl w-full mx-auto">
+    <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6 max-w-4xl w-full mx-auto select-text">
+      {/* Top action bar: Copy entire chat */}
+      {messages.length > 0 && (
+        <div className="flex items-center justify-between pb-3 mb-2 border-b border-[#212328] select-none">
+          <span className="text-[11px] text-[#6d717b] font-mono">
+            {messages.length} message{messages.length === 1 ? '' : 's'}
+          </span>
+          <button
+            type="button"
+            onClick={handleCopyFullChat}
+            className="flex items-center space-x-1.5 text-[11px] text-[#8e9196] hover:text-white bg-[#191a1e] hover:bg-[#25272e] border border-[#2a2c33] px-2.5 py-1 rounded-lg transition-colors cursor-pointer shadow-sm"
+            title="Copy entire chat history including tool records"
+          >
+            {copiedFullChat ? (
+              <>
+                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="text-emerald-400 font-medium">Copied Entire Chat</span>
+              </>
+            ) : (
+              <>
+                <Copy className="w-3.5 h-3.5" />
+                <span>Copy Entire Chat</span>
+              </>
+            )}
+          </button>
+        </div>
+      )}
+
       {messages.map((m) => {
         const isUser = m.role === 'user';
 
         if (isUser) {
+          const userMsgId = `user_${m.id}`;
           return (
-            <div key={m.id} className="flex justify-end">
-              <div className="max-w-2xl bg-[#1e2025] border border-[#2b2d35] text-[#f0f1f4] px-4 py-2.5 rounded-2xl text-[13px] leading-relaxed shadow-sm">
-                <div className="whitespace-pre-wrap">{m.content}</div>
+            <div key={m.id} className="flex justify-end items-center group/user space-x-2">
+              <button
+                type="button"
+                onClick={() => copyToClipboard(m.content, userMsgId)}
+                className="opacity-0 group-hover/user:opacity-100 transition-opacity p-1.5 rounded-lg text-[#8e9196] hover:text-white hover:bg-[#202227] cursor-pointer"
+                title="Copy message"
+              >
+                {copiedCodeId === userMsgId ? (
+                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                ) : (
+                  <Copy className="w-3.5 h-3.5" />
+                )}
+              </button>
+              <div className="max-w-2xl bg-[#1e2025] border border-[#2b2d35] text-[#f0f1f4] px-4 py-2.5 rounded-2xl text-[13px] leading-relaxed shadow-sm select-text cursor-text">
+                <div className="whitespace-pre-wrap select-text">{m.content}</div>
               </div>
             </div>
           );
         }
 
+        const asstMsgId = `asst_${m.id}`;
         return (
-          <div key={m.id} className="flex space-x-3.5 text-xs leading-relaxed group">
+          <div key={m.id} className="flex space-x-3.5 text-xs leading-relaxed group/asst">
             {/* Assistant Avatar: Antigravity Delta A Icon */}
-            <div className="w-7 h-7 rounded-lg bg-[#1a1b1f] border border-[#282a30] flex items-center justify-center shrink-0 text-white mt-0.5 shadow-sm">
+            <div className="w-7 h-7 rounded-lg bg-[#1a1b1f] border border-[#282a30] flex items-center justify-center shrink-0 text-white mt-0.5 shadow-sm select-none">
               <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
                 <path d="M12 2.5L2 20.5h4.2l1.9-3.6h7.8l1.9 3.6H22L12 2.5zm0 5.4l2.8 5.4H9.2L12 7.9z" />
               </svg>
@@ -59,18 +127,41 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
 
             {/* Message Body */}
             <div className="flex-1 overflow-hidden space-y-2">
-              <div className="flex items-center space-x-2">
-                <span className="font-medium text-[12px] text-[#c4c7cf]">
-                  Byte
-                </span>
-                <span className="text-[10px] text-[#60646c]">
-                  {new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </span>
+              <div className="flex items-center justify-between select-none">
+                <div className="flex items-center space-x-2">
+                  <span className="font-medium text-[12px] text-[#c4c7cf]">
+                    Byte
+                  </span>
+                  <span className="text-[10px] text-[#60646c]">
+                    {new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+
+                {m.content && (
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(m.content, asstMsgId)}
+                    className="flex items-center space-x-1 text-[11px] text-[#8e9196] hover:text-white transition-colors cursor-pointer px-2 py-0.5 rounded hover:bg-[#202227]"
+                    title="Copy response"
+                  >
+                    {copiedCodeId === asstMsgId ? (
+                      <>
+                        <Check className="w-3 h-3 text-emerald-400" />
+                        <span className="text-emerald-400 text-[10px]">Copied</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3 h-3" />
+                        <span className="text-[10px]">Copy</span>
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
 
               {/* Rich Markdown Formatted Content */}
               {m.content && (
-                <div className="prose-antigravity">
+                <div className="prose-antigravity select-text cursor-text">
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
                     components={{
@@ -153,7 +244,7 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
             </div>
 
             {currentStreamContent && (
-              <div className="prose-antigravity">
+              <div className="prose-antigravity select-text cursor-text">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
                   {currentStreamContent}
                 </ReactMarkdown>

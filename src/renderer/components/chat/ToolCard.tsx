@@ -9,7 +9,9 @@ import {
   ChevronRight, 
   Loader2, 
   CheckCircle2, 
-  AlertCircle 
+  AlertCircle,
+  Copy,
+  Check
 } from 'lucide-react';
 import type { ToolExecutionRecord } from '@/shared/types';
 
@@ -19,6 +21,14 @@ interface ToolCardProps {
 
 export const ToolCard: React.FC<ToolCardProps> = ({ tool }) => {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [copiedType, setCopiedType] = useState<string | null>(null);
+
+  const copyText = (e: React.MouseEvent, text: string, type: string) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(text);
+    setCopiedType(type);
+    setTimeout(() => setCopiedType(null), 2000);
+  };
 
   const getToolIcon = () => {
     switch (tool.toolName) {
@@ -81,11 +91,30 @@ export const ToolCard: React.FC<ToolCardProps> = ({ tool }) => {
       </div>
 
       {isExpanded && (
-        <div className="border-t border-[#25272e] bg-[#121316] p-3 font-mono text-[11px] overflow-x-auto space-y-2">
+        <div className="border-t border-[#25272e] bg-[#121316] p-3 font-mono text-[11px] overflow-x-auto space-y-3">
           {tool.args && Object.keys(tool.args).length > 0 && (
             <div>
-              <div className="text-[#787c87] font-semibold mb-1">Arguments:</div>
-              <pre className="text-[#34d399] whitespace-pre-wrap bg-[#18191d] p-2 rounded-lg border border-[#24262c]">
+              <div className="flex items-center justify-between mb-1 select-none">
+                <span className="text-[#787c87] font-semibold text-[11px]">Arguments:</span>
+                <button
+                  type="button"
+                  onClick={(e) => copyText(e, JSON.stringify(tool.args, null, 2), 'args')}
+                  className="flex items-center space-x-1 text-[10px] text-[#8e9196] hover:text-white px-2 py-0.5 rounded hover:bg-[#25272e] cursor-pointer transition-colors"
+                >
+                  {copiedType === 'args' ? (
+                    <>
+                      <Check className="w-3 h-3 text-emerald-400" />
+                      <span className="text-emerald-400">Copied</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3 h-3" />
+                      <span>Copy Args</span>
+                    </>
+                  )}
+                </button>
+              </div>
+              <pre className="text-[#34d399] whitespace-pre-wrap bg-[#18191d] p-2.5 rounded-lg border border-[#24262c] select-text cursor-text">
                 {JSON.stringify(tool.args, null, 2)}
               </pre>
             </div>
@@ -93,8 +122,27 @@ export const ToolCard: React.FC<ToolCardProps> = ({ tool }) => {
 
           {tool.output && (
             <div>
-              <div className="text-[#787c87] font-semibold mb-1">Output:</div>
-              <pre className="text-[#d1d5db] whitespace-pre-wrap max-h-64 overflow-y-auto bg-[#18191d] p-2 rounded-lg border border-[#24262c]">
+              <div className="flex items-center justify-between mb-1 select-none">
+                <span className="text-[#787c87] font-semibold text-[11px]">Output:</span>
+                <button
+                  type="button"
+                  onClick={(e) => copyText(e, tool.output || '', 'output')}
+                  className="flex items-center space-x-1 text-[10px] text-[#8e9196] hover:text-white px-2 py-0.5 rounded hover:bg-[#25272e] cursor-pointer transition-colors"
+                >
+                  {copiedType === 'output' ? (
+                    <>
+                      <Check className="w-3 h-3 text-emerald-400" />
+                      <span className="text-emerald-400">Copied</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3 h-3" />
+                      <span>Copy Output</span>
+                    </>
+                  )}
+                </button>
+              </div>
+              <pre className="text-[#d1d5db] whitespace-pre-wrap max-h-72 overflow-y-auto bg-[#18191d] p-2.5 rounded-lg border border-[#24262c] select-text cursor-text">
                 {tool.output}
               </pre>
             </div>
