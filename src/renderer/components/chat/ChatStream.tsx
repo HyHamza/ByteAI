@@ -6,6 +6,7 @@ import { ToolCard } from './ToolCard';
 interface ChatStreamProps {
   messages: ChatMessage[];
   currentStreamContent: string;
+  streamingTools?: ToolExecutionRecord[];
   isStreaming: boolean;
   mode: AppMode;
 }
@@ -13,6 +14,7 @@ interface ChatStreamProps {
 export const ChatStream: React.FC<ChatStreamProps> = ({
   messages,
   currentStreamContent,
+  streamingTools,
   isStreaming,
   mode,
 }) => {
@@ -20,7 +22,7 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, currentStreamContent]);
+  }, [messages, currentStreamContent, streamingTools]);
 
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -101,14 +103,25 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
 
           <div className="flex-1 space-y-2">
             <div className="font-semibold text-[11px] text-[#8b949e] flex items-center space-x-1.5">
-              <span>Reasoning autonomously...</span>
+              <span>{mode === 'jules' ? 'Supervising Jules workers...' : 'Reasoning autonomously...'}</span>
             </div>
 
-            {currentStreamContent ? (
-              <div className="whitespace-pre-wrap text-[#c9d1d9] bg-[#161b22]/70 p-3 rounded-lg border border-[#30363d]/60">
+            {currentStreamContent && (
+              <div className="whitespace-pre-wrap text-[#c9d1d9] bg-[#161b22]/70 p-3 rounded-lg border border-[#30363d]/60 font-sans">
                 {currentStreamContent}
               </div>
-            ) : (
+            )}
+
+            {/* Live Streaming Tool Cards */}
+            {streamingTools && streamingTools.length > 0 && (
+              <div className="space-y-2">
+                {streamingTools.map((tc) => (
+                  <ToolCard key={tc.id} tool={tc} />
+                ))}
+              </div>
+            )}
+
+            {!currentStreamContent && (!streamingTools || streamingTools.length === 0) && (
               <div className="text-[#8b949e] italic text-xs">Executing step...</div>
             )}
           </div>

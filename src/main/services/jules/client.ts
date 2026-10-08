@@ -78,17 +78,30 @@ export class JulesClient {
       const resp = await this.request<{ sessions?: any[] }>('/sessions?pageSize=30');
       if (!resp.sessions) return [];
 
-      return resp.sessions.map((s) => ({
-        id: s.name ? s.name.replace('sessions/', '') : s.id,
-        title: s.title || s.name,
-        state: s.state || 'STATE_UNSPECIFIED',
-        repo: s.sourceContext?.github?.repo || '',
-        branch: s.sourceContext?.github?.startingBranch || 'main',
-        createdAt: s.createTime || new Date().toISOString(),
-        updatedAt: s.updateTime || new Date().toISOString(),
-        prUrl: s.outputs?.pullRequest?.url,
-        prNumber: s.outputs?.pullRequest?.number,
-      }));
+      return resp.sessions.map((s) => {
+        let prUrl: string | undefined;
+        let prNumber: number | undefined;
+        if (Array.isArray(s.outputs)) {
+          for (const o of s.outputs) {
+            if (o.pullRequest) {
+              prUrl = o.pullRequest.url;
+              prNumber = o.pullRequest.number;
+              break;
+            }
+          }
+        }
+        return {
+          id: s.name ? s.name.replace('sessions/', '') : (s.id || ''),
+          title: s.title || s.name,
+          state: s.state || 'STATE_UNSPECIFIED',
+          repo: s.sourceContext?.source || s.sourceContext?.github?.repo || '',
+          branch: s.sourceContext?.githubRepoContext?.startingBranch || s.sourceContext?.github?.startingBranch || 'main',
+          createdAt: s.createTime || new Date().toISOString(),
+          updatedAt: s.updateTime || new Date().toISOString(),
+          prUrl,
+          prNumber,
+        };
+      });
     } catch (_) {
       return [];
     }
@@ -120,21 +133,26 @@ export class JulesClient {
     branch?: string;
   }): Promise<{ sessionId: string }> {
     const settings = DataStore.getInstance().getSettings();
-    const repo = params.repo || settings.julesDefaultRepo || process.env.JULES_REPO;
+    let repo = (params.repo || settings.julesDefaultRepo || process.env.JULES_REPO || '').trim();
     const branch = params.branch || settings.julesDefaultBranch || 'main';
 
     if (!repo) {
       throw new Error('GitHub repo source required (e.g. sources/github/Owner/Repo). Configure in Settings or pass directly.');
     }
 
+    // Normalize to sources/github/Owner/Repo
+    if (!repo.startsWith('sources/github/')) {
+      const cleaned = repo.replace(/\.git$/i, '').replace(/^https?:\/\/github\.com\//i, '').replace(/^git@github\.com:/i, '');
+      repo = `sources/github/${cleaned}`;
+    }
+
     const payload = {
+      title: params.title || `Jules: ${params.prompt.slice(0, 50)}`,
       prompt: params.prompt,
-      title: params.title || params.prompt.slice(0, 50),
       sourceContext: {
-        github: {
-          repo,
-          startingBranch: branch,
-        },
+        source: repo,
+        githubRepoContext: { startingBranch: branch },
+        environmentVariablesEnabled: true,
       },
     };
 
@@ -151,7 +169,7 @@ export class JulesClient {
     const cleanId = sessionId.replace('sessions/', '');
     await this.request(`/sessions/${cleanId}:sendMessage`, {
       method: 'POST',
-      body: { message: prompt },
+      body: { prompt },
     });
     return true;
   }

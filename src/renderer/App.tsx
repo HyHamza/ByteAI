@@ -6,7 +6,7 @@ import { ChatStream } from './components/chat/ChatStream';
 import { ChatInput } from './components/chat/ChatInput';
 import { SettingsModal } from './components/settings/SettingsModal';
 import { api } from './api';
-import type { AppSettings, ChatSession, AppMode, StreamTokenPayload, ToolCallPayload } from '@/shared/types';
+import type { AppSettings, ChatSession, AppMode, StreamTokenPayload, ToolCallPayload, ToolExecutionRecord } from '@/shared/types';
 
 const DEFAULT_SETTINGS: AppSettings = {
   mode: 'standard',
@@ -42,6 +42,7 @@ export const App: React.FC = () => {
   // Streaming state
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
+  const [streamingTools, setStreamingTools] = useState<ToolExecutionRecord[]>([]);
 
   // Load initial settings, workspace & sessions concurrently
   useEffect(() => {
@@ -104,24 +105,15 @@ export const App: React.FC = () => {
 
     const unsubTool = api.onToolCallUpdate((payload: ToolCallPayload) => {
       if (payload.sessionId === activeSessionId) {
-        setSessions((prev) =>
-          prev.map((s) => {
-            if (s.id !== payload.sessionId) return s;
-            const updatedMessages = [...s.messages];
-            const lastMsg = updatedMessages[updatedMessages.length - 1];
-            if (lastMsg && lastMsg.role === 'assistant') {
-              const existingTools = lastMsg.toolCalls || [];
-              const idx = existingTools.findIndex((t) => t.id === payload.toolCall.id);
-              if (idx !== -1) {
-                existingTools[idx] = payload.toolCall;
-              } else {
-                existingTools.push(payload.toolCall);
-              }
-              lastMsg.toolCalls = existingTools;
-            }
-            return { ...s, messages: updatedMessages };
-          })
-        );
+        setStreamingTools((prev) => {
+          const idx = prev.findIndex((t) => t.id === payload.toolCall.id);
+          if (idx !== -1) {
+            const next = [...prev];
+            next[idx] = payload.toolCall;
+            return next;
+          }
+          return [...prev, payload.toolCall];
+        });
       }
     });
 
@@ -129,6 +121,7 @@ export const App: React.FC = () => {
       if (sessId === activeSessionId) {
         setIsStreaming(false);
         setStreamingContent('');
+        setStreamingTools([]);
         api.listSessions().then((list: ChatSession[]) => setSessions(list));
       }
     });
@@ -206,6 +199,7 @@ export const App: React.FC = () => {
 
     setIsStreaming(true);
     setStreamingContent('');
+    setStreamingTools([]);
 
     await api.sendMessage(activeSessionId, text);
   };
@@ -214,6 +208,7 @@ export const App: React.FC = () => {
     if (!activeSessionId) return;
     await api.cancelExecution(activeSessionId);
     setIsStreaming(false);
+    setStreamingTools([]);
   };
 
   const handleSaveSettings = async (partial: Partial<AppSettings>) => {
@@ -253,6 +248,7 @@ export const App: React.FC = () => {
           <ChatStream
             messages={activeSession?.messages || []}
             currentStreamContent={streamingContent}
+            streamingTools={streamingTools}
             isStreaming={isStreaming}
             mode={activeSession?.mode || settings.mode}
           />
