@@ -140,15 +140,19 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
   }, [messages, currentStreamContent, streamingTools]);
 
   // When a user message is sent:
-  // Scroll so the sent message comes on top!
+  // Position sent message at the top of the turn smoothly ONCE without conflicting with streaming
   const prevMessagesCountRef = useRef(messages.length);
   useEffect(() => {
     if (messages.length > prevMessagesCountRef.current) {
       const lastMsg = messages[messages.length - 1];
       if (lastMsg && lastMsg.role === 'user') {
-        setTimeout(() => {
-          latestUserMsgRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }, 40);
+        requestAnimationFrame(() => {
+          if (scrollContainerRef.current && latestUserMsgRef.current) {
+            const container = scrollContainerRef.current;
+            const targetTop = latestUserMsgRef.current.offsetTop - 16;
+            container.scrollTo({ top: Math.max(0, targetTop), behavior: 'smooth' });
+          }
+        });
         isAtBottomRef.current = true;
         setShowScrollBottomBtn(false);
       }
@@ -213,7 +217,7 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
       <div 
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-4 py-6 space-y-6 max-w-4xl w-full mx-auto select-text scroll-smooth"
+        className="flex-1 overflow-y-auto px-4 py-6 space-y-6 max-w-4xl w-full mx-auto select-text"
       >
         {/* Top action bar: Copy entire chat */}
         {messages.length > 0 && (
