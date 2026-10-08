@@ -196,7 +196,7 @@ export class JulesPoller {
     if (Notification.isSupported()) {
       try {
         const notif = new Notification({
-          title: 'Byte - Jules Worker Needs Direction',
+          title: 'Byte - Jules Worker Update',
           body: `Task: ${s.title || s.id}\n${julesMessage.slice(0, 120)}...`,
           silent: false,
         });
@@ -238,22 +238,27 @@ export class JulesPoller {
     }
 
     // 3. Wake up Byte (Orchestrator) in the background to formulate architectural response
-    const supervisorPrompt = `[AUTONOMOUS JULES WORKER NOTIFICATION]
+    const supervisorPrompt = `[AUTONOMOUS JULES WORKER UPDATE]
 Jules Session ID: ${s.id}
 Task Title: ${s.title || 'Ongoing Task'}
-Current Status: Awaiting Feedback / User Input
+Current Status: ${s.state || 'IN_PROGRESS'}
 
-Jules Worker just reported:
+Jules Worker reported:
 """
 ${julesMessage}
 """
 
 SUPERVISOR DIRECTIVES FOR BYTE:
 1. You are the Senior Lead Architect supervising this Jules worker.
-2. Carefully review Jules' findings and question above.
-3. Formulate your architectural instructions or approval.
-4. Call the 'jules_reply_question' tool with session_id: "${s.id}" and your answer to instruct Jules to continue.
-5. Provide a concise update to the user summarizing your decision.`;
+2. Review Jules' findings/report above against the user's objective.
+3. IF Jules has delivered the requested analysis, report, answer, or code changes:
+   - Present the COMPLETE findings, report, and breakdown directly to the USER in clean, comprehensive markdown!
+   - DO NOT call 'jules_reply_question' to generate unsolicited extra plans, checklists, or work unless the user explicitly requested them.
+   - Conclude by asking the user if they would like to proceed with any of the recommended updates or implementation steps.
+4. ONLY IF Jules asked a specific question, is blocked, or explicitly requested user/lead direction to proceed:
+   - Formulate your architectural decision.
+   - Call the 'jules_reply_question' tool with session_id: "${s.id}" and your answer.
+   - Provide a concise summary to the user explaining what you directed Jules to do.`;
 
     this.isProcessingTurn = true;
     try {
@@ -291,6 +296,21 @@ SUPERVISOR DIRECTIVES FOR BYTE:
           timestamp: Date.now(),
         });
       }
+    }
+
+    // Find and update matching chat session
+    const store = DataStore.getInstance();
+    const existing = store.getSessions();
+    const chatSession = existing.find(
+      (cs) =>
+        (cs.julesSessionId && cs.julesSessionId === s.id) ||
+        cs.messages.some((m) => m.content && m.content.includes(s.id)) ||
+        (cs.title && cs.title.toLowerCase().includes((s.title || '').toLowerCase()))
+    );
+
+    if (chatSession) {
+      const summaryMsg = `[JULES TASK COMPLETED]\nTask: ${s.title || s.id}\nStatus: COMPLETED\n${s.prUrl ? `Pull Request: ${s.prUrl}` : 'The remote worker has finished the task.'}\n\nPlease inspect the final diff and provide a comprehensive completion summary to the user.`;
+      AgentOrchestrator.getInstance().runAutonomousTurn(chatSession.id, summaryMsg).catch(console.error);
     }
   }
 }

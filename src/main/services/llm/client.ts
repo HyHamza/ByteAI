@@ -218,8 +218,8 @@ export class LLMClient {
           }
         });
       });
-      req.setTimeout(3500, () => {
-        req.destroy(new Error('Request timed out after 3.5s'));
+      req.setTimeout(10000, () => {
+        req.destroy(new Error('Request timed out after 10s'));
       });
       req.on('error', reject);
       req.end();

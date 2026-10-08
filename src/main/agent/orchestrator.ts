@@ -289,7 +289,7 @@ Git Repository: ${activeRepo} (${activeBranch})`;
         // Execute tool
         const output = await executeToolCall(toolName, toolArgs, workspaceDir, sessionId);
 
-        toolRecord.status = output.startsWith('Error:') ? 'error' : 'completed';
+        toolRecord.status = output.startsWith('Error') ? 'error' : 'completed';
         toolRecord.output = output;
         toolRecord.completedAt = Date.now();
 

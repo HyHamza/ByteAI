@@ -56,8 +56,8 @@ export class JulesClient {
         });
       });
 
-      req.setTimeout(4000, () => {
-        req.destroy(new Error('Jules request timed out after 4s'));
+      req.setTimeout(30000, () => {
+        req.destroy(new Error('Jules request timed out after 30s'));
       });
 
       req.on('error', (err) => reject(err));
