@@ -127,10 +127,17 @@ export const App: React.FC = () => {
       }
     });
 
+    const unsubTitle = api.onTitleUpdated?.(({ sessionId, title }) => {
+      setSessions((prev) =>
+        prev.map((s) => (s.id === sessionId ? { ...s, title } : s))
+      );
+    });
+
     return () => {
       unsubToken();
       unsubTool();
       unsubCompleted();
+      unsubTitle?.();
     };
   }, [activeSessionId]);
 
@@ -195,7 +202,14 @@ export const App: React.FC = () => {
     };
 
     setSessions((prev) =>
-      prev.map((s) => (s.id === activeSessionId ? { ...s, messages: [...s.messages, userMsg] } : s))
+      prev.map((s) => {
+        if (s.id !== activeSessionId) return s;
+        const isGeneric = !s.title || s.title === 'New Task' || s.title === 'Initial Task' || s.title === 'New Conversation';
+        const clean = text.replace(/[#*`_~\[\]]/g, '').split('\n')[0].trim();
+        const shortTitle = clean.split(/\s+/).slice(0, 6).join(' ');
+        const newTitle = isGeneric && shortTitle ? (shortTitle.length > 36 ? shortTitle.slice(0, 36) + '...' : shortTitle) : s.title;
+        return { ...s, title: newTitle, messages: [...s.messages, userMsg] };
+      })
     );
 
     setIsStreaming(true);

@@ -59,6 +59,19 @@ export class AgentOrchestrator {
     };
     store.addMessage(sessionId, userMsg);
 
+    // Auto-generate title if currently generic
+    const isGenericTitle = !session.title || session.title === 'New Task' || session.title === 'Initial Task' || session.title === 'New Conversation';
+    if (isGenericTitle && userText.trim()) {
+      const clean = userText.replace(/[#*`_~\[\]]/g, '').split('\n')[0].trim();
+      const fallbackTitle = clean.split(/\s+/).slice(0, 6).join(' ');
+      session.title = fallbackTitle.length > 36 ? fallbackTitle.slice(0, 36) + '...' : fallbackTitle;
+      store.saveSession(session);
+      this.emitTitleUpdated(sessionId, session.title);
+
+      // Concurrently generate high quality AI title in background
+      this.generateAiTitle(sessionId, userText);
+    }
+
     const settings = store.getSettings();
     // Synchronize mode: if either session or header is in jules mode, operate in jules mode!
     const isJules = session.mode === 'jules' || settings.mode === 'jules';
@@ -249,6 +262,47 @@ Git Repository: ${activeRepo} (${activeBranch})`;
       if (!win.isDestroyed()) {
         win.webContents.send('chat:completed', sessionId);
       }
+    }
+  }
+
+  private emitTitleUpdated(sessionId: string, title: string) {
+    const windows = BrowserWindow.getAllWindows();
+    for (const win of windows) {
+      if (!win.isDestroyed()) {
+        win.webContents.send('chat:title-updated', { sessionId, title });
+      }
+    }
+  }
+
+  private async generateAiTitle(sessionId: string, userText: string) {
+    try {
+      const llmClient = LLMClient.getInstance();
+      const store = DataStore.getInstance();
+      const result = await llmClient.chatStream(
+        [
+          {
+            role: 'system',
+            content: 'Generate a short, clean, descriptive 3 to 5 word task title for this coding conversation. Do NOT use quotes, brackets, or punctuation. Example titles: "Fix POS Order Editing", "Implement Auth Token Refresh", "Autonomous AI Setup". Output only the title text.',
+          },
+          {
+            role: 'user',
+            content: userText.slice(0, 400),
+          },
+        ],
+        undefined,
+        { onToken: () => {} }
+      );
+
+      let cleanTitle = result.content
+        ? result.content.trim().replace(/^["'`]|["'`]$/g, '').replace(/[#*`_]/g, '').trim()
+        : '';
+      if (cleanTitle && cleanTitle.length >= 3) {
+        if (cleanTitle.length > 40) cleanTitle = cleanTitle.slice(0, 40).trim();
+        store.updateSession(sessionId, { title: cleanTitle });
+        this.emitTitleUpdated(sessionId, cleanTitle);
+      }
+    } catch (_) {
+      // Heuristic fallback already in place
     }
   }
 }

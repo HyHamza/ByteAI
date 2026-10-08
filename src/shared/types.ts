@@ -101,6 +101,7 @@ export interface ElectronAPI {
   onStreamToken: (callback: (payload: StreamTokenPayload) => void) => () => void;
   onToolCallUpdate: (callback: (payload: ToolCallPayload) => void) => () => void;
   onExecutionCompleted: (callback: (sessionId: string) => void) => () => void;
+  onTitleUpdated?: (callback: (payload: { sessionId: string; title: string }) => void) => () => void;
 
   // Sessions
   listSessions: (workspacePath?: string) => Promise<ChatSession[]>;

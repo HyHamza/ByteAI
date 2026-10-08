@@ -24,6 +24,12 @@ const api: ElectronAPI = {
     return () => ipcRenderer.removeListener('chat:completed', handler);
   },
 
+  onTitleUpdated: (callback) => {
+    const handler = (_: any, payload: { sessionId: string; title: string }) => callback(payload);
+    ipcRenderer.on('chat:title-updated', handler);
+    return () => ipcRenderer.removeListener('chat:title-updated', handler);
+  },
+
   // Sessions
   listSessions: (workspacePath) => ipcRenderer.invoke('sessions:list', { workspacePath }),
   createSession: (title, mode) => ipcRenderer.invoke('sessions:create', { title, mode }),

@@ -118,6 +118,26 @@ export class DataStore {
 
   public getSessions(workspacePath?: string): ChatSession[] {
     const list = Object.values(this.db.sessions);
+    let changed = false;
+    for (const s of list) {
+      const isGeneric = !s.title || s.title === 'New Task' || s.title === 'Initial Task' || s.title === 'New Conversation';
+      if (isGeneric && s.messages && s.messages.length > 0) {
+        const firstUser = s.messages.find((m) => m.role === 'user');
+        if (firstUser && firstUser.content) {
+          const clean = firstUser.content
+            .replace(/[#*`_~\[\]]/g, '')
+            .split('\n')[0]
+            .trim();
+          if (clean) {
+            const words = clean.split(/\s+/).slice(0, 6).join(' ');
+            s.title = words.length > 36 ? words.slice(0, 36) + '...' : words;
+            changed = true;
+          }
+        }
+      }
+    }
+    if (changed) this.save();
+
     if (!workspacePath) return list.sort((a, b) => b.updatedAt - a.updatedAt);
     return list
       .filter((s) => s.workspacePath === workspacePath)
