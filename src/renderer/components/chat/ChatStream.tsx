@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { 
@@ -26,6 +26,12 @@ interface ChatStreamProps {
   mode: AppMode;
 }
 
+interface ConversationTurn {
+  id: string;
+  userMessage?: ChatMessage;
+  assistantMessages: ChatMessage[];
+}
+
 function formatDuration(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
   const mins = Math.floor(seconds / 60);
@@ -48,7 +54,6 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
   const [copiedFullChat, setCopiedFullChat] = useState(false);
   const [showScrollBottomBtn, setShowScrollBottomBtn] = useState(false);
   const [expandedTrajectories, setExpandedTrajectories] = useState<Record<string, boolean>>({});
-  const [isStreamingTrajectoryExpanded, setIsStreamingTrajectoryExpanded] = useState<boolean>(true);
   const [feedbackMap, setFeedbackMap] = useState<Record<string, 'up' | 'down'>>({});
 
   // Active streaming timer
@@ -71,6 +76,40 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
       setStreamingSeconds(0);
     }
   }, [isStreaming]);
+
+  // Group messages into clean conversation turns so tools and responses from the same turn are unified
+  const turns = useMemo(() => {
+    const list: ConversationTurn[] = [];
+    let activeTurn: ConversationTurn | null = null;
+
+    for (const m of messages) {
+      if (m.role === 'user') {
+        if (activeTurn) {
+          list.push(activeTurn);
+        }
+        activeTurn = {
+          id: m.id,
+          userMessage: m,
+          assistantMessages: [],
+        };
+      } else if (m.role === 'assistant') {
+        if (!activeTurn) {
+          activeTurn = {
+            id: m.id,
+            assistantMessages: [m],
+          };
+        } else {
+          activeTurn.assistantMessages.push(m);
+        }
+      }
+    }
+
+    if (activeTurn) {
+      list.push(activeTurn);
+    }
+
+    return list;
+  }, [messages]);
 
   // Check if scroll container is at bottom
   const checkIsAtBottom = () => {
@@ -109,7 +148,7 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
       if (lastMsg && lastMsg.role === 'user') {
         setTimeout(() => {
           latestUserMsgRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }, 30);
+        }, 40);
         isAtBottomRef.current = true;
         setShowScrollBottomBtn(false);
       }
@@ -126,11 +165,14 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
     }
   };
 
-  const toggleTrajectory = (id: string) => {
-    setExpandedTrajectories((prev) => ({
-      ...prev,
-      [id]: !prev[id],
-    }));
+  const toggleTrajectory = (id: string, defaultExpanded: boolean) => {
+    setExpandedTrajectories((prev) => {
+      const current = prev[id] !== undefined ? prev[id] : defaultExpanded;
+      return {
+        ...prev,
+        [id]: !current,
+      };
+    });
   };
 
   const copyToClipboard = (text: string, id: string) => {
@@ -200,204 +242,253 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
           </div>
         )}
 
-        {messages.map((m, index) => {
-          const isUser = m.role === 'user';
-          const isLastUser = isUser && (index === messages.length - 1 || (index === messages.length - 2 && messages[index + 1].role === 'assistant'));
+        {/* Render Conversation Turns */}
+        {turns.map((turn, turnIdx) => {
+          const isLatestTurn = turnIdx === turns.length - 1;
+          const isLiveInThisTurn = isLatestTurn && isStreaming;
 
-          // Antigravity-Style User Message: Full Width Card at Top of Turn (Screenshot 5)
-          if (isUser) {
-            const userMsgId = `user_${m.id}`;
-            return (
-              <div 
-                key={m.id} 
-                ref={isLastUser ? latestUserMsgRef : undefined}
-                className="w-full relative group/user pt-1"
-              >
-                <div className="w-full bg-[#1e2025] border border-[#2b2d35] text-[#f0f1f4] px-4 py-3 rounded-2xl text-[13px] leading-relaxed shadow-sm select-text cursor-text relative">
-                  <div className="whitespace-pre-wrap select-text pr-8">{m.content}</div>
-
-                  <button
-                    type="button"
-                    onClick={() => copyToClipboard(m.content, userMsgId)}
-                    className="absolute top-2.5 right-2.5 opacity-0 group-hover/user:opacity-100 transition-opacity p-1.5 rounded-lg text-[#8e9196] hover:text-white hover:bg-[#282a31] cursor-pointer"
-                    title="Copy message"
-                  >
-                    {copiedCodeId === userMsgId ? (
-                      <Check className="w-3.5 h-3.5 text-emerald-400" />
-                    ) : (
-                      <Copy className="w-3.5 h-3.5" />
-                    )}
-                  </button>
-                </div>
-              </div>
-            );
+          // Gather all tool calls from all assistant steps in this turn
+          const allToolCalls: ToolExecutionRecord[] = [];
+          for (const am of turn.assistantMessages) {
+            if (am.toolCalls && am.toolCalls.length > 0) {
+              allToolCalls.push(...am.toolCalls);
+            }
+          }
+          if (isLiveInThisTurn && streamingTools && streamingTools.length > 0) {
+            allToolCalls.push(...streamingTools);
           }
 
-          // Assistant Turn
-          const asstMsgId = `asst_${m.id}`;
-          const prevMsg = index > 0 ? messages[index - 1] : null;
-          const hasTools = !!(m.toolCalls && m.toolCalls.length > 0);
-          const duration = m.executionDuration || (prevMsg && prevMsg.role === 'user' ? Math.max(1, Math.round((m.timestamp - prevMsg.timestamp) / 1000)) : 0);
-          const isExpanded = !!expandedTrajectories[m.id];
-          const timeFormatted = new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          // Gather assistant content
+          const messagesWithContent = turn.assistantMessages.filter((am) => am.content && am.content.trim());
+          let responseText = '';
+          const intermediateThoughts: string[] = [];
+
+          if (isLiveInThisTurn) {
+            // During live stream
+            responseText = currentStreamContent;
+            // Any prior messages with content in this turn are intermediate thoughts
+            for (const am of messagesWithContent) {
+              intermediateThoughts.push(am.content);
+            }
+          } else {
+            // Completed turn
+            if (messagesWithContent.length > 0) {
+              // The final message content is the response
+              responseText = messagesWithContent[messagesWithContent.length - 1].content;
+              // Earlier messages with content are intermediate thoughts
+              for (let i = 0; i < messagesWithContent.length - 1; i++) {
+                intermediateThoughts.push(messagesWithContent[i].content);
+              }
+            }
+          }
+
+          // Calculate turn duration
+          const lastAsst = turn.assistantMessages[turn.assistantMessages.length - 1];
+          let duration = 0;
+          if (isLiveInThisTurn) {
+            duration = streamingSeconds;
+          } else if (lastAsst?.executionDuration) {
+            duration = lastAsst.executionDuration;
+          } else if (turn.userMessage && lastAsst) {
+            duration = Math.max(1, Math.round((lastAsst.timestamp - turn.userMessage.timestamp) / 1000));
+          } else if (turn.assistantMessages.length > 0) {
+            duration = turn.assistantMessages.length * 3;
+          }
+
+          const hasAssistantActivity = turn.assistantMessages.length > 0 || isLiveInThisTurn;
+          const defaultExpanded = isLiveInThisTurn;
+          const isExpanded = expandedTrajectories[turn.id] !== undefined ? expandedTrajectories[turn.id] : defaultExpanded;
+          const turnTimestamp = lastAsst?.timestamp || turn.userMessage?.timestamp || Date.now();
+          const timeFormatted = new Date(turnTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          const asstTurnId = `asst_${turn.id}`;
 
           return (
-            <div key={m.id} className="w-full space-y-2 text-xs leading-relaxed group/asst pt-1">
-              {/* Antigravity Trajectory Row: "Worked for Xs >" (Screenshot 5) */}
-              {(hasTools || duration > 0) && (
+            <div key={turn.id} className="w-full space-y-3">
+              {/* User Message: Top-Aligned Full-Width Card (Antigravity Style) */}
+              {turn.userMessage && (
                 <div 
-                  onClick={() => toggleTrajectory(m.id)}
-                  className="flex items-center space-x-1.5 text-xs text-[#8e9196] hover:text-[#c4c7cf] cursor-pointer select-none py-1 transition-colors w-fit group/trajectory font-medium"
+                  ref={isLatestTurn ? latestUserMsgRef : undefined}
+                  className="w-full relative group/user pt-1"
                 >
-                  <span>Worked for {formatDuration(duration || 1)}</span>
-                  {isExpanded ? (
-                    <ChevronDown className="w-3.5 h-3.5 text-[#6e727c] group-hover/trajectory:text-[#c4c7cf]" />
-                  ) : (
-                    <ChevronRight className="w-3.5 h-3.5 text-[#6e727c] group-hover/trajectory:text-[#c4c7cf]" />
-                  )}
-                </div>
-              )}
+                  <div className="w-full bg-[#1e2025] border border-[#2b2d35] text-[#f0f1f4] px-4 py-3 rounded-2xl text-[13px] leading-relaxed shadow-sm select-text cursor-text relative">
+                    <div className="whitespace-pre-wrap select-text pr-8">{turn.userMessage.content}</div>
 
-              {/* Collapsible Tool Execution Records */}
-              {isExpanded && hasTools && (
-                <div className="space-y-1.5 py-1.5 pl-2 border-l border-[#272930] ml-1 animate-in fade-in duration-100">
-                  {m.toolCalls!.map((tc: ToolExecutionRecord) => (
-                    <ToolCard key={tc.id} tool={tc} />
-                  ))}
-                </div>
-              )}
-
-              {/* Response Markdown Content */}
-              {m.content && (
-                <div className="prose-antigravity select-text cursor-text text-[#e3e5ec] text-[13px] leading-relaxed">
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
-                    components={{
-                      code({ node, className, children, ...props }) {
-                        const match = /language-(\w+)/.exec(className || '');
-                        const codeString = String(children).replace(/\n$/, '');
-                        const isInline = !match && !codeString.includes('\n');
-
-                        if (isInline) {
-                          return (
-                            <code className={className} {...props}>
-                              {children}
-                            </code>
-                          );
-                        }
-
-                        const codeId = `code_${Math.random().toString(36).substring(7)}`;
-
-                        return (
-                          <div className="relative group/code my-2 rounded-xl overflow-hidden border border-[#27292f] bg-[#111215]">
-                            <div className="flex items-center justify-between px-3 py-1.5 bg-[#17181c] border-b border-[#24262b] text-[11px] text-[#787c86]">
-                              <span>{match ? match[1] : 'code'}</span>
-                              <button
-                                type="button"
-                                onClick={() => copyToClipboard(codeString, codeId)}
-                                className="flex items-center space-x-1 text-[#8e9196] hover:text-white transition-colors cursor-pointer"
-                              >
-                                {copiedCodeId === codeId ? (
-                                  <>
-                                    <Check className="w-3 h-3 text-emerald-400" />
-                                    <span className="text-emerald-400">Copied</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Copy className="w-3 h-3" />
-                                    <span>Copy</span>
-                                  </>
-                                )}
-                              </button>
-                            </div>
-                            <pre className="p-3 text-[12px] overflow-x-auto text-[#e2e8f0] font-mono leading-relaxed bg-[#111215] m-0">
-                              <code>{children}</code>
-                            </pre>
-                          </div>
-                        );
-                      },
-                    }}
-                  >
-                    {m.content}
-                  </ReactMarkdown>
-                </div>
-              )}
-
-              {/* Antigravity Turn Footer: Timestamp + Copy/Like/Dislike Actions (Screenshot 5) */}
-              <div className="flex items-center justify-between pt-2 select-none text-[11px] text-[#555861]">
-                <span>{timeFormatted}</span>
-
-                <div className="flex items-center space-x-1 opacity-0 group-hover/asst:opacity-100 transition-opacity">
-                  {m.content && (
                     <button
                       type="button"
-                      onClick={() => copyToClipboard(m.content, asstMsgId)}
-                      className="p-1 hover:text-white rounded hover:bg-[#202227] transition-colors cursor-pointer"
-                      title="Copy response"
+                      onClick={() => copyToClipboard(turn.userMessage!.content, `user_${turn.userMessage!.id}`)}
+                      className="absolute top-2.5 right-2.5 opacity-0 group-hover/user:opacity-100 transition-opacity p-1.5 rounded-lg text-[#8e9196] hover:text-white hover:bg-[#282a31] cursor-pointer"
+                      title="Copy message"
                     >
-                      {copiedCodeId === asstMsgId ? (
+                      {copiedCodeId === `user_${turn.userMessage!.id}` ? (
                         <Check className="w-3.5 h-3.5 text-emerald-400" />
                       ) : (
                         <Copy className="w-3.5 h-3.5" />
                       )}
                     </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Assistant Turn Response: Unified with Single "Worked for Xs >" and Content */}
+              {hasAssistantActivity && (
+                <div className="w-full space-y-2 text-xs leading-relaxed group/asst pt-1">
+                  {/* Single Unified "Worked for Xs >" Banner for the entire turn */}
+                  {(allToolCalls.length > 0 || duration > 0 || isLiveInThisTurn) && (
+                    <div 
+                      onClick={() => toggleTrajectory(turn.id, defaultExpanded)}
+                      className="flex items-center space-x-1.5 text-xs text-[#8e9196] hover:text-[#c4c7cf] cursor-pointer select-none py-1 transition-colors w-fit group/trajectory font-medium"
+                    >
+                      {isLiveInThisTurn ? (
+                        <div className="flex items-center space-x-1.5 text-cyan-400">
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          <span>Working for {formatDuration(duration || 1)}...</span>
+                        </div>
+                      ) : (
+                        <span>Worked for {formatDuration(duration || 1)}</span>
+                      )}
+                      {isExpanded ? (
+                        <ChevronDown className="w-3.5 h-3.5 text-[#6e727c] group-hover/trajectory:text-[#c4c7cf]" />
+                      ) : (
+                        <ChevronRight className="w-3.5 h-3.5 text-[#6e727c] group-hover/trajectory:text-[#c4c7cf]" />
+                      )}
+                    </div>
                   )}
 
-                  <button
-                    type="button"
-                    onClick={() => setFeedbackMap((prev) => ({ ...prev, [m.id]: prev[m.id] === 'up' ? undefined! : 'up' }))}
-                    className={`p-1 rounded hover:bg-[#202227] transition-colors cursor-pointer ${
-                      feedbackMap[m.id] === 'up' ? 'text-cyan-400' : 'hover:text-white'
-                    }`}
-                    title="Good response"
-                  >
-                    <ThumbsUp className="w-3.5 h-3.5" />
-                  </button>
+                  {/* Collapsible Tool Execution Records & Intermediate Steps */}
+                  {isExpanded && (allToolCalls.length > 0 || intermediateThoughts.length > 0) && (
+                    <div className="space-y-1.5 py-1.5 pl-2 border-l border-[#272930] ml-1 animate-in fade-in duration-100">
+                      {intermediateThoughts.map((thought, idx) => (
+                        <div key={idx} className="text-[#a0a3ad] italic text-xs py-0.5">
+                          {thought}
+                        </div>
+                      ))}
+                      {allToolCalls.map((tc: ToolExecutionRecord) => (
+                        <ToolCard key={tc.id} tool={tc} />
+                      ))}
+                    </div>
+                  )}
 
-                  <button
-                    type="button"
-                    onClick={() => setFeedbackMap((prev) => ({ ...prev, [m.id]: prev[m.id] === 'down' ? undefined! : 'down' }))}
-                    className={`p-1 rounded hover:bg-[#202227] transition-colors cursor-pointer ${
-                      feedbackMap[m.id] === 'down' ? 'text-amber-400' : 'hover:text-white'
-                    }`}
-                    title="Bad response"
-                  >
-                    <ThumbsDown className="w-3.5 h-3.5" />
-                  </button>
+                  {/* Response Markdown Content */}
+                  {responseText ? (
+                    <div className="prose-antigravity select-text cursor-text text-[#e3e5ec] text-[13px] leading-relaxed">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          code({ node, className, children, ...props }) {
+                            const match = /language-(\w+)/.exec(className || '');
+                            const codeString = String(children).replace(/\n$/, '');
+                            const isInline = !match && !codeString.includes('\n');
+
+                            if (isInline) {
+                              return (
+                                <code className={className} {...props}>
+                                  {children}
+                                </code>
+                              );
+                            }
+
+                            const codeId = `code_${Math.random().toString(36).substring(7)}`;
+
+                            return (
+                              <div className="relative group/code my-2 rounded-xl overflow-hidden border border-[#27292f] bg-[#111215]">
+                                <div className="flex items-center justify-between px-3 py-1.5 bg-[#17181c] border-b border-[#24262b] text-[11px] text-[#787c86]">
+                                  <span>{match ? match[1] : 'code'}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => copyToClipboard(codeString, codeId)}
+                                    className="flex items-center space-x-1 text-[#8e9196] hover:text-white transition-colors cursor-pointer"
+                                  >
+                                    {copiedCodeId === codeId ? (
+                                      <>
+                                        <Check className="w-3 h-3 text-emerald-400" />
+                                        <span className="text-emerald-400">Copied</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Copy className="w-3 h-3" />
+                                        <span>Copy</span>
+                                      </>
+                                    )}
+                                  </button>
+                                </div>
+                                <pre className="p-3 text-[12px] overflow-x-auto text-[#e2e8f0] font-mono leading-relaxed bg-[#111215] m-0">
+                                  <code>{children}</code>
+                                </pre>
+                              </div>
+                            );
+                          },
+                        }}
+                      >
+                        {responseText}
+                      </ReactMarkdown>
+                    </div>
+                  ) : isLiveInThisTurn && (!allToolCalls || allToolCalls.length === 0) ? (
+                    <div className="text-[#6c707a] italic text-xs pl-1">Thinking and analyzing...</div>
+                  ) : null}
+
+                  {/* Single Unified Turn Footer: Timestamp + Actions */}
+                  {!isLiveInThisTurn && responseText && (
+                    <div className="flex items-center justify-between pt-2 select-none text-[11px] text-[#555861]">
+                      <span>{timeFormatted}</span>
+
+                      <div className="flex items-center space-x-1 opacity-0 group-hover/asst:opacity-100 transition-opacity">
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard(responseText, asstTurnId)}
+                          className="p-1 hover:text-white rounded hover:bg-[#202227] transition-colors cursor-pointer"
+                          title="Copy response"
+                        >
+                          {copiedCodeId === asstTurnId ? (
+                            <Check className="w-3.5 h-3.5 text-emerald-400" />
+                          ) : (
+                            <Copy className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setFeedbackMap((prev) => ({ ...prev, [turn.id]: prev[turn.id] === 'up' ? undefined! : 'up' }))}
+                          className={`p-1 rounded hover:bg-[#202227] transition-colors cursor-pointer ${
+                            feedbackMap[turn.id] === 'up' ? 'text-cyan-400' : 'hover:text-white'
+                          }`}
+                          title="Good response"
+                        >
+                          <ThumbsUp className="w-3.5 h-3.5" />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setFeedbackMap((prev) => ({ ...prev, [turn.id]: prev[turn.id] === 'down' ? undefined! : 'down' }))}
+                          className={`p-1 rounded hover:bg-[#202227] transition-colors cursor-pointer ${
+                            feedbackMap[turn.id] === 'down' ? 'text-amber-400' : 'hover:text-white'
+                          }`}
+                          title="Bad response"
+                        >
+                          <ThumbsDown className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
+              )}
             </div>
           );
         })}
 
-        {/* Live Streaming Block */}
-        {isStreaming && (
+        {/* If live streaming and no turn exists yet */}
+        {isStreaming && turns.length === 0 && (
           <div className="w-full space-y-2 text-xs leading-relaxed pt-1">
-            {/* Live "Worked for Xs >" / "Thinking for Xs..." */}
-            <div 
-              onClick={() => setIsStreamingTrajectoryExpanded(!isStreamingTrajectoryExpanded)}
-              className="flex items-center space-x-2 text-xs text-[#8e9196] hover:text-[#c4c7cf] cursor-pointer select-none py-1 transition-colors w-fit font-medium"
-            >
-              <div className="flex items-center space-x-1.5 text-cyan-400">
-                <Loader2 className="w-3 h-3 animate-spin" />
-                <span>Working for {formatDuration(streamingSeconds)}...</span>
-              </div>
-              {isStreamingTrajectoryExpanded ? (
-                <ChevronDown className="w-3.5 h-3.5 text-[#6e727c]" />
-              ) : (
-                <ChevronRight className="w-3.5 h-3.5 text-[#6e727c]" />
-              )}
+            <div className="flex items-center space-x-1.5 text-cyan-400 py-1 font-medium">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              <span>Working for {formatDuration(streamingSeconds)}...</span>
             </div>
-
-            {/* Live Streaming Tool Cards */}
-            {isStreamingTrajectoryExpanded && streamingTools && streamingTools.length > 0 && (
+            {streamingTools && streamingTools.length > 0 && (
               <div className="space-y-1.5 py-1.5 pl-2 border-l border-[#272930] ml-1">
                 {streamingTools.map((tc) => (
                   <ToolCard key={tc.id} tool={tc} />
                 ))}
               </div>
             )}
-
             {currentStreamContent && (
               <div className="prose-antigravity select-text cursor-text text-[#e3e5ec] text-[13px] leading-relaxed">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
@@ -405,15 +496,11 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
                 </ReactMarkdown>
               </div>
             )}
-
-            {!currentStreamContent && (!streamingTools || streamingTools.length === 0) && (
-              <div className="text-[#6c707a] italic text-xs pl-1">Thinking and analyzing...</div>
-            )}
           </div>
         )}
       </div>
 
-      {/* Floating "Scroll to bottom" button (appears when user scrolls up during chat) */}
+      {/* Floating "Scroll to bottom" button */}
       {showScrollBottomBtn && (
         <button
           onClick={scrollToBottom}
