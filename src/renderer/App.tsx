@@ -36,7 +36,8 @@ export const App: React.FC = () => {
   const [gitRepo, setGitRepo] = useState<string | null>(null);
   const [gitBranch, setGitBranch] = useState<string | null>(null);
 
-  const [isJulesPanelOpen, setIsJulesPanelOpen] = useState(true);
+  const [isJulesPanelOpen, setIsJulesPanelOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // Streaming state
@@ -218,7 +219,7 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-screen w-full bg-[#0d1117] text-[#c9d1d9] overflow-hidden font-sans">
+    <div className="flex flex-col h-screen w-full bg-[#131314] text-[#e3e3e3] overflow-hidden font-sans">
       <Header
         settings={settings}
         availableModels={availableModels}
@@ -231,34 +232,71 @@ export const App: React.FC = () => {
         onOpenSettings={() => setIsSettingsOpen(true)}
         isJulesPanelOpen={isJulesPanelOpen}
         onToggleJulesPanel={() => setIsJulesPanelOpen(!isJulesPanelOpen)}
+        isSidebarOpen={isSidebarOpen}
+        onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
       />
 
       <div className="flex flex-1 overflow-hidden">
         {/* Left Sidebar */}
-        <Sidebar
-          sessions={sessions}
-          activeSessionId={activeSessionId}
-          onSelectSession={setActiveSessionId}
-          onCreateSession={handleCreateSession}
-          onDeleteSession={handleDeleteSession}
-        />
+        {isSidebarOpen && (
+          <Sidebar
+            sessions={sessions}
+            activeSessionId={activeSessionId}
+            workspaceName={workspaceName}
+            onSelectSession={setActiveSessionId}
+            onCreateSession={handleCreateSession}
+            onDeleteSession={handleDeleteSession}
+            onOpenSettings={() => setIsSettingsOpen(true)}
+            onSelectWorkspace={handleSelectWorkspace}
+          />
+        )}
 
-        {/* Center Chat Feed */}
-        <main className="flex-1 flex flex-col bg-[#0d1117] overflow-hidden">
-          <ChatStream
-            messages={activeSession?.messages || []}
-            currentStreamContent={streamingContent}
-            streamingTools={streamingTools}
-            isStreaming={isStreaming}
-            mode={activeSession?.mode || settings.mode}
-          />
-          <ChatInput
-            onSendMessage={handleSendMessage}
-            onCancel={handleCancelExecution}
-            isStreaming={isStreaming}
-            mode={activeSession?.mode || settings.mode}
-            disabled={!activeSessionId}
-          />
+        {/* Center Main Canvas */}
+        <main className="flex-1 flex flex-col bg-[#131314] overflow-hidden relative">
+          {(!activeSession || activeSession.messages.length === 0) && !isStreaming ? (
+            <div className="flex-1 flex flex-col items-center justify-center p-4">
+              <ChatInput
+                onSendMessage={handleSendMessage}
+                onCancel={handleCancelExecution}
+                isStreaming={isStreaming}
+                mode={activeSession?.mode || settings.mode}
+                onToggleMode={handleToggleMode}
+                availableModels={availableModels}
+                selectedModel={settings.selectedModel}
+                isAutoModel={settings.isAutoModel}
+                onChangeModel={handleChangeModel}
+                workspaceName={workspaceName}
+                onSelectWorkspace={handleSelectWorkspace}
+                disabled={!activeSessionId}
+                isCenteredLayout={true}
+              />
+            </div>
+          ) : (
+            <>
+              <ChatStream
+                messages={activeSession?.messages || []}
+                currentStreamContent={streamingContent}
+                streamingTools={streamingTools}
+                isStreaming={isStreaming}
+                mode={activeSession?.mode || settings.mode}
+              />
+              <ChatInput
+                onSendMessage={handleSendMessage}
+                onCancel={handleCancelExecution}
+                isStreaming={isStreaming}
+                mode={activeSession?.mode || settings.mode}
+                onToggleMode={handleToggleMode}
+                availableModels={availableModels}
+                selectedModel={settings.selectedModel}
+                isAutoModel={settings.isAutoModel}
+                onChangeModel={handleChangeModel}
+                workspaceName={workspaceName}
+                onSelectWorkspace={handleSelectWorkspace}
+                disabled={!activeSessionId}
+                isCenteredLayout={false}
+              />
+            </>
+          )}
         </main>
 
         {/* Right Jules Mission Control Panel */}

@@ -24,47 +24,47 @@ export const ToolCard: React.FC<ToolCardProps> = ({ tool }) => {
     switch (tool.toolName) {
       case 'run_terminal_command':
       case 'run_verification_test':
-        return <Terminal className="w-3.5 h-3.5 text-yellow-400" />;
+        return <Terminal className="w-3.5 h-3.5 text-[#fbbf24]" />;
       case 'read_file':
-        return <FileText className="w-3.5 h-3.5 text-blue-400" />;
+        return <FileText className="w-3.5 h-3.5 text-[#60a5fa]" />;
       case 'write_file':
       case 'edit_file_content':
-        return <Edit3 className="w-3.5 h-3.5 text-emerald-400" />;
+        return <Edit3 className="w-3.5 h-3.5 text-[#34d399]" />;
       case 'list_directory':
-        return <Folder className="w-3.5 h-3.5 text-purple-400" />;
+        return <Folder className="w-3.5 h-3.5 text-[#c084fc]" />;
       case 'jules_create_task':
       case 'jules_reply_question':
       case 'jules_inspect_diff':
-        return <Sparkles className="w-3.5 h-3.5 text-sky-400" />;
+        return <Sparkles className="w-3.5 h-3.5 text-[#38bdf8]" />;
       default:
-        return <Terminal className="w-3.5 h-3.5 text-gray-400" />;
+        return <Terminal className="w-3.5 h-3.5 text-[#9ca3af]" />;
     }
   };
 
   const getStatusIcon = () => {
     switch (tool.status) {
       case 'running':
-        return <Loader2 className="w-3.5 h-3.5 text-sky-400 animate-spin" />;
+        return <Loader2 className="w-3.5 h-3.5 text-[#38bdf8] animate-spin" />;
       case 'completed':
-        return <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />;
+        return <CheckCircle2 className="w-3.5 h-3.5 text-[#34d399]" />;
       case 'error':
-        return <AlertCircle className="w-3.5 h-3.5 text-red-400" />;
+        return <AlertCircle className="w-3.5 h-3.5 text-[#f87171]" />;
       default:
         return null;
     }
   };
 
   return (
-    <div className="my-2 border border-[#30363d] rounded-md bg-[#161b22] text-xs overflow-hidden">
+    <div className="my-1.5 border border-[#272930] rounded-xl bg-[#18191d] text-xs overflow-hidden transition-all shadow-sm">
       <div
         onClick={() => setIsExpanded(!isExpanded)}
-        className="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-[#21262d] transition-colors select-none"
+        className="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-[#202227] transition-colors select-none"
       >
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-2.5 min-w-0 mr-2">
           {getToolIcon()}
-          <span className="font-mono font-medium text-[#c9d1d9]">{tool.toolName}</span>
+          <span className="font-mono font-medium text-[#e3e3e3]">{tool.toolName}</span>
           {tool.args && Object.keys(tool.args).length > 0 && (
-            <span className="text-[#8b949e] font-mono truncate max-w-[320px]">
+            <span className="text-[#787c87] font-mono truncate max-w-[340px] text-[11px]">
               {tool.args.command || tool.args.path || tool.args.prompt || JSON.stringify(tool.args)}
             </span>
           )}
@@ -73,19 +73,19 @@ export const ToolCard: React.FC<ToolCardProps> = ({ tool }) => {
         <div className="flex items-center space-x-2 shrink-0">
           {getStatusIcon()}
           {isExpanded ? (
-            <ChevronDown className="w-3.5 h-3.5 text-[#8b949e]" />
+            <ChevronDown className="w-3.5 h-3.5 text-[#6c707a]" />
           ) : (
-            <ChevronRight className="w-3.5 h-3.5 text-[#8b949e]" />
+            <ChevronRight className="w-3.5 h-3.5 text-[#6c707a]" />
           )}
         </div>
       </div>
 
       {isExpanded && (
-        <div className="border-t border-[#30363d] bg-[#0d1117] p-2.5 font-mono text-[11px] overflow-x-auto">
+        <div className="border-t border-[#25272e] bg-[#121316] p-3 font-mono text-[11px] overflow-x-auto space-y-2">
           {tool.args && Object.keys(tool.args).length > 0 && (
-            <div className="mb-2">
-              <div className="text-[#8b949e] font-semibold mb-1">Arguments:</div>
-              <pre className="text-emerald-400 whitespace-pre-wrap">
+            <div>
+              <div className="text-[#787c87] font-semibold mb-1">Arguments:</div>
+              <pre className="text-[#34d399] whitespace-pre-wrap bg-[#18191d] p-2 rounded-lg border border-[#24262c]">
                 {JSON.stringify(tool.args, null, 2)}
               </pre>
             </div>
@@ -93,8 +93,8 @@ export const ToolCard: React.FC<ToolCardProps> = ({ tool }) => {
 
           {tool.output && (
             <div>
-              <div className="text-[#8b949e] font-semibold mb-1">Output:</div>
-              <pre className="text-[#c9d1d9] whitespace-pre-wrap max-h-60 overflow-y-auto">
+              <div className="text-[#787c87] font-semibold mb-1">Output:</div>
+              <pre className="text-[#d1d5db] whitespace-pre-wrap max-h-64 overflow-y-auto bg-[#18191d] p-2 rounded-lg border border-[#24262c]">
                 {tool.output}
               </pre>
             </div>

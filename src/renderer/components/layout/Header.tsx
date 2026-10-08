@@ -1,11 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
-  FolderOpen, 
-  Settings, 
-  Bot, 
-  Sparkles, 
-  Cpu, 
-  Layers 
+  ChevronLeft, 
+  ChevronRight, 
+  PanelLeft, 
+  MoreVertical, 
+  Play, 
+  Settings as SettingsIcon,
+  Sparkles,
+  Bot
 } from 'lucide-react';
 import type { AppMode, AppSettings } from '@/shared/types';
 
@@ -21,6 +23,8 @@ interface HeaderProps {
   onOpenSettings: () => void;
   isJulesPanelOpen: boolean;
   onToggleJulesPanel: () => void;
+  isSidebarOpen?: boolean;
+  onToggleSidebar?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -35,112 +39,170 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenSettings,
   isJulesPanelOpen,
   onToggleJulesPanel,
+  isSidebarOpen = true,
+  onToggleSidebar,
 }) => {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+
   return (
-    <header className="h-12 bg-[#161b22] border-b border-[#30363d] flex items-center justify-between px-4 select-none shrink-0 z-20">
-      {/* Brand & Workspace */}
-      <div className="flex items-center space-x-3">
-        <div className="flex items-center space-x-2 font-semibold text-sm tracking-wide text-white">
-          <div className="w-6 h-6 rounded bg-gradient-to-tr from-emerald-500 to-sky-500 flex items-center justify-center text-white font-bold text-xs shadow-sm">
-            SE
-          </div>
-          <span className="hidden sm:inline">SeniorEngineer</span>
+    <header className="bg-[#111214] border-b border-[#202226] select-none shrink-0 z-30">
+      {/* Top Application Menu Bar (Antigravity | File | View | Window) */}
+      <div className="h-6 flex items-center justify-between px-3 text-[11px] text-[#8e9196] border-b border-[#1a1b1e]">
+        <div className="flex items-center space-x-4">
+          <span className="font-medium text-[#c4c7cf]">Antigravity</span>
+          <button 
+            onClick={onSelectWorkspace} 
+            className="hover:text-white transition-colors"
+          >
+            File
+          </button>
+          <button 
+            onClick={onToggleSidebar} 
+            className="hover:text-white transition-colors"
+          >
+            View
+          </button>
+          <button 
+            onClick={onToggleJulesPanel} 
+            className="hover:text-white transition-colors"
+          >
+            Window
+          </button>
         </div>
 
-        {/* Workspace directory picker */}
-        <button
-          onClick={onSelectWorkspace}
-          className="flex items-center space-x-1.5 px-2.5 py-1 text-xs font-mono bg-[#0d1117] hover:bg-[#21262d] text-[#8b949e] hover:text-[#c9d1d9] border border-[#30363d] rounded-md transition-colors"
-          title={settings.activeWorkspacePath || 'Select workspace directory'}
-        >
-          <FolderOpen className="w-3.5 h-3.5 text-emerald-400" />
-          <span className="max-w-[140px] truncate">{workspaceName || 'Select Folder'}</span>
-        </button>
-
-        {/* Auto-detected Git Repo indicator */}
+        {/* Git indicator subtle pill in title bar */}
         {gitRepo && (
-          <div
-            className="hidden md:flex items-center space-x-1 px-2 py-0.5 text-[11px] font-mono bg-sky-950/50 text-sky-300 border border-sky-500/30 rounded-md"
-            title={`Detected Git Repository: ${gitRepo} (${gitBranch || 'main'})`}
-          >
-            <span className="text-sky-400">repo:</span>
-            <span className="max-w-[130px] truncate font-medium">{gitRepo.replace('sources/github/', '')}</span>
-            {gitBranch && <span className="text-[#8b949e]">({gitBranch})</span>}
+          <div className="flex items-center space-x-1.5 text-[10px] text-[#71757e]">
+            <span>repo:</span>
+            <span className="text-[#a6aab4] font-mono">{gitRepo.replace('sources/github/', '')}</span>
+            {gitBranch && <span>({gitBranch})</span>}
           </div>
         )}
       </div>
 
-      {/* Mode Switcher Toggle: Standard vs Jules Senior Lead */}
-      <div className="flex items-center bg-[#0d1117] p-1 rounded-lg border border-[#30363d]">
-        <button
-          onClick={() => onToggleMode('standard')}
-          className={`flex items-center space-x-1.5 px-3 py-1 rounded-md text-xs font-medium transition-all ${
-            settings.mode === 'standard'
-              ? 'bg-[#21262d] text-emerald-400 shadow-sm border border-emerald-500/30'
-              : 'text-[#8b949e] hover:text-white'
-          }`}
-        >
-          <Bot className="w-3.5 h-3.5" />
-          <span>Standard AI</span>
-        </button>
+      {/* Main Toolbar Row */}
+      <div className="h-11 flex items-center justify-between px-3">
+        {/* Left: Antigravity Logo + Sidebar Toggle + History Arrows */}
+        <div className="flex items-center space-x-2">
+          {/* Antigravity Stylized Delta/A Logo */}
+          <div className="w-7 h-7 flex items-center justify-center text-white mr-1 cursor-default">
+            <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+              <path d="M12 2.5L2 20.5h4.2l1.9-3.6h7.8l1.9 3.6H22L12 2.5zm0 5.4l2.8 5.4H9.2L12 7.9z" />
+            </svg>
+          </div>
 
-        <button
-          onClick={() => onToggleMode('jules')}
-          className={`flex items-center space-x-1.5 px-3 py-1 rounded-md text-xs font-medium transition-all ${
-            settings.mode === 'jules'
-              ? 'bg-[#0369a1] text-sky-200 shadow-sm border border-sky-400/40'
-              : 'text-[#8b949e] hover:text-sky-400'
-          }`}
-        >
-          <Sparkles className="w-3.5 h-3.5" />
-          <span>Jules Lead</span>
-        </button>
-      </div>
-
-      {/* Model Selector & Jules Control Panel Toggle */}
-      <div className="flex items-center space-x-2">
-        <div className="relative">
-          <select
-            value={settings.isAutoModel ? 'auto' : settings.selectedModel}
-            onChange={(e) => {
-              if (e.target.value === 'auto') {
-                onChangeModel(settings.selectedModel, true);
-              } else {
-                onChangeModel(e.target.value, false);
-              }
-            }}
-            className="text-xs bg-[#0d1117] text-[#c9d1d9] border border-[#30363d] rounded-md px-2.5 py-1 pr-6 hover:bg-[#21262d] cursor-pointer focus:outline-none"
+          {/* Sidebar Toggle Icon */}
+          <button
+            onClick={onToggleSidebar}
+            className={`p-1.5 rounded hover:bg-[#202226] text-[#8e9196] hover:text-white transition-colors ${
+              !isSidebarOpen ? 'text-[#50545c]' : ''
+            }`}
+            title="Toggle Sidebar"
           >
-            <option value="auto">✨ Auto Router</option>
-            {availableModels.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </select>
+            <PanelLeft className="w-4 h-4" />
+          </button>
+
+          {/* Navigation Arrows (Back / Forward) */}
+          <div className="flex items-center space-x-0.5 text-[#5e626a]">
+            <button className="p-1 rounded hover:bg-[#202226] hover:text-[#c4c7cf] transition-colors" title="Back">
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <button className="p-1 rounded hover:bg-[#202226] hover:text-[#c4c7cf] transition-colors" title="Forward">
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
-        {/* Toggle Jules Right Panel */}
-        <button
-          onClick={onToggleJulesPanel}
-          className={`p-1.5 rounded-md border text-xs flex items-center space-x-1 transition-colors ${
-            isJulesPanelOpen
-              ? 'bg-[#0369a1]/20 border-sky-500/50 text-sky-400'
-              : 'bg-[#0d1117] border-[#30363d] text-[#8b949e] hover:text-[#c9d1d9]'
-          }`}
-          title="Toggle Jules Mission Control Panel"
-        >
-          <Layers className="w-4 h-4" />
-        </button>
+        {/* Center: Workspace / Mode indicator chip */}
+        <div className="flex items-center space-x-2">
+          <div className="flex items-center bg-[#18191c] rounded-full p-0.5 border border-[#27292f]">
+            <button
+              onClick={() => onToggleMode('standard')}
+              className={`flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium transition-all ${
+                settings.mode === 'standard'
+                  ? 'bg-[#26282e] text-white shadow-sm'
+                  : 'text-[#7e828d] hover:text-[#c4c7cf]'
+              }`}
+            >
+              <Bot className="w-3 h-3 text-emerald-400" />
+              <span>Standard</span>
+            </button>
+            <button
+              onClick={() => onToggleMode('jules')}
+              className={`flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium transition-all ${
+                settings.mode === 'jules'
+                  ? 'bg-[#1a73e8] text-white shadow-sm'
+                  : 'text-[#7e828d] hover:text-[#c4c7cf]'
+              }`}
+            >
+              <Sparkles className="w-3 h-3 text-sky-200" />
+              <span>Jules Lead</span>
+            </button>
+          </div>
+        </div>
 
-        {/* Settings button */}
-        <button
-          onClick={onOpenSettings}
-          className="p-1.5 rounded-md bg-[#0d1117] hover:bg-[#21262d] border border-[#30363d] text-[#8b949e] hover:text-[#c9d1d9] transition-colors"
-          title="Settings & API Endpoints"
-        >
-          <Settings className="w-4 h-4" />
-        </button>
+        {/* Right: Blue Action Pill Button + Menu Dots + Open IDE */}
+        <div className="flex items-center space-x-2">
+          {/* Antigravity Blue Pill: Jules Mission Control */}
+          <button
+            onClick={onToggleJulesPanel}
+            className={`flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-medium transition-all ${
+              isJulesPanelOpen
+                ? 'bg-[#1a73e8] text-white shadow hover:bg-[#1558b0]'
+                : 'bg-[#1e222b] text-[#70a6ff] hover:bg-[#252b37] border border-[#2e3748]'
+            }`}
+          >
+            <span>Jules Panel</span>
+            <span className="text-[11px]">→</span>
+          </button>
+
+          {/* Three Dots Menu */}
+          <div className="relative">
+            <button
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+              className="p-1.5 rounded hover:bg-[#202226] text-[#8e9196] hover:text-white transition-colors"
+              title="More options"
+            >
+              <MoreVertical className="w-4 h-4" />
+            </button>
+
+            {isMenuOpen && (
+              <div 
+                className="absolute right-0 mt-1 w-44 bg-[#1b1c20] border border-[#2b2d33] rounded-lg shadow-xl py-1 text-xs text-[#c4c7cf] z-50"
+                onMouseLeave={() => setIsMenuOpen(false)}
+              >
+                <button
+                  onClick={() => {
+                    setIsMenuOpen(false);
+                    onSelectWorkspace();
+                  }}
+                  className="w-full text-left px-3 py-1.5 hover:bg-[#26282e] transition-colors"
+                >
+                  Change Workspace...
+                </button>
+                <button
+                  onClick={() => {
+                    setIsMenuOpen(false);
+                    onOpenSettings();
+                  }}
+                  className="w-full text-left px-3 py-1.5 hover:bg-[#26282e] transition-colors"
+                >
+                  Settings & Keys
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Open IDE Button (styled exactly like Antigravity's "Open IDE" with blue triangle icon) */}
+          <button
+            onClick={onOpenSettings}
+            className="flex items-center space-x-1.5 px-2.5 py-1 rounded-md text-xs font-medium text-[#c4c7cf] hover:text-white hover:bg-[#202226] border border-[#282a30] transition-colors"
+            title="Configure Environment & IDE"
+          >
+            <Play className="w-3.5 h-3.5 text-[#1a73e8] fill-[#1a73e8]" />
+            <span>Open IDE</span>
+          </button>
+        </div>
       </div>
     </header>
   );

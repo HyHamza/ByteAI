@@ -2,16 +2,24 @@
 
 @layer base {
   :root {
-    --bg-dark: #0d1117;
-    --surface-dark: #161b22;
-    --surface-hover: #21262d;
-    --border-dark: #30363d;
+    --bg-canvas: #131314;
+    --bg-sidebar: #18191b;
+    --bg-surface: #1e1f20;
+    --bg-surface-hover: #26282b;
+    --border-subtle: #24262a;
+    --border-card: #2e3035;
+    --text-primary: #e3e3e3;
+    --text-secondary: #8e9196;
+    --text-muted: #5e626a;
+    --accent-blue: #1a73e8;
   }
 
   body {
-    background-color: var(--bg-dark);
-    color: #c9d1d9;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background-color: var(--bg-canvas);
+    color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
     overflow: hidden;
     margin: 0;
     padding: 0;
@@ -29,19 +37,131 @@
     user-select: text !important;
   }
 
-  /* Custom subtle scrollbars */
+  /* Custom minimal Antigravity scrollbars */
   ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+    width: 5px;
+    height: 5px;
   }
   ::-webkit-scrollbar-track {
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: #30363d;
-    border-radius: 3px;
+    background: #2a2b30;
+    border-radius: 4px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: #484f58;
+    background: #3e4047;
   }
+}
+
+/* Markdown styling classes for assistant messages */
+.prose-antigravity {
+  color: #d1d4dc;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.prose-antigravity h1,
+.prose-antigravity h2,
+.prose-antigravity h3,
+.prose-antigravity h4 {
+  color: #f0f1f4;
+  font-weight: 600;
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.prose-antigravity h1 { font-size: 1.25rem; }
+.prose-antigravity h2 { font-size: 1.1rem; }
+.prose-antigravity h3 { font-size: 0.95rem; }
+
+.prose-antigravity p {
+  margin-top: 0.4rem;
+  margin-bottom: 0.4rem;
+}
+
+.prose-antigravity ul,
+.prose-antigravity ol {
+  padding-left: 1.25rem;
+  margin-top: 0.35rem;
+  margin-bottom: 0.35rem;
+}
+
+.prose-antigravity ul {
+  list-style-type: disc;
+}
+
+.prose-antigravity ol {
+  list-style-type: decimal;
+}
+
+.prose-antigravity li {
+  margin-top: 0.2rem;
+  margin-bottom: 0.2rem;
+}
+
+.prose-antigravity strong {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.prose-antigravity code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11.5px;
+  background-color: #1a1b1e;
+  border: 1px solid #2d2f34;
+  padding: 0.15rem 0.35rem;
+  border-radius: 4px;
+  color: #7dd3fc;
+}
+
+.prose-antigravity pre {
+  margin-top: 0.6rem;
+  margin-bottom: 0.6rem;
+  background-color: #121315;
+  border: 1px solid #282a2f;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  overflow-x: auto;
+}
+
+.prose-antigravity pre code {
+  background-color: transparent;
+  border: none;
+  padding: 0;
+  color: #e2e8f0;
+  font-size: 12px;
+}
+
+.prose-antigravity blockquote {
+  border-left: 3px solid #3b82f6;
+  padding-left: 0.75rem;
+  margin: 0.5rem 0;
+  color: #9ca3af;
+  font-style: italic;
+}
+
+.prose-antigravity table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75rem 0;
+  font-size: 12px;
+}
+
+.prose-antigravity th,
+.prose-antigravity td {
+  border: 1px solid #282a2f;
+  padding: 0.4rem 0.6rem;
+  text-align: left;
+}
+
+.prose-antigravity th {
+  background-color: #1a1b1f;
+  color: #ffffff;
+}
+
+.prose-antigravity hr {
+  border: none;
+  border-top: 1px solid #282a2f;
+  margin: 1rem 0;
 }
