@@ -6,6 +6,7 @@ import { JulesClient } from './services/jules/client';
 import { JulesPoller } from './services/jules/poller';
 import { AgentOrchestrator } from './agent/orchestrator';
 import { detectGitRepo } from './services/git/detector';
+import { syncAndMergeJulesSession } from './services/git/merger';
 import type { AppMode, ChatSession } from '../shared/types';
 
 let mainWindow: BrowserWindow | null = null;
@@ -191,5 +192,9 @@ function setupIpcHandlers() {
 
   ipcMain.handle('jules:followup', async (_, { sessionId, prompt }) => {
     return julesClient.sendFollowup(sessionId, prompt);
+  });
+
+  ipcMain.handle('jules:merge', async (_, { sessionId }: { sessionId: string }) => {
+    return syncAndMergeJulesSession(sessionId);
   });
 }

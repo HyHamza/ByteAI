@@ -11,7 +11,8 @@ import {
   CheckCircle2, 
   AlertCircle,
   Copy,
-  Check
+  Check,
+  GitMerge
 } from 'lucide-react';
 import type { ToolExecutionRecord } from '@/shared/types';
 
@@ -46,6 +47,8 @@ export const ToolCard: React.FC<ToolCardProps> = ({ tool }) => {
       case 'jules_reply_question':
       case 'jules_inspect_diff':
         return <Sparkles className="w-3.5 h-3.5 text-[#38bdf8]" />;
+      case 'jules_sync_and_merge':
+        return <GitMerge className="w-3.5 h-3.5 text-[#34d399]" />;
       default:
         return <Terminal className="w-3.5 h-3.5 text-[#9ca3af]" />;
     }

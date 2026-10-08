@@ -39,7 +39,11 @@ CORE DIRECTIVES:
 4. ASYNCHRONOUS CLOUD EXECUTION & NO POLLING:
    - Once you call 'jules_create_task', STOP IMMEDIATELY! Do NOT call 'jules_inspect_diff'. Do NOT poll. Jules runs remotely in Google Cloud.
    - Our system runs an autonomous native background supervisor engine ('JulesPoller') that continuously monitors Jules, and will automatically wake you up and send native desktop notifications the moment Jules completes or asks an architectural question.
-   - Conclude your turn with a clear, concise confirmation to the user that the task was dispatched to Jules and you are supervising it in the background.`;
+   - Conclude your turn with a clear, concise confirmation to the user that the task was dispatched to Jules and you are supervising it in the background.
+
+5. AUTOMATIC REPO & LOCAL SYNCHRONIZATION:
+   - When a Jules task completes, our background system automatically pulls and merges the PR/changes into the local repository and pushes to the remote origin branch, keeping local and remote in sync.
+   - If you ever need to manually pull and merge a completed Jules task, call 'jules_sync_and_merge' with the session_id.`;
 
 export class AgentOrchestrator {
   private static instance: AgentOrchestrator;
@@ -110,14 +114,7 @@ export class AgentOrchestrator {
     }
 
     const settings = store.getSettings();
-    // Synchronize mode: if either session or header is in jules mode, operate in jules mode!
-    const isJules = session.mode === 'jules' || settings.mode === 'jules';
-    const mode: AppMode = isJules ? 'jules' : 'standard';
-
-    if (session.mode !== mode) {
-      session.mode = mode;
-      store.saveSession(session);
-    }
+    const mode: AppMode = session.mode || settings.mode || 'standard';
 
     let currentToolDefs = mode === 'jules' ? JULES_TOOL_DEFS : STANDARD_TOOL_DEFS;
     const workspaceDir = session.workspacePath || process.cwd();
@@ -138,10 +135,10 @@ CURRENT WORKSPACE & REPOSITORY (AUTO-DETECTED):
 
 CRITICAL RULES FOR JULES LEAD MODE:
 1. You are operating in JULES LEAD MODE.
-2. For ANY coding, feature, bug fix, audit, review, or analysis task from the user, YOU MUST DELEGATE IT TO JULES via 'jules_create_task'! DO NOT ATTEMPT TO EXECUTE IT MANUALLY OR READ FILES TO DO THE TASK YOURSELF.
-3. The GitHub repository '${activeRepo}' has ALREADY BEEN AUTOMATICALLY DETECTED.
-4. When calling 'jules_create_task', automatically use repo: "${activeRepo}" and branch: "${activeBranch}".
-5. DO NOT ask the user for the repo or branch.
+2. For ANY coding, feature, bug fix, code audit, or implementation task from the user, YOU MUST DELEGATE IT TO JULES via 'jules_create_task'!
+3. When asked what Jules is doing, its progress, or current status, ALWAYS call 'jules_get_status' to fetch the real-time activity stream and report back!
+4. You have tools to inspect local workspace files ('read_file', 'list_directory') when the user asks questions about existing code or local context.
+5. When calling 'jules_create_task', automatically use repo: "${activeRepo}" and branch: "${activeBranch}".
 6. Once 'jules_create_task' is called, STOP and let Jules work in the cloud.`;
     } else {
       systemPrompt = `${STANDARD_SYSTEM_PROMPT}

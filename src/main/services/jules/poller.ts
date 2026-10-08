@@ -6,6 +6,7 @@ import { JulesClient } from './client';
 import type { JulesSessionSummary } from '../../../shared/types';
 import { DataStore } from '../db/store';
 import { AgentOrchestrator } from '../../agent/orchestrator';
+import { syncAndMergeJulesSession } from '../git/merger';
 
 const STATE_FILE = path.join(os.homedir(), '.seniorengineer', 'jules_supervisor_state.json');
 
@@ -298,6 +299,15 @@ SUPERVISOR DIRECTIVES FOR BYTE:
       }
     }
 
+    // Automatically pull and merge changes to local workspace and remote origin!
+    let mergeReport = '';
+    try {
+      const mergeRes = await syncAndMergeJulesSession(s.id);
+      mergeReport = `\n\n${mergeRes.message}`;
+    } catch (err: any) {
+      mergeReport = `\n\n(Auto-sync attempt encountered: ${err.message || String(err)})`;
+    }
+
     // Find and update matching chat session
     const store = DataStore.getInstance();
     const existing = store.getSessions();
@@ -309,7 +319,7 @@ SUPERVISOR DIRECTIVES FOR BYTE:
     );
 
     if (chatSession) {
-      const summaryMsg = `[JULES TASK COMPLETED]\nTask: ${s.title || s.id}\nStatus: COMPLETED\n${s.prUrl ? `Pull Request: ${s.prUrl}` : 'The remote worker has finished the task.'}\n\nPlease inspect the final diff and provide a comprehensive completion summary to the user.`;
+      const summaryMsg = `[JULES TASK COMPLETED & SYNCED]\nTask: ${s.title || s.id}\nStatus: COMPLETED\n${s.prUrl ? `Pull Request: ${s.prUrl}` : 'The remote worker has finished the task.'}${mergeReport}\n\nPlease inspect the merged code and confirm that local and remote repositories are fully synchronized.`;
       AgentOrchestrator.getInstance().runAutonomousTurn(chatSession.id, summaryMsg).catch(console.error);
     }
   }

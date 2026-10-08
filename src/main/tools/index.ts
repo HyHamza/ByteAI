@@ -7,6 +7,7 @@ import { JulesClient } from '../services/jules/client';
 import { JulesPoller } from '../services/jules/poller';
 import { DataStore } from '../services/db/store';
 import { detectGitRepo } from '../services/git/detector';
+import { syncAndMergeJulesSession } from '../services/git/merger';
 
 // ─── Standard Tool Definitions (Antigravity Mode) ──────────────────────────────
 export const STANDARD_TOOL_DEFS: LLMToolDefinition[] = [
@@ -84,6 +85,33 @@ export const STANDARD_TOOL_DEFS: LLMToolDefinition[] = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'jules_get_status',
+      description: 'Check the current progress, state, branch, and recent activities of an active or completed Jules AI task.',
+      parameters: {
+        type: 'object',
+        properties: {
+          session_id: { type: 'string', description: 'Optional Jules session ID. If not specified, checks the active task for the current session.' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'jules_sync_and_merge',
+      description: 'Pull and merge code changes from a completed Jules AI task/PR into the local git repository and push to remote origin so both are synchronized.',
+      parameters: {
+        type: 'object',
+        properties: {
+          session_id: { type: 'string', description: 'The Jules session ID to sync and merge' },
+        },
+        required: ['session_id'],
+      },
+    },
+  },
 ];
 
 // ─── Jules Supervisor Tool Definitions (Senior Lead Mode) ──────────────────────
@@ -108,6 +136,19 @@ export const JULES_TOOL_DEFS: LLMToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'jules_get_status',
+      description: 'Check the current progress, state, branch, and recent activities of an active or completed Jules AI task.',
+      parameters: {
+        type: 'object',
+        properties: {
+          session_id: { type: 'string', description: 'Optional Jules session ID. If not specified, checks the active task for the current session.' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'jules_reply_question',
       description: 'Respond to an architectural question or disambiguation query asked by Jules.',
       parameters: {
@@ -124,7 +165,7 @@ export const JULES_TOOL_DEFS: LLMToolDefinition[] = [
     type: 'function',
     function: {
       name: 'jules_inspect_diff',
-      description: 'Inspect the pull request diff, outputs, or code changes of a COMPLETED Jules task. NEVER use this tool to poll or check running sessions.',
+      description: 'Inspect the pull request diff, outputs, or code changes of a COMPLETED Jules task.',
       parameters: {
         type: 'object',
         properties: {
@@ -137,12 +178,69 @@ export const JULES_TOOL_DEFS: LLMToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'jules_sync_and_merge',
+      description: 'Pull and merge code changes from a completed Jules AI task/PR into the local git repository and push to remote origin so both are synchronized.',
+      parameters: {
+        type: 'object',
+        properties: {
+          session_id: { type: 'string', description: 'The Jules session ID to sync and merge' },
+        },
+        required: ['session_id'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'read_file',
+      description: 'Read the contents of a local file at the given relative or absolute path.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Path to the file to read' },
+          start_line: { type: 'number', description: 'Optional 1-indexed start line' },
+          end_line: { type: 'number', description: 'Optional 1-indexed end line' },
+        },
+        required: ['path'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'list_directory',
+      description: 'List files and directories in the given local workspace path.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Path to list (defaults to workspace root)' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'run_verification_test',
       description: 'Run project tests locally (e.g. npm test, flutter analyze) to verify changes.',
       parameters: {
         type: 'object',
         properties: {
           command: { type: 'string', description: 'Verification test command to run' },
+        },
+        required: ['command'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'run_terminal_command',
+      description: 'Execute a shell command in the current workspace directory.',
+      parameters: {
+        type: 'object',
+        properties: {
+          command: { type: 'string', description: 'The terminal command line string to execute' },
         },
         required: ['command'],
       },
@@ -264,6 +362,48 @@ export async function executeToolCall(
           return `Session ${args.session_id} is currently running asynchronously in Google Cloud (${session.state}). The background supervisor will wake you up automatically when Jules replies or finishes. Do not poll.`;
         }
         return JSON.stringify(session, null, 2);
+      }
+
+      case 'jules_sync_and_merge': {
+        const result = await syncAndMergeJulesSession(args.session_id, workspaceDir);
+        return result.message;
+      }
+
+      case 'jules_get_status': {
+        const client = JulesClient.getInstance();
+        let targetId = args.session_id;
+        if (!targetId && sessionId) {
+          const chatSession = DataStore.getInstance().getSession(sessionId);
+          targetId = chatSession?.julesSessionId;
+        }
+        if (!targetId) {
+          const sessions = await client.listSessions();
+          if (sessions.length > 0) targetId = sessions[0].id;
+        }
+        if (!targetId) {
+          return 'No active or recent Jules task found.';
+        }
+
+        const session = await client.getSession(targetId);
+        const activities = await client.listActivities(targetId).catch(() => []);
+        const recent = activities.slice(-5).map(a => `- [${new Date(a.timestamp).toLocaleTimeString()}] ${a.description}`).join('\n');
+
+        let prInfo = '';
+        if (Array.isArray(session.outputs)) {
+          for (const o of session.outputs) {
+            if (o.pullRequest?.url) {
+              prInfo = `\nPull Request: ${o.pullRequest.url}`;
+              break;
+            }
+          }
+        }
+
+        return `Jules Task: "${session.title || targetId}" (ID: ${targetId})
+Current Status: ${session.state}
+Repository: ${session.sourceContext?.source || ''} (${session.sourceContext?.githubRepoContext?.startingBranch || 'main'})${prInfo}
+
+Recent Activity:
+${recent || '(No activity recorded yet)'}`;
       }
 
       default:
