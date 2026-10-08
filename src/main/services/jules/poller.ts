@@ -139,15 +139,11 @@ export class JulesPoller {
 
       // Find sessions requiring active intervention
       for (const s of sessions) {
-        const isAwaitingFeedback = 
-          s.state === 'AWAITING_USER_FEEDBACK' || 
-          s.state === 'AWAITING_USER_INPUT' ||
-          s.state === 'PAUSED';
-
-        if (isAwaitingFeedback) {
-          await this.handleAwaitingFeedback(s);
-        } else if (s.state === 'COMPLETED') {
+        if (s.state === 'COMPLETED') {
           await this.handleSessionCompleted(s);
+        } else if (s.state !== 'CANCELLED' && s.state !== 'FAILED') {
+          // Check ANY active session (IN_PROGRESS, AWAITING_FEEDBACK, etc.) for unhandled agent questions
+          await this.handleAwaitingFeedback(s);
         }
       }
     } catch (err: any) {
@@ -162,12 +158,26 @@ export class JulesPoller {
     const activities = await client.listActivities(s.id).catch(() => []);
     if (!activities || activities.length === 0) return;
 
-    // Find the latest message or question from the agent
-    const agentMsgAct = activities.find(
-      (a) => a.metadata?.originator === 'agent' && (a.metadata?.agentMessaged || a.type === 'AGENT_MESSAGE')
-    ) || activities[0];
+    // Find the latest message or question from the agent (newest to oldest)
+    const reversed = [...activities].reverse();
+    const agentMsgAct = reversed.find(
+      (a) =>
+        (a.metadata?.originator === 'agent' || a.metadata?.agentMessaged) &&
+        (a.metadata?.agentMessaged?.agentMessage || a.metadata?.agentMessaged?.message || a.type === 'AGENT_MESSAGE')
+    );
 
     if (!agentMsgAct || !agentMsgAct.id) return;
+
+    // Check if there is already a newer user message that answered this agent message
+    const agentMsgIndex = activities.findIndex((a) => a.id === agentMsgAct.id);
+    if (agentMsgIndex !== -1) {
+      const subsequentUserMsg = activities.slice(agentMsgIndex + 1).find(
+        (a) => a.metadata?.originator === 'user' || a.metadata?.userMessaged || a.type === 'USER_MESSAGE'
+      );
+      if (subsequentUserMsg) {
+        return; // Already answered
+      }
+    }
 
     if (this.handledActivities.has(agentMsgAct.id)) {
       return; // Already reviewed and handled this message
