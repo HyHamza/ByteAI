@@ -216,6 +216,12 @@ export const App: React.FC = () => {
     const updated = { ...settings, ...partial };
     setSettings(updated);
     await api.saveSettings(partial);
+    try {
+      const models = await api.getAvailableModels();
+      if (models && models.length > 0) {
+        setAvailableModels(models);
+      }
+    } catch (_) {}
   };
 
   return (

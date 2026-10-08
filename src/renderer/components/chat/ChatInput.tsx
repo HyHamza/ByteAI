@@ -8,7 +8,8 @@ import {
   Folder, 
   Sparkles, 
   Bot, 
-  ShieldCheck 
+  ShieldCheck,
+  Check
 } from 'lucide-react';
 import type { AppMode } from '@/shared/types';
 
@@ -26,6 +27,37 @@ interface ChatInputProps {
   onSelectWorkspace: () => void;
   disabled?: boolean;
   isCenteredLayout?: boolean;
+}
+
+export function formatModelDisplayName(modelId: string): string {
+  if (!modelId) return 'Auto Router';
+  if (modelId === 'auto') return 'Auto Router';
+  
+  const map: Record<string, string> = {
+    'claude-opus-4-5': 'Claude Opus 4.5',
+    'claude-sonnet-4-5': 'Claude Sonnet 4.5',
+    'claude-haiku-4-5': 'Claude Haiku 4.5',
+    'claude-3-5-sonnet': 'Claude 3.5 Sonnet',
+    'claude-3-7-sonnet': 'Claude 3.7 Sonnet',
+    'qwen3.8-27b': 'Qwen 3.8 (27B)',
+    'fusion': 'Fusion Multi-Model',
+    'gpt-4o': 'GPT-4o',
+    'gpt-4o-mini': 'GPT-4o Mini',
+    'gpt-4-turbo': 'GPT-4 Turbo',
+    'gemini-2.5-pro': 'Gemini 2.5 Pro',
+    'gemini-2.5-flash': 'Gemini 2.5 Flash',
+    'gemini-2.0-flash': 'Gemini 2.0 Flash',
+    'deepseek-chat': 'DeepSeek Chat',
+    'deepseek-coder': 'DeepSeek Coder',
+    'deepseek-r1': 'DeepSeek R1',
+  };
+
+  if (map[modelId]) return map[modelId];
+
+  return modelId
+    .split('-')
+    .map((w) => (w.length > 0 ? w[0].toUpperCase() + w.slice(1) : w))
+    .join(' ');
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
@@ -70,7 +102,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     }
   }, [text, isCenteredLayout]);
 
-  const activeModelDisplay = isAutoModel ? 'Gemini 2.5 Flash Medium' : selectedModel;
+  const currentModelId = isAutoModel ? 'auto' : (selectedModel || 'auto');
+  const activeModelDisplay = formatModelDisplayName(currentModelId);
+
+  // Real models without duplicate entries
+  const modelsList = availableModels && availableModels.length > 0 
+    ? Array.from(new Set(availableModels))
+    : ['auto'];
 
   return (
     <div className={`w-full flex flex-col items-center ${isCenteredLayout ? 'px-4 py-8' : 'px-4 pb-4 pt-1 bg-gradient-to-t from-[#131314] to-transparent'}`}>
@@ -114,7 +152,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 <Plus className="w-4 h-4" />
               </button>
 
-              {/* Model Pill with Shield Icon */}
+              {/* Model Pill showing active real model */}
               <div className="relative">
                 <button
                   type="button"
@@ -128,33 +166,50 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
                 {isModelDropdownOpen && (
                   <div 
-                    className="absolute bottom-9 left-0 w-52 bg-[#1b1c20] border border-[#2b2d33] rounded-xl shadow-2xl py-1 text-xs text-[#c4c7cf] z-50 max-h-56 overflow-y-auto"
+                    className="absolute bottom-9 left-0 w-64 bg-[#1b1c20] border border-[#2b2d33] rounded-2xl shadow-2xl py-1 text-xs text-[#c4c7cf] z-50 max-h-64 overflow-y-auto"
                     onMouseLeave={() => setIsModelDropdownOpen(false)}
                   >
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onChangeModel(selectedModel, true);
-                        setIsModelDropdownOpen(false);
-                      }}
-                      className={`w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#26282e] ${isAutoModel ? 'text-[#70a6ff] font-medium' : ''}`}
-                    >
-                      <span>Gemini 2.5 Flash Medium (Auto)</span>
-                      <ShieldCheck className="w-3.5 h-3.5 text-[#fbbf24]" />
-                    </button>
-                    {availableModels.map((m) => (
-                      <button
-                        key={m}
-                        type="button"
-                        onClick={() => {
-                          onChangeModel(m, false);
-                          setIsModelDropdownOpen(false);
-                        }}
-                        className={`w-full text-left px-3 py-1.5 hover:bg-[#26282e] ${!isAutoModel && selectedModel === m ? 'text-[#70a6ff] font-medium' : ''}`}
-                      >
-                        {m}
-                      </button>
-                    ))}
+                    <div className="px-3 py-1.5 text-[10px] font-semibold text-[#6c707a] uppercase tracking-wider border-b border-[#25272e]">
+                      Available Models
+                    </div>
+
+                    <div className="py-1">
+                      {modelsList.map((m) => {
+                        const isAuto = m === 'auto';
+                        const isSelected = (isAutoModel && isAuto) || (!isAutoModel && selectedModel === m);
+                        const friendlyName = formatModelDisplayName(m);
+
+                        return (
+                          <button
+                            key={m}
+                            type="button"
+                            onClick={() => {
+                              onChangeModel(m, isAuto);
+                              setIsModelDropdownOpen(false);
+                            }}
+                            className={`w-full flex items-center justify-between px-3 py-2 text-left hover:bg-[#26282e] transition-colors cursor-pointer ${
+                              isSelected ? 'bg-[#22242b] text-[#70a6ff]' : 'text-[#c4c7cf]'
+                            }`}
+                          >
+                            <div className="flex flex-col min-w-0 pr-2">
+                              <span className="font-medium text-[12px] truncate flex items-center space-x-1.5">
+                                <span>{friendlyName}</span>
+                                {isAuto && <span className="text-[10px] text-[#fbbf24] font-normal">(Smart)</span>}
+                              </span>
+                              <span className="text-[10px] text-[#6c707a] font-mono truncate">{m}</span>
+                            </div>
+
+                            <div className="shrink-0 flex items-center space-x-1">
+                              {isAuto ? (
+                                <ShieldCheck className="w-3.5 h-3.5 text-[#fbbf24]" />
+                              ) : isSelected ? (
+                                <Check className="w-3.5 h-3.5 text-[#70a6ff]" />
+                              ) : null}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
               </div>
@@ -185,9 +240,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   disabled={!text.trim() || disabled}
                   className={`w-7 h-7 rounded-full flex items-center justify-center transition-all cursor-pointer ${
                     text.trim() && !disabled
-                      ? mode === 'jules'
-                        ? 'bg-[#1a73e8] text-white hover:bg-[#165ec2] shadow-md'
-                        : 'bg-[#1a73e8] text-white hover:bg-[#165ec2] shadow-md'
+                      ? 'bg-[#1a73e8] text-white hover:bg-[#165ec2] shadow-md'
                       : 'bg-[#282a30] text-[#5e626a] cursor-not-allowed'
                   }`}
                   title="Send message"
