@@ -145,9 +145,10 @@ export class LLMClient {
   public async chatStream(
     messages: LLMMessage[],
     tools: LLMToolDefinition[] | undefined,
-    callbacks: LLMStreamCallbacks
+    callbacks: LLMStreamCallbacks,
+    options?: { maxRetries?: number }
   ): Promise<{ content: string; toolCalls: any[] }> {
-    const MAX_RETRIES = 9;
+    const MAX_RETRIES = options?.maxRetries !== undefined ? options.maxRetries : 9;
     let attempt = 0;
 
     while (attempt <= MAX_RETRIES) {

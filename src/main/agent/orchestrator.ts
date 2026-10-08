@@ -422,7 +422,8 @@ Git Repository: ${activeRepo} (${activeBranch})`;
           },
         ],
         undefined,
-        { onToken: () => {} }
+        { onToken: () => {} },
+        { maxRetries: 0 }
       );
 
       let cleanTitle = result.content ? result.content.trim() : '';

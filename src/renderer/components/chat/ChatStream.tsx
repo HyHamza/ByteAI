@@ -439,7 +439,21 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
                       </ReactMarkdown>
                     </div>
                   ) : isLiveInThisTurn && (!allToolCalls || allToolCalls.length === 0) ? (
-                    <div className="text-[#6c707a] italic text-xs pl-1">Thinking and analyzing...</div>
+                    retryStatus ? (
+                      <div className="flex items-center space-x-2 text-amber-400 bg-amber-500/10 border border-amber-500/20 px-3 py-2 rounded-xl text-xs w-fit">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400 shrink-0" />
+                        <div>
+                          <div className="font-medium text-amber-300">
+                            Upstream provider unavailable, retrying attempt {retryStatus.attempt} of {retryStatus.maxRetries}...
+                          </div>
+                          <div className="text-[11px] text-amber-400/80 mt-0.5">
+                            {retryStatus.reason} • Next attempt in {Math.round(retryStatus.delayMs / 1000)}s
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-[#6c707a] italic text-xs pl-1">Thinking and analyzing...</div>
+                    )
                   ) : null}
 
                   {/* Single Unified Turn Footer: Timestamp + Actions */}
