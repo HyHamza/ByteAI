@@ -84,6 +84,14 @@ const mockAPI: ElectronAPI = {
     mockSessions.unshift(s);
     return s;
   },
+  updateSession: async (id: string, updates: Partial<ChatSession>) => {
+    const s = mockSessions.find((sess) => sess.id === id);
+    if (s) {
+      Object.assign(s, updates);
+      return s;
+    }
+    return null;
+  },
   deleteSession: async (id: string) => {
     mockSessions = mockSessions.filter((s) => s.id !== id);
     return true;

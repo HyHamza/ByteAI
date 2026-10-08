@@ -103,6 +103,7 @@ export interface ElectronAPI {
   // Sessions
   listSessions: (workspacePath?: string) => Promise<ChatSession[]>;
   createSession: (title: string, mode?: AppMode) => Promise<ChatSession>;
+  updateSession: (sessionId: string, updates: Partial<ChatSession>) => Promise<ChatSession | null>;
   deleteSession: (sessionId: string) => Promise<boolean>;
 
   // Workspace

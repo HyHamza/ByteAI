@@ -151,8 +151,11 @@ export const App: React.FC = () => {
   const handleToggleMode = async (mode: AppMode) => {
     setSettings((prev) => ({ ...prev, mode }));
     await api.saveSettings({ mode });
-    if (activeSession) {
-      activeSession.mode = mode;
+    if (activeSessionId) {
+      await api.updateSession(activeSessionId, { mode });
+      setSessions((prev) =>
+        prev.map((s) => (s.id === activeSessionId ? { ...s, mode } : s))
+      );
     }
   };
 
@@ -239,13 +242,13 @@ export const App: React.FC = () => {
             messages={activeSession?.messages || []}
             currentStreamContent={streamingContent}
             isStreaming={isStreaming}
-            mode={settings.mode}
+            mode={activeSession?.mode || settings.mode}
           />
           <ChatInput
             onSendMessage={handleSendMessage}
             onCancel={handleCancelExecution}
             isStreaming={isStreaming}
-            mode={settings.mode}
+            mode={activeSession?.mode || settings.mode}
             disabled={!activeSessionId}
           />
         </main>

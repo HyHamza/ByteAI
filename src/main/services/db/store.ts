@@ -95,7 +95,19 @@ export class DataStore {
   }
 
   public getSettings(): AppSettings {
-    return { ...this.db.settings };
+    const s = { ...this.db.settings };
+    if (!s.julesApiKey) {
+      const julesKeyPath = path.join(os.homedir(), '.gemini', 'config', 'skills', 'jules', '.jules_key');
+      if (fs.existsSync(julesKeyPath)) {
+        try {
+          s.julesApiKey = fs.readFileSync(julesKeyPath, 'utf-8').trim();
+        } catch (_) {}
+      }
+    }
+    if (!s.julesDefaultRepo) {
+      s.julesDefaultRepo = 'sources/github/HyHamza/SeniorEngineer';
+    }
+    return s;
   }
 
   public saveSettings(partial: Partial<AppSettings>): AppSettings {
@@ -120,6 +132,17 @@ export class DataStore {
     this.db.sessions[session.id] = session;
     this.save();
     return session;
+  }
+
+  public updateSession(id: string, updates: Partial<ChatSession>): ChatSession | null {
+    const session = this.db.sessions[id];
+    if (session) {
+      Object.assign(session, updates);
+      session.updatedAt = Date.now();
+      this.save();
+      return session;
+    }
+    return null;
   }
 
   public deleteSession(id: string): boolean {

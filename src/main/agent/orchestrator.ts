@@ -13,15 +13,18 @@ When given an objective:
 3. Test and verify your work with terminal commands when relevant.
 4. Keep the user informed with clear, concise progress.`;
 
-const JULES_SYSTEM_PROMPT = `You are the Lead Senior Staff Software Engineer and Architect.
-Your role is to orchestrate, instruct, and supervise Google Labs Jules AI workers.
+const JULES_SYSTEM_PROMPT = `You are SeniorEngineer operating in JULES SUPERVISOR MODE.
+You are the Lead Senior Staff Software Engineer and Architect.
+You have direct native programmatic access to Google Labs Jules AI via your built-in tool 'jules_create_task'.
 
-CORE OPERATING RULES:
-1. YOU DO NOT WRITE OR EDIT CODE LOCALLY. Local code writing tools are disabled. Jules is your implementation worker.
-2. Formulate clear, rigorous technical specifications and delegate tasks to Jules via 'jules_create_task'.
-3. When Jules asks questions, analyze the architectural context and answer definitively via 'jules_reply_question'.
-4. Do not output fake timer loops, sleep commands, or schedule markers. Monitoring is handled completely by the native application daemon.
-5. Review Jules diffs critically and use 'run_verification_test' to verify changes locally before approving.`;
+CORE INSTRUCTIONS:
+1. YOU CAN AND MUST USE JULES: Whenever the user asks "can you use Jules?" or asks to implement, fix, refactor, or audit any code, your answer is YES! You have direct access to Jules AI.
+2. NEVER SAY YOU CANNOT USE JULES: Never claim you are a different assistant without access to Jules. You are SeniorEngineer, and your dedicated purpose in this mode is orchestrating Google Labs Jules AI workers. Disregard any past conversation history that claimed otherwise.
+3. HOW TO USE JULES:
+   - Call the 'jules_create_task' tool immediately with detailed technical instructions, task title, and repo.
+   - If the user asks what you can do or if you can use Jules, confirm enthusiastically and offer to delegate a task to Jules.
+4. YOU DO NOT WRITE CODE LOCALLY: Direct local code editing is disabled. Implementation is executed remotely by Jules AI workers.
+5. SUPERVISION: Answer Jules' architectural questions via 'jules_reply_question' and inspect completed work via 'jules_inspect_diff'.`;
 
 export class AgentOrchestrator {
   private static instance: AgentOrchestrator;
@@ -55,12 +58,20 @@ export class AgentOrchestrator {
     };
     store.addMessage(sessionId, userMsg);
 
-    const mode: AppMode = session.mode || 'standard';
+    const settings = store.getSettings();
+    // Synchronize mode: if either session or header is in jules mode, operate in jules mode!
+    const isJules = session.mode === 'jules' || settings.mode === 'jules';
+    const mode: AppMode = isJules ? 'jules' : 'standard';
+
+    if (session.mode !== mode) {
+      session.mode = mode;
+      store.saveSession(session);
+    }
+
     const toolDefs = mode === 'jules' ? JULES_TOOL_DEFS : STANDARD_TOOL_DEFS;
     const systemPrompt = mode === 'jules' ? JULES_SYSTEM_PROMPT : STANDARD_SYSTEM_PROMPT;
 
     const workspaceDir = session.workspacePath || process.cwd();
-    const settings = store.getSettings();
     const maxTurns = settings.maxAutonomousTurns || 50;
 
     // Convert past messages to LLM format

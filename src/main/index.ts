@@ -111,6 +111,10 @@ function setupIpcHandlers() {
     return store.saveSession(newSession);
   });
 
+  ipcMain.handle('sessions:update', async (_, { sessionId, updates }: { sessionId: string; updates: Partial<ChatSession> }) => {
+    return store.updateSession(sessionId, updates);
+  });
+
   ipcMain.handle('sessions:delete', async (_, { sessionId }) => {
     return store.deleteSession(sessionId);
   });

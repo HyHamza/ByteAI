@@ -27,6 +27,7 @@ const api: ElectronAPI = {
   // Sessions
   listSessions: (workspacePath) => ipcRenderer.invoke('sessions:list', { workspacePath }),
   createSession: (title, mode) => ipcRenderer.invoke('sessions:create', { title, mode }),
+  updateSession: (sessionId, updates) => ipcRenderer.invoke('sessions:update', { sessionId, updates }),
   deleteSession: (sessionId) => ipcRenderer.invoke('sessions:delete', { sessionId }),
 
   // Workspace
