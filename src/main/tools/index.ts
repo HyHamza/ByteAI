@@ -124,7 +124,7 @@ export const JULES_TOOL_DEFS: LLMToolDefinition[] = [
     type: 'function',
     function: {
       name: 'jules_inspect_diff',
-      description: 'Inspect the status and outputs of a Jules session.',
+      description: 'Inspect the pull request diff, outputs, or code changes of a COMPLETED Jules task. NEVER use this tool to poll or check running sessions.',
       parameters: {
         type: 'object',
         properties: {
@@ -243,7 +243,7 @@ export async function executeToolCall(
         // Automatically track session in native background poller!
         JulesPoller.getInstance().trackSession(res.sessionId);
 
-        return `Jules task created successfully with Session ID: ${res.sessionId} on ${repo || 'default repository'} (${branch}). Native background supervisor is now tracking execution.`;
+        return `Jules task created successfully with Session ID: ${res.sessionId} on ${repo || 'default repository'} (${branch}). The autonomous background supervisor daemon is now tracking execution in the background and will wake you up automatically when Jules reports back. Conclude your turn immediately and do not call any more tools.`;
       }
 
       case 'jules_reply_question': {
@@ -255,6 +255,14 @@ export async function executeToolCall(
       case 'jules_inspect_diff': {
         const client = JulesClient.getInstance();
         const session = await client.getSession(args.session_id);
+        const isRunning = 
+          session.state === 'IN_PROGRESS' || 
+          session.state === 'PLANNING' || 
+          session.state === 'CODING' || 
+          session.state === 'INITIALIZING';
+        if (isRunning) {
+          return `Session ${args.session_id} is currently running asynchronously in Google Cloud (${session.state}). The background supervisor will wake you up automatically when Jules replies or finishes. Do not poll.`;
+        }
         return JSON.stringify(session, null, 2);
       }
 

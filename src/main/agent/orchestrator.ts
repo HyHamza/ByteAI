@@ -19,13 +19,14 @@ You are the Lead Senior Staff Software Engineer and Architect.
 You have direct native programmatic access to Google Labs Jules AI via your built-in tool 'jules_create_task'.
 
 CORE INSTRUCTIONS:
-1. YOU CAN AND MUST USE JULES: Whenever the user asks "can you use Jules?" or asks to implement, fix, refactor, or audit any code, your answer is YES! You have direct access to Jules AI.
-2. NEVER SAY YOU CANNOT USE JULES: Never claim you are a different assistant without access to Jules. You are Byte, and your dedicated purpose in this mode is orchestrating Google Labs Jules AI workers. Disregard any past conversation history that claimed otherwise.
-3. HOW TO USE JULES:
+1. YOU CAN AND MUST USE JULES: Whenever the user asks "can you use Jules?" or asks to implement, fix, refactor, or audit any code, your answer is YES!
+2. HOW TO USE JULES:
    - Call the 'jules_create_task' tool immediately with detailed technical instructions, task title, and repo.
-   - If the user asks what you can do or if you can use Jules, confirm enthusiastically and offer to delegate a task to Jules.
-4. YOU DO NOT WRITE CODE LOCALLY: Direct local code editing is disabled. Implementation is executed remotely by Jules AI workers.
-5. SUPERVISION: Answer Jules' architectural questions via 'jules_reply_question' and inspect completed work via 'jules_inspect_diff'.`;
+   - ASYNCHRONOUS CLOUD EXECUTION & NO POLLING: Once you call 'jules_create_task', STOP CALLING TOOLS IMMEDIATELY! Do NOT call 'jules_inspect_diff'. Do NOT poll. Jules runs remotely in Google Cloud.
+   - Our system runs an autonomous native background supervisor engine ('JulesPoller') that continuously monitors Jules, and will automatically wake you up and send native desktop notifications the moment Jules completes or asks an architectural question.
+   - Conclude your turn with a clear, concise confirmation to the user that the task was dispatched to Jules and you are supervising it in the background.
+3. YOU DO NOT WRITE CODE LOCALLY: Direct local code editing is disabled. Implementation is executed remotely by Jules AI workers.
+4. SUPERVISION: Answer Jules' architectural questions via 'jules_reply_question' and inspect final completed results via 'jules_inspect_diff'.`;
 
 export class AgentOrchestrator {
   private static instance: AgentOrchestrator;
@@ -105,7 +106,7 @@ export class AgentOrchestrator {
       store.saveSession(session);
     }
 
-    const toolDefs = mode === 'jules' ? JULES_TOOL_DEFS : STANDARD_TOOL_DEFS;
+    let currentToolDefs = mode === 'jules' ? JULES_TOOL_DEFS : STANDARD_TOOL_DEFS;
     const workspaceDir = session.workspacePath || process.cwd();
     const maxTurns = settings.maxAutonomousTurns || 50;
 
@@ -164,7 +165,7 @@ Git Repository: ${activeRepo} (${activeBranch})`;
       try {
         result = await llmClient.chatStream(
           llmMessages,
-          toolDefs,
+          currentToolDefs,
           {
             onToken: (token) => {
               streamedContent += token;
@@ -218,9 +219,14 @@ Git Repository: ${activeRepo} (${activeBranch})`;
 
       // Execute each tool call
       const toolRecords: ToolExecutionRecord[] = [];
+      let hasDispatchedJules = false;
 
       for (const tc of result.toolCalls) {
         const toolName = tc.function?.name;
+        if (toolName === 'jules_create_task' || toolName === 'jules_reply_question') {
+          hasDispatchedJules = true;
+        }
+
         let toolArgs: any = {};
         try {
           toolArgs = JSON.parse(tc.function?.arguments || '{}');
@@ -252,6 +258,12 @@ Git Repository: ${activeRepo} (${activeBranch})`;
           tool_call_id: tc.id,
           content: output,
         });
+      }
+
+      if (hasDispatchedJules) {
+        // Jules runs asynchronously in the cloud.
+        // Disable tools for next LLM turn so Byte cleanly yields after reporting to user without manual polling!
+        currentToolDefs = [];
       }
 
       assistantMsg.toolCalls = toolRecords;
