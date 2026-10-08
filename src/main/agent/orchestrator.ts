@@ -8,34 +8,38 @@ import { detectGitRepo } from '../services/git/detector';
 const STANDARD_SYSTEM_PROMPT = `You are Byte, a powerful autonomous software engineering AI assistant.
 You operate on goals and objectives.
 You have tools to read files, write files, edit file contents, run terminal commands, and inspect directories.
-When given an objective:
-1. Act autonomously. Execute the necessary steps to completion.
-2. Do not stop midway to ask unnecessary questions when you have the tools to investigate and execute.
+
+CORE BEHAVIOR (ANTIGRAVITY STYLE):
+1. CHRONOLOGICAL PROGRESSION:
+   - Before executing any tool, ALWAYS output a concise 1-line statement explaining what you are checking or doing (e.g. "Let me inspect package.json:", "Running verification tests:").
+   - Once the tool finishes, analyze the results and provide your conclusions in the subsequent step so thoughts and tool actions flow chronologically.
+2. Act autonomously. Execute the necessary steps to completion without stopping midway for trivial confirmations.
 3. Test and verify your work with terminal commands when relevant.
-4. Keep the user informed with clear, concise progress.`;
+4. Keep the user informed with clear, structured progress.`;
 
 const JULES_SYSTEM_PROMPT = `You are Byte operating in JULES LEAD MODE.
 You are the Lead Senior Staff Software Engineer and Orchestrator.
-Your PRIMARY and DEFAULT responsibility in this mode is orchestrating Google Labs Jules AI workers.
+Your PRIMARY responsibility in this mode is orchestrating Google Labs Jules AI workers.
 
 CORE DIRECTIVES:
 1. ALWAYS DELEGATE TASKS TO JULES:
    - For ANY coding, feature request, bug fix, code audit, or analysis task (e.g. "Analyze sidebar...", "Implement X", "Audit Y", "Fix Z"):
      YOU MUST CALL 'jules_create_task' to delegate the objective to Jules AI!
    - DO NOT ATTEMPT TO EXECUTE TASKS MANUALLY. Manual local work belongs in Standard Mode. In Jules Lead mode, the user expects Jules to do the work.
-   - Formulate a clear, comprehensive technical specification and call 'jules_create_task' immediately.
+   - Formulate a clear, comprehensive technical specification and call 'jules_create_task'.
 
-2. NEVER GUESS OR HALLUCINATE FILE PATHS:
+2. CHRONOLOGICAL PROGRESSION (ANTIGRAVITY STYLE):
+   - Before calling ANY tool (such as 'jules_create_task', 'jules_inspect_diff', or 'jules_reply_question'), ALWAYS provide a brief 1-line statement explaining your intent (e.g. "Let me check the Jules session diff:", "I will dispatch this task to the Jules worker:").
+   - When the tool returns with results, provide your architectural analysis, report, or summary in the subsequent step so that thoughts and tool usages flow chronologically like Antigravity.
+
+3. NEVER GUESS OR HALLUCINATE FILE PATHS:
    - Do not guess file extensions or assume non-existent paths.
    - Remote Jules workers have the full repository indexed in cloud VMs and perform accurate workspace-wide analysis.
 
-3. ASYNCHRONOUS CLOUD EXECUTION & NO POLLING:
+4. ASYNCHRONOUS CLOUD EXECUTION & NO POLLING:
    - Once you call 'jules_create_task', STOP IMMEDIATELY! Do NOT call 'jules_inspect_diff'. Do NOT poll. Jules runs remotely in Google Cloud.
    - Our system runs an autonomous native background supervisor engine ('JulesPoller') that continuously monitors Jules, and will automatically wake you up and send native desktop notifications the moment Jules completes or asks an architectural question.
-   - Conclude your turn with a clear, concise confirmation to the user that the task was dispatched to Jules and you are supervising it in the background.
-
-4. SUPERVISION:
-   - When awakened by the background supervisor with Jules' report or questions, review the findings, formulate your senior engineering direction, and reply via 'jules_reply_question', or inspect final results via 'jules_inspect_diff'.`;
+   - Conclude your turn with a clear, concise confirmation to the user that the task was dispatched to Jules and you are supervising it in the background.`;
 
 export class AgentOrchestrator {
   private static instance: AgentOrchestrator;
@@ -189,8 +193,6 @@ Git Repository: ${activeRepo} (${activeBranch})`;
 
     let turnCount = 0;
     const llmClient = LLMClient.getInstance();
-    const accumulatedToolRecords: ToolExecutionRecord[] = [];
-    const mainAssistantMsgId = `msg_${Date.now()}_assistant`;
 
     while (turnCount < maxTurns) {
       if (this.activeCancellations.has(sessionId)) {
@@ -229,6 +231,7 @@ Git Repository: ${activeRepo} (${activeBranch})`;
           toolCalls: [],
         };
         store.addMessage(sessionId, errorMsg);
+        this.emitSessionsUpdated();
         break;
       }
 
@@ -237,16 +240,6 @@ Git Repository: ${activeRepo} (${activeBranch})`;
         this.emitToken(sessionId, result.content, assistantMsgId);
       }
 
-      // Save assistant message
-      const assistantMsg: ChatMessage = {
-        id: assistantMsgId,
-        sessionId,
-        role: 'assistant',
-        content: result.content,
-        timestamp: Date.now(),
-        toolCalls: [],
-      };
-
       // Add to running LLM context
       llmMessages.push({
         role: 'assistant',
@@ -254,15 +247,22 @@ Git Repository: ${activeRepo} (${activeBranch})`;
         tool_calls: result.toolCalls && result.toolCalls.length > 0 ? result.toolCalls : undefined,
       });
 
-      // If no tool calls were requested, the turn is complete!
+      // If no tool calls were requested, this is the concluding response!
       if (!result.toolCalls || result.toolCalls.length === 0) {
-        assistantMsg.id = mainAssistantMsgId;
-        assistantMsg.toolCalls = accumulatedToolRecords.length > 0 ? accumulatedToolRecords : undefined;
-        store.addMessage(sessionId, assistantMsg);
+        const finalMsg: ChatMessage = {
+          id: assistantMsgId,
+          sessionId,
+          role: 'assistant',
+          content: result.content || '',
+          timestamp: Date.now(),
+        };
+        store.addMessage(sessionId, finalMsg);
+        this.emitSessionsUpdated();
         break;
       }
 
-      // Execute each tool call
+      // Execute each tool call for this step
+      const stepToolRecords: ToolExecutionRecord[] = [];
       let hasDispatchedJules = false;
 
       for (const tc of result.toolCalls) {
@@ -294,7 +294,7 @@ Git Repository: ${activeRepo} (${activeBranch})`;
         toolRecord.completedAt = Date.now();
 
         this.emitToolCall(sessionId, assistantMsgId, toolRecord);
-        accumulatedToolRecords.push(toolRecord);
+        stepToolRecords.push(toolRecord);
 
         // Append tool result for next LLM turn
         llmMessages.push({
@@ -303,6 +303,18 @@ Git Repository: ${activeRepo} (${activeBranch})`;
           content: output,
         });
       }
+
+      // Save this step message with its text AND its executed tools in chronological order!
+      const stepMsg: ChatMessage = {
+        id: assistantMsgId,
+        sessionId,
+        role: 'assistant',
+        content: result.content || '',
+        timestamp: Date.now(),
+        toolCalls: stepToolRecords,
+      };
+      store.addMessage(sessionId, stepMsg);
+      this.emitSessionsUpdated();
 
       if (hasDispatchedJules) {
         // Jules runs asynchronously in the cloud.
@@ -314,6 +326,17 @@ Git Repository: ${activeRepo} (${activeBranch})`;
       this.runningSessions.delete(sessionId);
       this.emitAgentStatus(sessionId, 'idle');
       this.emitCompleted(sessionId);
+    }
+  }
+
+  private emitSessionsUpdated() {
+    const store = DataStore.getInstance();
+    const sessions = store.getSessions();
+    const windows = BrowserWindow.getAllWindows();
+    for (const win of windows) {
+      if (!win.isDestroyed()) {
+        win.webContents.send('sessions:updated', sessions);
+      }
     }
   }
 

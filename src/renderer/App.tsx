@@ -148,6 +148,8 @@ export const App: React.FC = () => {
 
     const unsubSessions = api.onSessionsUpdated?.((newList: ChatSession[]) => {
       setSessions(newList);
+      setStreamingContent('');
+      setStreamingTools([]);
     });
 
     const unsubAgent = api.onAgentStatus?.(({ sessionId, status }) => {

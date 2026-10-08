@@ -89,8 +89,10 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
         </div>
       )}
 
-      {messages.map((m) => {
+      {messages.map((m, index) => {
         const isUser = m.role === 'user';
+        const prevMsg = index > 0 ? messages[index - 1] : null;
+        const isConsecutiveAssistant = !isUser && prevMsg?.role === 'assistant';
 
         if (isUser) {
           const userMsgId = `user_${m.id}`;
@@ -117,22 +119,30 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
 
         const asstMsgId = `asst_${m.id}`;
         return (
-          <div key={m.id} className="flex space-x-3.5 text-xs leading-relaxed group/asst">
-            {/* Assistant Avatar: Antigravity Delta A Icon */}
-            <div className="w-7 h-7 rounded-lg bg-[#1a1b1f] border border-[#282a30] flex items-center justify-center shrink-0 text-white mt-0.5 shadow-sm select-none">
-              <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
-                <path d="M12 2.5L2 20.5h4.2l1.9-3.6h7.8l1.9 3.6H22L12 2.5zm0 5.4l2.8 5.4H9.2L12 7.9z" />
-              </svg>
-            </div>
+          <div key={m.id} className={`flex space-x-3.5 text-xs leading-relaxed group/asst ${isConsecutiveAssistant ? '-mt-3.5' : ''}`}>
+            {/* Assistant Avatar or Antigravity Trajectory Connector */}
+            {isConsecutiveAssistant ? (
+              <div className="w-7 flex justify-center shrink-0 select-none">
+                <div className="w-[1.5px] h-full bg-[#272930] rounded-full min-h-[20px]" />
+              </div>
+            ) : (
+              <div className="w-7 h-7 rounded-lg bg-[#1a1b1f] border border-[#282a30] flex items-center justify-center shrink-0 text-white mt-0.5 shadow-sm select-none">
+                <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                  <path d="M12 2.5L2 20.5h4.2l1.9-3.6h7.8l1.9 3.6H22L12 2.5zm0 5.4l2.8 5.4H9.2L12 7.9z" />
+                </svg>
+              </div>
+            )}
 
             {/* Message Body */}
             <div className="flex-1 overflow-hidden space-y-2">
               <div className="flex items-center justify-between select-none">
                 <div className="flex items-center space-x-2">
-                  <span className="font-medium text-[12px] text-[#c4c7cf]">
-                    Byte
-                  </span>
-                  <span className="text-[10px] text-[#60646c]">
+                  {!isConsecutiveAssistant && (
+                    <span className="font-medium text-[12px] text-[#c4c7cf]">
+                      Byte
+                    </span>
+                  )}
+                  <span className="text-[10px] text-[#555861] font-mono">
                     {new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </div>
@@ -142,7 +152,7 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
                     type="button"
                     onClick={() => copyToClipboard(m.content, asstMsgId)}
                     className="flex items-center space-x-1 text-[11px] text-[#8e9196] hover:text-white transition-colors cursor-pointer px-2 py-0.5 rounded hover:bg-[#202227]"
-                    title="Copy response"
+                    title="Copy step"
                   >
                     {copiedCodeId === asstMsgId ? (
                       <>
@@ -230,17 +240,28 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
 
       {/* Live Streaming Block */}
       {isStreaming && (
-        <div className="flex space-x-3.5 text-xs leading-relaxed">
-          <div className="w-7 h-7 rounded-lg bg-[#1a1b1f] border border-[#282a30] flex items-center justify-center shrink-0 text-white mt-0.5">
-            <Loader2 className="w-4 h-4 animate-spin text-[#1a73e8]" />
-          </div>
+        <div className={`flex space-x-3.5 text-xs leading-relaxed ${messages.length > 0 && messages[messages.length - 1].role === 'assistant' ? '-mt-3.5' : ''}`}>
+          {messages.length > 0 && messages[messages.length - 1].role === 'assistant' ? (
+            <div className="w-7 flex justify-center shrink-0 select-none">
+              <div className="w-[1.5px] h-full bg-[#272930] rounded-full min-h-[24px]" />
+            </div>
+          ) : (
+            <div className="w-7 h-7 rounded-lg bg-[#1a1b1f] border border-[#282a30] flex items-center justify-center shrink-0 text-white mt-0.5">
+              <Loader2 className="w-4 h-4 animate-spin text-[#1a73e8]" />
+            </div>
+          )}
 
           <div className="flex-1 space-y-2">
             <div className="flex items-center space-x-2 text-[12px] text-[#8e9196]">
-              <span className="font-medium text-[#c4c7cf]">
-                Byte
+              {!(messages.length > 0 && messages[messages.length - 1].role === 'assistant') && (
+                <span className="font-medium text-[#c4c7cf]">
+                  Byte
+                </span>
+              )}
+              <span className="text-[11px] text-[#60646c] italic flex items-center space-x-1.5">
+                <Loader2 className="w-3 h-3 animate-spin text-[#1a73e8]" />
+                <span>Thinking...</span>
               </span>
-              <span className="text-[11px] text-[#60646c] italic">Thinking...</span>
             </div>
 
             {currentStreamContent && (
