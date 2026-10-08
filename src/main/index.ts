@@ -4,6 +4,7 @@ import { DataStore } from './services/db/store';
 import { LLMClient } from './services/llm/client';
 import { JulesClient } from './services/jules/client';
 import { AgentOrchestrator } from './agent/orchestrator';
+import { detectGitRepo } from './services/git/detector';
 import type { AppMode, ChatSession } from '../shared/types';
 
 let mainWindow: BrowserWindow | null = null;
@@ -79,16 +80,26 @@ function setupIpcHandlers() {
     });
     if (result.canceled || result.filePaths.length === 0) return null;
     const selected = result.filePaths[0];
-    store.saveSettings({ activeWorkspacePath: selected });
+    const gitInfo = detectGitRepo(selected);
+
+    const updates: any = { activeWorkspacePath: selected };
+    if (gitInfo.repo) {
+      updates.julesDefaultRepo = gitInfo.repo;
+      if (gitInfo.branch) updates.julesDefaultBranch = gitInfo.branch;
+    }
+    store.saveSettings(updates);
     return selected;
   });
 
   ipcMain.handle('workspace:get-info', async () => {
     const settings = store.getSettings();
-    if (!settings.activeWorkspacePath) return null;
+    const wsPath = settings.activeWorkspacePath || process.cwd();
+    const gitInfo = detectGitRepo(wsPath);
     return {
-      path: settings.activeWorkspacePath,
-      name: path.basename(settings.activeWorkspacePath),
+      path: wsPath,
+      name: path.basename(wsPath),
+      gitRepo: gitInfo.repo,
+      gitBranch: gitInfo.branch,
     };
   });
 

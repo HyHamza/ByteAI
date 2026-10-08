@@ -33,6 +33,8 @@ export const App: React.FC = () => {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [workspaceName, setWorkspaceName] = useState<string>('');
+  const [gitRepo, setGitRepo] = useState<string | null>(null);
+  const [gitBranch, setGitBranch] = useState<string | null>(null);
 
   const [isJulesPanelOpen, setIsJulesPanelOpen] = useState(true);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -56,7 +58,11 @@ export const App: React.FC = () => {
         if (!isMounted) return;
 
         if (s) setSettings(s);
-        if (ws) setWorkspaceName(ws.name);
+        if (ws) {
+          setWorkspaceName(ws.name);
+          if (ws.gitRepo) setGitRepo(ws.gitRepo);
+          if (ws.gitBranch) setGitBranch(ws.gitBranch);
+        }
 
         if (sessList && sessList.length > 0) {
           setSessions(sessList);
@@ -141,7 +147,11 @@ export const App: React.FC = () => {
     if (selected) {
       setSettings((prev) => ({ ...prev, activeWorkspacePath: selected }));
       const ws = await api.getWorkspaceInfo();
-      if (ws) setWorkspaceName(ws.name);
+      if (ws) {
+        setWorkspaceName(ws.name);
+        setGitRepo(ws.gitRepo || null);
+        setGitBranch(ws.gitBranch || null);
+      }
       const list = await api.listSessions(selected);
       setSessions(list);
       if (list.length > 0) setActiveSessionId(list[0].id);
@@ -218,6 +228,8 @@ export const App: React.FC = () => {
         settings={settings}
         availableModels={availableModels}
         workspaceName={workspaceName}
+        gitRepo={gitRepo}
+        gitBranch={gitBranch}
         onSelectWorkspace={handleSelectWorkspace}
         onToggleMode={handleToggleMode}
         onChangeModel={handleChangeModel}

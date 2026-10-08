@@ -101,6 +101,8 @@ const mockAPI: ElectronAPI = {
   getWorkspaceInfo: async () => ({
     path: mockSettings.activeWorkspacePath || 'E:\\CODE\\SeniorEngineer',
     name: 'SeniorEngineer',
+    gitRepo: 'sources/github/HyHamza/SeniorEngineer',
+    gitBranch: 'main',
   }),
 
   getSettings: async () => ({ ...mockSettings }),

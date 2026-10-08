@@ -13,6 +13,8 @@ interface HeaderProps {
   settings: AppSettings;
   availableModels: string[];
   workspaceName: string;
+  gitRepo?: string | null;
+  gitBranch?: string | null;
   onSelectWorkspace: () => void;
   onToggleMode: (mode: AppMode) => void;
   onChangeModel: (model: string, isAuto: boolean) => void;
@@ -25,6 +27,8 @@ export const Header: React.FC<HeaderProps> = ({
   settings,
   availableModels,
   workspaceName,
+  gitRepo,
+  gitBranch,
   onSelectWorkspace,
   onToggleMode,
   onChangeModel,
@@ -52,6 +56,18 @@ export const Header: React.FC<HeaderProps> = ({
           <FolderOpen className="w-3.5 h-3.5 text-emerald-400" />
           <span className="max-w-[140px] truncate">{workspaceName || 'Select Folder'}</span>
         </button>
+
+        {/* Auto-detected Git Repo indicator */}
+        {gitRepo && (
+          <div
+            className="hidden md:flex items-center space-x-1 px-2 py-0.5 text-[11px] font-mono bg-sky-950/50 text-sky-300 border border-sky-500/30 rounded-md"
+            title={`Detected Git Repository: ${gitRepo} (${gitBranch || 'main'})`}
+          >
+            <span className="text-sky-400">repo:</span>
+            <span className="max-w-[130px] truncate font-medium">{gitRepo.replace('sources/github/', '')}</span>
+            {gitBranch && <span className="text-[#8b949e]">({gitBranch})</span>}
+          </div>
+        )}
       </div>
 
       {/* Mode Switcher Toggle: Standard vs Jules Senior Lead */}

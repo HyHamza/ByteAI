@@ -6,6 +6,7 @@ import type { LLMToolDefinition } from '../services/llm/client';
 import { JulesClient } from '../services/jules/client';
 import { JulesPoller } from '../services/jules/poller';
 import { DataStore } from '../services/db/store';
+import { detectGitRepo } from '../services/git/detector';
 
 // ─── Standard Tool Definitions (Antigravity Mode) ──────────────────────────────
 export const STANDARD_TOOL_DEFS: LLMToolDefinition[] = [
@@ -220,17 +221,21 @@ export async function executeToolCall(
       // ── Jules Supervisor Tools
       case 'jules_create_task': {
         const client = JulesClient.getInstance();
+        const gitInfo = detectGitRepo(workspaceDir);
+        const repo = args.repo || gitInfo.repo;
+        const branch = args.branch || gitInfo.branch || 'main';
+
         const res = await client.createSession({
           prompt: args.prompt,
           title: args.title,
-          repo: args.repo,
-          branch: args.branch,
+          repo,
+          branch,
         });
 
         // Automatically track session in native background poller!
         JulesPoller.getInstance().trackSession(res.sessionId);
 
-        return `Jules task created successfully with Session ID: ${res.sessionId}. Native background supervisor is now tracking execution.`;
+        return `Jules task created successfully with Session ID: ${res.sessionId} on ${repo || 'default repository'} (${branch}). Native background supervisor is now tracking execution.`;
       }
 
       case 'jules_reply_question': {

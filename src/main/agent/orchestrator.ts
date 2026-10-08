@@ -3,6 +3,7 @@ import type { AppMode, ChatMessage, ToolExecutionRecord } from '../../shared/typ
 import { LLMClient, type LLMMessage } from '../services/llm/client';
 import { STANDARD_TOOL_DEFS, JULES_TOOL_DEFS, executeToolCall } from '../tools';
 import { DataStore } from '../services/db/store';
+import { detectGitRepo } from '../services/git/detector';
 
 const STANDARD_SYSTEM_PROMPT = `You are SeniorEngineer, a powerful autonomous software engineering AI assistant.
 You operate on goals and objectives.
@@ -69,10 +70,32 @@ export class AgentOrchestrator {
     }
 
     const toolDefs = mode === 'jules' ? JULES_TOOL_DEFS : STANDARD_TOOL_DEFS;
-    const systemPrompt = mode === 'jules' ? JULES_SYSTEM_PROMPT : STANDARD_SYSTEM_PROMPT;
-
     const workspaceDir = session.workspacePath || process.cwd();
     const maxTurns = settings.maxAutonomousTurns || 50;
+
+    const gitInfo = detectGitRepo(workspaceDir);
+    const activeRepo = gitInfo.repo || settings.julesDefaultRepo || 'sources/github/HyHamza/SeniorEngineer';
+    const activeBranch = gitInfo.branch || settings.julesDefaultBranch || 'main';
+
+    let systemPrompt = '';
+    if (mode === 'jules') {
+      systemPrompt = `${JULES_SYSTEM_PROMPT}
+
+CURRENT WORKSPACE & REPOSITORY (AUTO-DETECTED):
+- GitHub Repository: ${activeRepo}
+- Active Branch: ${activeBranch}
+- Local Workspace: ${workspaceDir}
+
+CRITICAL RULES:
+1. The GitHub repository '${activeRepo}' has ALREADY BEEN AUTOMATICALLY DETECTED.
+2. DO NOT ASK THE USER what the GitHub repository or path is. You already know it is '${activeRepo}'.
+3. When delegating a task to Jules using 'jules_create_task', automatically use repo: "${activeRepo}" and branch: "${activeBranch}".`;
+    } else {
+      systemPrompt = `${STANDARD_SYSTEM_PROMPT}
+
+Workspace Path: ${workspaceDir}
+Git Repository: ${activeRepo} (${activeBranch})`;
+    }
 
     // Convert past messages to LLM format
     const llmMessages: LLMMessage[] = [

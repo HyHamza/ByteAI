@@ -90,6 +90,8 @@ export interface WorkspaceFolderInfo {
   path: string;
   name: string;
   filesCount?: number;
+  gitRepo?: string | null;
+  gitBranch?: string | null;
 }
 
 export interface ElectronAPI {
