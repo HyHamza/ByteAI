@@ -8,6 +8,7 @@ import { JulesPoller } from '../services/jules/poller';
 import { DataStore } from '../services/db/store';
 import { detectGitRepo } from '../services/git/detector';
 import { syncAndMergeJulesSession } from '../services/git/merger';
+import { TaskManager } from '../services/task/manager';
 
 // ─── Standard Tool Definitions (Antigravity Mode) ──────────────────────────────
 export const STANDARD_TOOL_DEFS: LLMToolDefinition[] = [
@@ -96,13 +97,51 @@ export const STANDARD_TOOL_DEFS: LLMToolDefinition[] = [
     type: 'function',
     function: {
       name: 'run_terminal_command',
-      description: 'Execute a shell command in the current workspace directory and capture stdout and stderr.',
+      description: 'Execute a shell command in the workspace directory. If the command takes longer than wait_ms_before_async (or is_background is true), it is automatically sent to the background as a task. When the background task completes, the system automatically wakes you up with the results.',
       parameters: {
         type: 'object',
         properties: {
           command: { type: 'string', description: 'The terminal command line string to execute' },
+          wait_ms_before_async: {
+            type: 'number',
+            description: 'Milliseconds to wait before sending command to background (default: 5000, max: 15000). Set to 0 to send to background immediately.',
+          },
+          is_daemon: {
+            type: 'boolean',
+            description: 'Set to true for long-running support processes that keep running indefinitely and should not wake you up (e.g. dev servers, file watchers). Defaults to false.',
+          },
+          is_background: {
+            type: 'boolean',
+            description: 'Set to true to immediately execute this command in the background as an asynchronous task.',
+          },
         },
         required: ['command'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'manage_task',
+      description: 'Manage background tasks. Use this tool to list running tasks, check status and logs, kill a task, or send input to a running task.',
+      parameters: {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'string',
+            enum: ['list', 'status', 'kill', 'send_input'],
+            description: "The action to perform: 'list' (list all background tasks), 'status' (check task status and recent output), 'kill' (terminate task process), or 'send_input' (send stdin to running task).",
+          },
+          task_id: {
+            type: 'string',
+            description: "The task ID to manage. Required for 'status', 'kill', and 'send_input'.",
+          },
+          input: {
+            type: 'string',
+            description: "The input string to send to the running task's stdin. Required when action is 'send_input'.",
+          },
+        },
+        required: ['action'],
       },
     },
   },
@@ -364,14 +403,51 @@ export async function executeToolCall(
 
       case 'run_terminal_command':
       case 'run_verification_test': {
-        return new Promise((resolve) => {
-          exec(args.command, { cwd: workspaceDir, maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
-            let output = stdout || '';
-            if (stderr) output += `\n[STDERR]\n${stderr}`;
-            if (err) output += `\n[EXIT CODE ${err.code || 1}]`;
-            resolve(output.trim() || '(Command completed with no output)');
-          });
+        const cmd = args.command || args.command_line || '';
+        const waitMs = args.wait_ms_before_async !== undefined
+          ? args.wait_ms_before_async
+          : (args.wait_ms !== undefined ? args.wait_ms : 5000);
+        const isDaemon = Boolean(args.is_daemon || args.isDaemon);
+        const isBackground = Boolean(args.is_background || args.isBackground);
+
+        const res = await TaskManager.getInstance().startCommand({
+          command: cmd,
+          cwd: workspaceDir,
+          sessionId: sessionId || 'default',
+          isDaemon,
+          isBackground,
+          waitMsBeforeAsync: waitMs,
         });
+
+        return res.output;
+      }
+
+      case 'manage_task': {
+        const action = args.action;
+        const taskMgr = TaskManager.getInstance();
+
+        switch (action) {
+          case 'list': {
+            const list = taskMgr.listTasks(sessionId);
+            if (list.length === 0) return 'No background tasks currently recorded.';
+            return JSON.stringify(list, null, 2);
+          }
+          case 'status': {
+            if (!args.task_id) return 'Error: task_id is required for action "status".';
+            return taskMgr.getTaskStatus(args.task_id);
+          }
+          case 'kill': {
+            if (!args.task_id) return 'Error: task_id is required for action "kill".';
+            return taskMgr.killTask(args.task_id);
+          }
+          case 'send_input': {
+            if (!args.task_id) return 'Error: task_id is required for action "send_input".';
+            if (args.input === undefined) return 'Error: input is required for action "send_input".';
+            return taskMgr.sendInput(args.task_id, args.input);
+          }
+          default:
+            return `Unknown action: "${action}". Supported actions: 'list', 'status', 'kill', 'send_input'.`;
+        }
       }
 
       case 'list_directory': {

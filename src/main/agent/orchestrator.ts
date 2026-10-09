@@ -4,6 +4,7 @@ import { LLMClient, type LLMMessage } from '../services/llm/client';
 import { STANDARD_TOOL_DEFS, JULES_TOOL_DEFS, executeToolCall } from '../tools';
 import { DataStore, isSubstantiveMessage } from '../services/db/store';
 import { detectGitRepo } from '../services/git/detector';
+import { TaskManager, type BackgroundTask } from '../services/task/manager';
 
 const STANDARD_SYSTEM_PROMPT = `You are Byte, a powerful autonomous software engineering AI assistant.
 You operate on goals and objectives.
@@ -17,7 +18,8 @@ CORE BEHAVIOR (ANTIGRAVITY STYLE):
    - 'write_file': Create new files or overwrite existing files.
    - 'resolve_merge_conflict': Directly resolve git merge conflicts ('ours', 'theirs', or 'custom_content'), stage the resolution, and commit/push.
    - 'list_directory': Inspect directory trees.
-   - 'run_terminal_command': Run shell commands and verification tests.
+   - 'run_terminal_command': Run shell commands. For long-running commands (builds, tests, dev servers), use 'wait_ms_before_async' or 'is_background: true' to run in the background. When a background task completes, the system automatically wakes you up! Set 'is_daemon: true' for persistent servers.
+   - 'manage_task': Manage background tasks ('list', 'status', 'kill', 'send_input').
    - 'jules_create_task': Delegate complex tasks or audits to Google Labs Jules AI workers.
    - 'jules_sync_and_merge': Pull, merge, and apply git patches/PRs from Jules into local workspace and remote origin.
    - 'jules_get_status': Check live progress and activity stream of Jules tasks.
@@ -31,7 +33,12 @@ CORE BEHAVIOR (ANTIGRAVITY STYLE):
 7. MERGE CONFLICT RESOLUTION:
    - When merge conflicts occur or when the user asks you to resolve a conflict (e.g., "u resolve that", "fix conflict"):
    - NEVER refuse or claim you lack tools! You have 'resolve_merge_conflict', 'read_file', 'replace_file_content', and 'run_terminal_command'.
-   - Inspect the conflict, determine or apply the correct resolution, stage, commit, and push.`;
+   - Inspect the conflict, determine or apply the correct resolution, stage, commit, and push.
+8. LONG-RUNNING COMMANDS & REACTIVE WAKEUP (ANTIGRAVITY STYLE):
+   - For long-running commands (e.g., dev servers, builds, test suites, long package installs), run them via 'run_terminal_command'.
+   - When a command is sent to the background as a task (with a task ID), DO NOT POLL OR LOOP! Conclude your turn with a brief 1-line update confirming the command was launched.
+   - The system will AUTOMATICALLY WAKE YOU UP with a <SYSTEM_MESSAGE> containing the exit code and output the moment the task finishes!
+   - You can inspect, kill, or send input to running tasks at any time using 'manage_task'.`;
 
 const JULES_SYSTEM_PROMPT = `You are Byte operating in JULES LEAD MODE.
 You are the Lead Senior Staff Software Engineer and Orchestrator.
@@ -42,7 +49,7 @@ CORE DIRECTIVES:
    - For ANY major coding, feature request, bug fix, code audit, or analysis task (e.g. "Implement feature X", "Audit Y", "Fix bug Z"):
      YOU MUST CALL 'jules_create_task' to delegate the objective to Jules AI! Formulate a clear, comprehensive technical specification and call 'jules_create_task'.
    - DIRECT USER DIRECTIVES & LOCAL ACTIONS: If the user explicitly asks YOU to do something directly in the repository (e.g. "u resolve that", "push the changes", "resolve conflict", "git status", "run this command"):
-     NEVER REFUSE! NEVER claim you lack tools or cannot work directly! You have full tools ('resolve_merge_conflict', 'read_file', 'replace_file_content', 'run_terminal_command', 'write_file', 'list_directory') and are expected to fulfill the user's direct local command immediately.
+     NEVER REFUSE! NEVER claim you lack tools or cannot work directly! You have full tools ('resolve_merge_conflict', 'read_file', 'replace_file_content', 'run_terminal_command', 'manage_task', 'write_file', 'list_directory') and are expected to fulfill the user's direct local command immediately.
 
 2. CHRONOLOGICAL PROGRESSION (ANTIGRAVITY STYLE):
    - Before calling ANY tool (such as 'jules_create_task', 'resolve_merge_conflict', or 'run_terminal_command'), ALWAYS provide a brief 1-line statement explaining your intent (e.g. "Let me inspect the conflict markers in DownloadsView.tsx:", "I will dispatch this task to the Jules worker:").
@@ -70,7 +77,13 @@ CORE DIRECTIVES:
    - If a merge conflict occurs when merging Jules branches or if the user asks you to resolve conflicts ("u resolve that"):
    - NEVER claim you lack tools or refuse.
    - Inspect the conflicted file with 'read_file' or 'resolve_merge_conflict'.
-   - Resolve the conflict markers or choose the proper strategy ('ours', 'theirs', or 'custom_content'), stage the file, and complete the merge commit and push!`;
+   - Resolve the conflict markers or choose the proper strategy ('ours', 'theirs', or 'custom_content'), stage the file, and complete the merge commit and push!
+
+8. LONG-RUNNING COMMANDS & REACTIVE WAKEUP (ANTIGRAVITY STYLE):
+   - For long-running commands (e.g., dev servers, builds, test suites, long package installs), run them via 'run_terminal_command'.
+   - When a command is sent to the background as a task (with a task ID), DO NOT POLL OR LOOP! Conclude your turn with a brief 1-line update confirming the command was launched.
+   - The system will AUTOMATICALLY WAKE YOU UP with a <SYSTEM_MESSAGE> containing the exit code and output the moment the task finishes!
+   - You can inspect, kill, or send input to running tasks at any time using 'manage_task'.`;
 
 /**
  * Prune and compress conversation history to prevent TPM/context length exhaustion
@@ -111,12 +124,41 @@ export class AgentOrchestrator {
   private static instance: AgentOrchestrator;
   private activeCancellations: Set<string> = new Set();
   private runningSessions: Set<string> = new Set();
+  private pendingTurnQueues: Map<string, string[]> = new Map();
 
   public static getInstance(): AgentOrchestrator {
     if (!AgentOrchestrator.instance) {
       AgentOrchestrator.instance = new AgentOrchestrator();
+      // Wire up TaskManager completion handler for Antigravity-style reactive background wakeup
+      TaskManager.getInstance().setTaskCompletedHandler((task, notificationPrompt) => {
+        AgentOrchestrator.instance.wakeUpWithTaskNotification(task.sessionId, notificationPrompt);
+      });
     }
     return AgentOrchestrator.instance;
+  }
+
+  public wakeUpWithTaskNotification(sessionId: string, prompt: string) {
+    const store = DataStore.getInstance();
+    let targetSessionId = sessionId;
+
+    if (!targetSessionId || targetSessionId === 'default') {
+      const all = store.getSessions();
+      if (all.length > 0) {
+        targetSessionId = all[0].id;
+      }
+    }
+
+    if (!targetSessionId) return;
+
+    if (this.runningSessions.has(targetSessionId)) {
+      const queue = this.pendingTurnQueues.get(targetSessionId) || [];
+      queue.push(prompt);
+      this.pendingTurnQueues.set(targetSessionId, queue);
+    } else {
+      this.runAutonomousTurn(targetSessionId, prompt).catch((err) => {
+        console.error(`[AgentOrchestrator] Error during reactive background task wakeup:`, err);
+      });
+    }
   }
 
   public getRunningSessions(): string[] {
@@ -401,9 +443,13 @@ Git Repository: ${activeRepo} (${activeBranch})`;
       store.addMessage(sessionId, stepMsg);
       this.emitSessionsUpdated();
 
-      if (hasDispatchedJules) {
-        // Jules runs asynchronously in the cloud.
-        // Yield turn cleanly: background JulesPoller supervises execution and will notify/wake upon completion!
+      const hasBackgroundRunningTask = stepToolRecords.some(
+        (tc) => tc.output && tc.output.includes('Tool is running as a background task with task id:')
+      );
+
+      if (hasDispatchedJules || hasBackgroundRunningTask) {
+        // Asynchronous cloud task or local background process launched.
+        // Yield turn cleanly: background supervisor tracks execution and will automatically wake Byte up upon completion!
         break;
       }
     }
@@ -411,6 +457,18 @@ Git Repository: ${activeRepo} (${activeBranch})`;
       this.runningSessions.delete(sessionId);
       this.emitAgentStatus(sessionId, 'idle');
       this.emitCompleted(sessionId);
+
+      // Check if there is a pending queued notification (e.g. from a background task that just completed)
+      const queue = this.pendingTurnQueues.get(sessionId);
+      if (queue && queue.length > 0) {
+        const nextPrompt = queue.shift()!;
+        if (queue.length === 0) {
+          this.pendingTurnQueues.delete(sessionId);
+        }
+        setTimeout(() => {
+          this.runAutonomousTurn(sessionId, nextPrompt).catch(console.error);
+        }, 150);
+      }
     }
   }
 

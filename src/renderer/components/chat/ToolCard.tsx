@@ -17,7 +17,8 @@ import {
   FileCode,
   FileEdit,
   GitPullRequest,
-  MessageSquare
+  MessageSquare,
+  Activity
 } from 'lucide-react';
 import type { ToolExecutionRecord } from '@/shared/types';
 
@@ -84,10 +85,25 @@ function getToolDisplayConfig(tool: ToolExecutionRecord): ToolDisplayConfig {
 
     case 'run_terminal_command':
     case 'run_verification_test': {
+      const isBg = args.is_background || args.isBackground || (args.wait_ms_before_async === 0);
+      const isDaemon = args.is_daemon || args.isDaemon;
+      let title = 'Run command';
+      if (isDaemon) title = 'Run background daemon';
+      else if (isBg) title = 'Run in background';
+
       return {
-        title: 'Run command',
+        title,
         detail: args.command ? `$ ${args.command}` : 'Running terminal command',
         icon: <Terminal className="w-3.5 h-3.5 text-amber-400" />,
+      };
+    }
+
+    case 'manage_task': {
+      const actionName = args.action ? args.action.charAt(0).toUpperCase() + args.action.slice(1) : 'Manage';
+      return {
+        title: `${actionName} task`,
+        detail: args.task_id ? `Task ${args.task_id}${args.input ? ` (input: ${args.input})` : ''}` : `${args.action} tasks`,
+        icon: <Activity className="w-3.5 h-3.5 text-cyan-400" />,
       };
     }
 
