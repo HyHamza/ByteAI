@@ -23,6 +23,13 @@ export interface AppSettings {
   maxAutonomousTurns: number;
   activeWorkspacePath: string | null;
   groqApiKey?: string;
+  securityPreset?: 'turbo' | 'confirm';
+  planReviewPolicy?: 'proceed' | 'review';
+  queuedMessages?: 'queue' | 'immediate';
+  theme?: 'obsidian' | 'contrast';
+  vadEnabled?: boolean;
+  userName?: string;
+  userEmail?: string;
 }
 
 export interface AttachmentFile {

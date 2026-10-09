@@ -20,6 +20,13 @@ const DEFAULT_SETTINGS: AppSettings = {
   maxAutonomousTurns: 50,
   activeWorkspacePath: null,
   groqApiKey: '',
+  securityPreset: 'turbo',
+  planReviewPolicy: 'proceed',
+  queuedMessages: 'queue',
+  theme: 'obsidian',
+  vadEnabled: true,
+  userName: 'Hamza',
+  userEmail: 'talkdrove@gmail.com',
 };
 
 // Fallback in-memory storage for web browser preview or when Electron preload isn't attached

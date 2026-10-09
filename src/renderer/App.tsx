@@ -584,6 +584,22 @@ export const App: React.FC = () => {
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         onSave={handleSaveSettings}
+        projects={projects}
+        availableModels={availableModels}
+        activeWorkspacePath={settings.activeWorkspacePath}
+        onSelectProject={async (path) => {
+          const ws = await api.getWorkspaceInfo();
+          if (ws) {
+            setWorkspaceName(ws.name);
+            if (ws.gitRepo) setGitRepo(ws.gitRepo);
+            if (ws.gitBranch) setGitBranch(ws.gitBranch);
+          }
+          const list = await api.listSessions(path);
+          setSessions(list);
+          if (list.length > 0) setActiveSessionId(list[0].id);
+        }}
+        onDeleteProject={handleDeleteProject}
+        onAddProject={() => handleAddProject()}
       />
     </div>
   );
