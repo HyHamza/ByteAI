@@ -122,6 +122,33 @@ export const STANDARD_TOOL_DEFS: LLMToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'resolve_merge_conflict',
+      description: 'Resolve a git merge conflict in a file by checking out ours/theirs or applying custom resolved content, staging the file, and optionally completing the merge commit and push.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Relative path to the conflicted file' },
+          strategy: {
+            type: 'string',
+            enum: ['ours', 'theirs', 'custom_content'],
+            description: 'Conflict resolution strategy: "ours" (keep current branch HEAD), "theirs" (take incoming branch changes), or "custom_content" (write specified resolved content)',
+          },
+          custom_content: {
+            type: 'string',
+            description: 'The complete resolved content of the file without conflict markers (required if strategy is custom_content)',
+          },
+          complete_merge: {
+            type: 'boolean',
+            description: 'If true, stages the file with git add, and if no other conflicts exist, completes the merge with git commit and pushes to remote (default: true)',
+          },
+        },
+        required: ['path'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'jules_get_status',
       description: 'Check the current progress, state, branch, and recent activities of an active or completed Jules AI task.',
       parameters: {
@@ -354,6 +381,79 @@ export async function executeToolCall(
         return entries
           .map((e) => `${e.isDirectory() ? '[DIR] ' : '[FILE]'} ${e.name}`)
           .join('\n');
+      }
+
+      case 'resolve_merge_conflict': {
+        const fullPath = resolvePath(args.path);
+        if (!fs.existsSync(fullPath)) {
+          return `Error: File not found: ${args.path}`;
+        }
+
+        const runGit = (cmd: string): Promise<{ stdout: string; stderr: string; code: number }> => {
+          return new Promise((resolve) => {
+            exec(cmd, { cwd: workspaceDir, maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
+              const code = err ? (typeof err.code === 'number' ? err.code : 1) : 0;
+              resolve({ stdout: stdout?.trim() || '', stderr: stderr?.trim() || '', code });
+            });
+          });
+        };
+
+        let strategyApplied = '';
+        if (args.strategy === 'ours') {
+          const res = await runGit(`git checkout --ours -- "${args.path}"`);
+          if (res.code !== 0) return `Failed to checkout ours for ${args.path}: ${res.stderr || res.stdout}`;
+          strategyApplied = 'Checked out "ours" (HEAD version).';
+        } else if (args.strategy === 'theirs') {
+          const res = await runGit(`git checkout --theirs -- "${args.path}"`);
+          if (res.code !== 0) return `Failed to checkout theirs for ${args.path}: ${res.stderr || res.stdout}`;
+          strategyApplied = 'Checked out "theirs" (incoming branch version).';
+        } else if (args.strategy === 'custom_content' || args.custom_content) {
+          if (!args.custom_content) return `Error: custom_content is required when using custom_content strategy.`;
+          fs.writeFileSync(fullPath, args.custom_content, 'utf-8');
+          strategyApplied = 'Applied custom resolved content.';
+        } else {
+          // If no explicit strategy, check if file still contains merge conflict markers
+          const currentContent = fs.readFileSync(fullPath, 'utf-8');
+          if (currentContent.includes('<<<<<<<') && currentContent.includes('>>>>>>>')) {
+            return `File ${args.path} still contains merge conflict markers (<<<<<<< / >>>>>>>). Please specify a strategy ('ours', 'theirs', or 'custom_content' with resolved content) or edit the file with 'replace_file_content' first.`;
+          }
+          strategyApplied = 'Verified file has no conflict markers.';
+        }
+
+        // Stage the resolved file
+        const addRes = await runGit(`git add "${args.path}"`);
+        if (addRes.code !== 0) {
+          return `Error staging ${args.path}: ${addRes.stderr || addRes.stdout}`;
+        }
+
+        let output = `Conflict resolved for ${args.path}: ${strategyApplied}\nStaged with git add.`;
+
+        // Check if merge should be completed
+        if (args.complete_merge !== false) {
+          const statusRes = await runGit(`git status --porcelain`);
+          const hasRemainingConflicts = statusRes.stdout
+            .split('\n')
+            .some((line) => /^(UU|AA|UD|DU|DD)/.test(line.trim()));
+
+          if (hasRemainingConflicts) {
+            output += `\nNote: Other conflicted files remain in the repository. Resolve them before committing.`;
+          } else {
+            const commitRes = await runGit(`git commit -m "Resolve merge conflict in ${args.path}"`);
+            if (commitRes.code === 0) {
+              output += `\nMerge commit created successfully: ${commitRes.stdout.split('\n')[0]}`;
+              const pushRes = await runGit(`git push`);
+              if (pushRes.code === 0) {
+                output += `\nSuccessfully pushed to remote origin.`;
+              } else {
+                output += `\nGit push output: ${pushRes.stderr || pushRes.stdout}`;
+              }
+            } else {
+              output += `\nGit commit note: ${commitRes.stderr || commitRes.stdout}`;
+            }
+          }
+        }
+
+        return output;
       }
 
       // ── Jules Supervisor Tools

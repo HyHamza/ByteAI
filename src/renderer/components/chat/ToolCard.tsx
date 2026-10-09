@@ -131,6 +131,14 @@ function getToolDisplayConfig(tool: ToolExecutionRecord): ToolDisplayConfig {
       };
     }
 
+    case 'resolve_merge_conflict': {
+      return {
+        title: 'Resolve merge conflict',
+        detail: args.path ? `${args.path}${args.strategy ? ` (${args.strategy})` : ''}` : 'Resolving conflict',
+        icon: <GitMerge className="w-3.5 h-3.5 text-amber-400" />,
+      };
+    }
+
     default: {
       return {
         title: toolName.replace(/_/g, ' '),
