@@ -129,7 +129,13 @@ export class DataStore {
   }
 
   public saveSettings(partial: Partial<AppSettings>): AppSettings {
-    this.db.settings = { ...this.db.settings, ...partial };
+    const cleaned: any = { ...partial };
+    for (const key of Object.keys(cleaned)) {
+      if (typeof cleaned[key] === 'string') {
+        cleaned[key] = cleaned[key].trim();
+      }
+    }
+    this.db.settings = { ...this.db.settings, ...cleaned };
     this.save();
     return this.getSettings();
   }

@@ -350,9 +350,9 @@ export const App: React.FC = () => {
   };
 
   const handleSaveSettings = async (partial: Partial<AppSettings>) => {
-    const updated = { ...settings, ...partial };
-    setSettings(updated);
     await api.saveSettings(partial);
+    const fresh = await api.getSettings();
+    if (fresh) setSettings(fresh);
     try {
       const models = await api.getAvailableModels();
       if (models && models.length > 0) {
@@ -394,7 +394,11 @@ export const App: React.FC = () => {
         onSelectWorkspace={handleSelectWorkspace}
         onToggleMode={handleToggleMode}
         onChangeModel={handleChangeModel}
-        onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenSettings={async () => {
+          const fresh = await api.getSettings();
+          if (fresh) setSettings(fresh);
+          setIsSettingsOpen(true);
+        }}
         isJulesPanelOpen={isJulesPanelOpen}
         onToggleJulesPanel={() => setIsJulesPanelOpen(!isJulesPanelOpen)}
         isSidebarOpen={isSidebarOpen}
