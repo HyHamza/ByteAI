@@ -19,7 +19,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import type { ChatMessage, ToolExecutionRecord, AppMode, AttachmentFile } from '@/shared/types';
-import { ToolCard } from './ToolCard';
+import { ToolCard, AntigravityToolStream } from './ToolCard';
 
 interface ChatStreamProps {
   messages: ChatMessage[];
@@ -409,15 +409,13 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
 
                   {/* Collapsible Tool Execution Records & Intermediate Steps */}
                   {isExpanded && (allToolCalls.length > 0 || intermediateThoughts.length > 0) && (
-                    <div className="space-y-1.5 py-1.5 pl-2 border-l border-[#272930] ml-1 animate-in fade-in duration-100">
+                    <div className="py-1 ml-0.5 animate-in fade-in duration-100">
                       {intermediateThoughts.map((thought, idx) => (
                         <div key={idx} className="text-[#a0a3ad] italic text-xs py-0.5">
                           {thought}
                         </div>
                       ))}
-                      {allToolCalls.map((tc: ToolExecutionRecord) => (
-                        <ToolCard key={tc.id} tool={tc} />
-                      ))}
+                      <AntigravityToolStream tools={allToolCalls} />
                     </div>
                   )}
 
@@ -583,10 +581,8 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
               </div>
             )}
             {streamingTools && streamingTools.length > 0 && (
-              <div className="space-y-1.5 py-1.5 pl-2 border-l border-[#272930] ml-1">
-                {streamingTools.map((tc) => (
-                  <ToolCard key={tc.id} tool={tc} />
-                ))}
+              <div className="py-1 ml-0.5">
+                <AntigravityToolStream tools={streamingTools} />
               </div>
             )}
             {currentStreamContent && (
