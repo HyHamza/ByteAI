@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { api } from '../api';
 
 interface VoiceDictationOptions {
   onFinalTranscript?: (text: string) => void;
@@ -14,14 +15,16 @@ export function useVoiceDictation(options: VoiceDictationOptions = {}) {
   const [interimText, setInterimText] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  const recognitionRef = useRef<any>(null);
   const isListeningRef = useRef(false);
   const audioContextRef = useRef<AudioContext | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const animFrameRef = useRef<number | null>(null);
+  const recognitionRef = useRef<any>(null);
+  const unsubscribersRef = useRef<Array<() => void>>([]);
 
-  const isSupported = typeof window !== 'undefined' && 
-    Boolean((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
+  const isNativeSupported = typeof window !== 'undefined' && Boolean((window as any).electronAPI?.startSpeech);
+  const isWebSpeechSupported = typeof window !== 'undefined' && Boolean((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
+  const isSupported = isNativeSupported || isWebSpeechSupported;
 
   const stopListening = useCallback(() => {
     isListeningRef.current = false;
@@ -29,7 +32,20 @@ export function useVoiceDictation(options: VoiceDictationOptions = {}) {
     setInterimText('');
     setAudioLevel(0);
 
-    // Stop recognition
+    // Unsubscribe native listeners
+    unsubscribersRef.current.forEach((unsub) => {
+      try {
+        unsub();
+      } catch (_) {}
+    });
+    unsubscribersRef.current = [];
+
+    // Stop native speech engine
+    if (isNativeSupported && api.stopSpeech) {
+      api.stopSpeech().catch(() => {});
+    }
+
+    // Stop browser web speech fallback
     if (recognitionRef.current) {
       try {
         recognitionRef.current.stop();
@@ -37,7 +53,7 @@ export function useVoiceDictation(options: VoiceDictationOptions = {}) {
       recognitionRef.current = null;
     }
 
-    // Stop audio stream and context
+    // Stop audio stream and visualizer context
     if (animFrameRef.current) {
       cancelAnimationFrame(animFrameRef.current);
       animFrameRef.current = null;
@@ -52,55 +68,116 @@ export function useVoiceDictation(options: VoiceDictationOptions = {}) {
       audioContextRef.current.close().catch(() => {});
       audioContextRef.current = null;
     }
-  }, []);
+  }, [isNativeSupported]);
 
   const startListening = useCallback(async () => {
     setError(null);
     setInterimText('');
 
-    const SpeechRecognitionClass = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-
-    if (!SpeechRecognitionClass) {
-      setError('Voice recognition is not supported in this environment.');
+    if (!isSupported) {
+      setError('Voice recognition is not supported on this platform.');
       return;
     }
 
+    // 1. Setup audio analyser for live waveform bars
     try {
-      // 1. Request microphone access for audio visualization & verify device access
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaStreamRef.current = stream;
 
-      // 2. Setup audio analysis for live waveform visualization
-      try {
-        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-        if (AudioCtx) {
-          const audioCtx = new AudioCtx();
-          audioContextRef.current = audioCtx;
-          const source = audioCtx.createMediaStreamSource(stream);
-          const analyser = audioCtx.createAnalyser();
-          analyser.fftSize = 64;
-          source.connect(analyser);
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioCtx) {
+        const audioCtx = new AudioCtx();
+        audioContextRef.current = audioCtx;
+        const source = audioCtx.createMediaStreamSource(stream);
+        const analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 64;
+        source.connect(analyser);
 
-          const dataArray = new Uint8Array(analyser.frequencyBinCount);
-          const updateAudioLevel = () => {
-            if (!isListeningRef.current) return;
-            analyser.getByteFrequencyData(dataArray);
-            let sum = 0;
-            for (let i = 0; i < dataArray.length; i++) {
-              sum += dataArray[i];
-            }
-            const average = sum / dataArray.length;
-            const normalized = Math.min(100, Math.round((average / 128) * 100));
-            setAudioLevel(normalized);
-            animFrameRef.current = requestAnimationFrame(updateAudioLevel);
-          };
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        const updateAudioLevel = () => {
+          if (!isListeningRef.current) return;
+          analyser.getByteFrequencyData(dataArray);
+          let sum = 0;
+          for (let i = 0; i < dataArray.length; i++) {
+            sum += dataArray[i];
+          }
+          const average = sum / dataArray.length;
+          const normalized = Math.min(100, Math.round((average / 128) * 100));
+          setAudioLevel(normalized);
           animFrameRef.current = requestAnimationFrame(updateAudioLevel);
-        }
-      } catch (audioErr) {
-        console.warn('AudioContext visualization setup note:', audioErr);
+        };
+        animFrameRef.current = requestAnimationFrame(updateAudioLevel);
+      }
+    } catch (micErr: any) {
+      console.warn('Microphone stream access note:', micErr);
+      if (micErr.name === 'NotAllowedError' || micErr.name === 'PermissionDeniedError') {
+        setError('Microphone access was denied. Please allow microphone permissions.');
+        return;
+      }
+    }
+
+    // 2. Prefer Native Electron Speech Engine (Windows native / offline / real-time streaming)
+    if (isNativeSupported && api.startSpeech) {
+      isListeningRef.current = true;
+      setIsListening(true);
+
+      const unsubs: Array<() => void> = [];
+
+      if (api.onSpeechInterim) {
+        unsubs.push(
+          api.onSpeechInterim(({ text }) => {
+            setInterimText(text);
+            onInterimTranscript?.(text);
+          })
+        );
       }
 
-      // 3. Initialize SpeechRecognition instance with real-time streaming
+      if (api.onSpeechFinal) {
+        unsubs.push(
+          api.onSpeechFinal(({ text }) => {
+            if (text && text.trim()) {
+              onFinalTranscript?.(text.trim());
+            }
+            setInterimText('');
+          })
+        );
+      }
+
+      if (api.onSpeechStatus) {
+        unsubs.push(
+          api.onSpeechStatus((status) => {
+            if (!status.isListening && isListeningRef.current) {
+              stopListening();
+            }
+            if (status.error) {
+              setError(status.error);
+            }
+          })
+        );
+      }
+
+      if (api.onSpeechError) {
+        unsubs.push(
+          api.onSpeechError(({ error: errText }) => {
+            setError(errText);
+            stopListening();
+          })
+        );
+      }
+
+      unsubscribersRef.current = unsubs;
+
+      const res = await api.startSpeech(lang);
+      if (!res.success) {
+        setError(res.error || 'Failed to start native speech recognizer');
+        stopListening();
+      }
+      return;
+    }
+
+    // 3. Web Speech Fallback (if running outside Electron)
+    const SpeechRecognitionClass = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (SpeechRecognitionClass) {
       const recognition = new SpeechRecognitionClass();
       recognition.continuous = true;
       recognition.interimResults = true;
@@ -115,62 +192,43 @@ export function useVoiceDictation(options: VoiceDictationOptions = {}) {
 
       recognition.onresult = (event: any) => {
         let currentInterim = '';
-
         for (let i = event.resultIndex; i < event.results.length; ++i) {
-          const transcriptChunk = event.results[i][0]?.transcript || '';
+          const chunk = event.results[i][0]?.transcript || '';
           if (event.results[i].isFinal) {
-            if (transcriptChunk.trim()) {
-              onFinalTranscript?.(transcriptChunk);
-            }
+            if (chunk.trim()) onFinalTranscript?.(chunk);
           } else {
-            currentInterim += transcriptChunk;
+            currentInterim += chunk;
           }
         }
-
         setInterimText(currentInterim);
         onInterimTranscript?.(currentInterim);
       };
 
       recognition.onerror = (event: any) => {
-        if (event.error === 'no-speech') {
-          // Normal silence, keep listening
-          return;
-        }
+        if (event.error === 'no-speech') return;
         if (event.error === 'not-allowed') {
-          setError('Microphone access was denied. Please allow microphone permissions.');
-          stopListening();
+          setError('Microphone permission denied.');
         } else if (event.error === 'network') {
-          setError('Network issue connecting to speech recognition service.');
+          setError('Speech service unavailable in browser.');
         } else {
-          console.warn('SpeechRecognition error:', event.error);
+          setError(`Speech error: ${event.error}`);
         }
+        stopListening();
       };
 
       recognition.onend = () => {
-        // If still supposed to be listening, restart (browser sometimes terminates on silence)
-        if (isListeningRef.current) {
-          try {
-            recognition.start();
-          } catch (_) {
-            stopListening();
-          }
-        } else {
-          stopListening();
-        }
+        stopListening();
       };
 
       recognitionRef.current = recognition;
-      recognition.start();
-    } catch (err: any) {
-      console.error('Failed to start microphone speech recognition:', err);
-      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        setError('Microphone permission denied. Please allow microphone in settings.');
-      } else {
-        setError(`Microphone error: ${err.message || 'Unable to access microphone'}`);
+      try {
+        recognition.start();
+      } catch (err: any) {
+        setError(err.message || 'Failed to start browser recognition');
+        stopListening();
       }
-      stopListening();
     }
-  }, [lang, onFinalTranscript, onInterimTranscript, stopListening]);
+  }, [lang, isNativeSupported, isSupported, onFinalTranscript, onInterimTranscript, stopListening]);
 
   const toggleListening = useCallback(() => {
     if (isListening) {

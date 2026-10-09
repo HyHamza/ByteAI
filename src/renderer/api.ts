@@ -153,6 +153,12 @@ const mockAPI: ElectronAPI = {
   onAgentStatus: () => () => {},
   onJulesAllSessions: () => () => {},
   onJulesUpdate: () => () => {},
+  startSpeech: async () => ({ success: true }),
+  stopSpeech: async () => true,
+  onSpeechInterim: () => () => {},
+  onSpeechFinal: () => () => {},
+  onSpeechStatus: () => () => {},
+  onSpeechError: () => () => {},
 };
 
 export const api: ElectronAPI =
