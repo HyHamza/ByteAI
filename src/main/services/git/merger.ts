@@ -32,10 +32,11 @@ export async function syncAndMergeJulesSession(
     return { success: false, message: `Jules session ${sessionId} not found.` };
   }
 
-  // Extract PR info from outputs
+  // Extract PR info or direct gitPatch from outputs
   let prUrl = '';
   let prNumber: number | undefined;
   let headBranch: string | undefined;
+  let gitPatch: { unidiffPatch: string; suggestedCommitMessage?: string; baseCommitId?: string } | undefined;
 
   if (Array.isArray(session.outputs)) {
     for (const o of session.outputs) {
@@ -43,7 +44,9 @@ export async function syncAndMergeJulesSession(
         prUrl = o.pullRequest.url || '';
         prNumber = o.pullRequest.number;
         headBranch = o.pullRequest.headBranch || o.pullRequest.branch || o.pullRequest.headRef;
-        break;
+      }
+      if (o.changeSet?.gitPatch?.unidiffPatch) {
+        gitPatch = o.changeSet.gitPatch;
       }
     }
   }
@@ -53,21 +56,53 @@ export async function syncAndMergeJulesSession(
     if (match) prNumber = parseInt(match[1], 10);
   }
 
-  // Determine local workspace path
-  let dir = targetWorkspaceDir || settings.activeWorkspacePath || process.cwd();
-  if (!fs.existsSync(path.join(dir, '.git'))) {
-    // If active workspace is not a git repo, check chat sessions associated with this jules task
-    const chatSession = store.getSessions().find(
-      (cs) => cs.julesSessionId === sessionId || cs.messages.some((m) => m.content?.includes(sessionId))
-    );
-    if (chatSession?.workspacePath && fs.existsSync(path.join(chatSession.workspacePath, '.git'))) {
-      dir = chatSession.workspacePath;
-    } else {
-      return {
-        success: false,
-        message: `Local directory '${dir}' is not a valid Git repository. Unable to merge changes.`,
-      };
+  // Extract Jules repo identifier (e.g. "sources/github/HyHamza/VD" -> "HyHamza/VD")
+  const julesRepo = (session.sourceContext?.source || session.sourceContext?.githubRepoContext?.repo || '')
+    .replace(/^sources\/github\//i, '')
+    .toLowerCase();
+
+  // Smart workspace resolution:
+  // 1. targetWorkspaceDir if provided
+  // 2. Chat session matching this Jules sessionId
+  // 3. Any session or project whose git remote origin matches the Jules repo
+  // 4. settings.activeWorkspacePath or process.cwd()
+  let dir = targetWorkspaceDir;
+  const chatSessions = store.getSessions();
+  const matchedSession = chatSessions.find(
+    (cs) => cs.julesSessionId === sessionId || cs.messages.some((m) => m.content?.includes(sessionId))
+  );
+
+  if (!dir && matchedSession?.workspacePath) {
+    dir = matchedSession.workspacePath;
+  }
+
+  const isMatchingRepo = (testDir?: string | null): boolean => {
+    if (!testDir || !fs.existsSync(path.join(testDir, '.git'))) return false;
+    if (!julesRepo) return true;
+    const info = detectGitRepo(testDir);
+    const remote = (info.repo || '').toLowerCase();
+    return remote.includes(julesRepo);
+  };
+
+  if (!dir || !isMatchingRepo(dir)) {
+    // Search all sessions for the repository that matches Jules repo
+    for (const cs of chatSessions) {
+      if (isMatchingRepo(cs.workspacePath)) {
+        dir = cs.workspacePath;
+        break;
+      }
     }
+  }
+
+  if (!dir) {
+    dir = settings.activeWorkspacePath || process.cwd();
+  }
+
+  if (!fs.existsSync(path.join(dir, '.git'))) {
+    return {
+      success: false,
+      message: `Local directory '${dir}' is not a valid Git repository. Unable to sync Jules changes.`,
+    };
   }
 
   const gitInfo = detectGitRepo(dir);
@@ -83,7 +118,7 @@ export async function syncAndMergeJulesSession(
   };
 
   try {
-    // 1. Check working directory status
+    // Auto-stash uncommitted local modifications if any
     const status = runGit('git status --porcelain');
     let stashed = false;
     if (status.length > 0) {
@@ -98,89 +133,176 @@ export async function syncAndMergeJulesSession(
       }
     }
 
-    // 2. Fetch latest changes from remote origin
-    try {
-      runGit('git fetch origin');
-    } catch (_) {}
+    // ── PATHWAY A: Direct Git Patch (unidiffPatch) ──────────────────────────
+    if (gitPatch && gitPatch.unidiffPatch) {
+      console.log(`[merger] Applying Jules git patch (${gitPatch.unidiffPatch.length} bytes) to ${dir}...`);
+      const patchFileName = `.jules_patch_${sessionId.slice(0, 10)}.patch`;
+      const patchFilePath = path.join(dir, patchFileName);
+      fs.writeFileSync(patchFilePath, gitPatch.unidiffPatch, 'utf-8');
 
-    const tempBranch = prNumber ? `jules-pr-${prNumber}` : (headBranch || `jules-task-${sessionId.slice(0, 8)}`);
+      let applied = false;
+      let applyError = '';
 
-    // 3. Fetch the Jules changes
-    let fetched = false;
-    if (prNumber) {
-      try {
-        runGit(`git fetch origin pull/${prNumber}/head:${tempBranch} --force`);
-        fetched = true;
-      } catch (err: any) {
-        console.warn(`Could not fetch via pull/${prNumber}/head ref, attempting branch fetch:`, err.message);
+      const applyCandidates = [
+        `git apply --3way "${patchFileName}"`,
+        `git apply --whitespace=fix "${patchFileName}"`,
+        `git apply --ignore-whitespace "${patchFileName}"`,
+        `git apply -C1 "${patchFileName}"`,
+        `git apply --reject "${patchFileName}"`,
+      ];
+
+      for (const cmd of applyCandidates) {
+        try {
+          runGit(cmd);
+          applied = true;
+          break;
+        } catch (err: any) {
+          applyError = err.message || String(err);
+        }
       }
-    }
 
-    if (!fetched && headBranch) {
+      // Cleanup temporary patch file
       try {
-        runGit(`git fetch origin ${headBranch}:${tempBranch} --force`);
-        fetched = true;
+        if (fs.existsSync(patchFilePath)) fs.unlinkSync(patchFilePath);
       } catch (_) {}
-    }
 
-    if (!fetched) {
+      if (!applied) {
+        if (stashed) {
+          try { runGit('git stash pop'); } catch (_) {}
+        }
+        return {
+          success: false,
+          message: `Failed to apply Jules git patch cleanly to local repository: ${applyError}`,
+        };
+      }
+
+      // Stage all modified and untracked files from patch
+      runGit('git add -A');
+
+      // Commit changes
+      const commitMsg = gitPatch.suggestedCommitMessage || `feat: Apply Jules changes for ${session.title || sessionId}`;
+      const msgFileName = `.jules_commit_msg_${sessionId.slice(0, 10)}.txt`;
+      const msgFilePath = path.join(dir, msgFileName);
+      try {
+        fs.writeFileSync(msgFilePath, commitMsg, 'utf-8');
+        runGit(`git commit -F "${msgFileName}"`);
+      } finally {
+        try {
+          if (fs.existsSync(msgFilePath)) fs.unlinkSync(msgFilePath);
+        } catch (_) {}
+      }
+
+      // Push to remote origin
+      let pushMessage = '';
+      try {
+        runGit(`git push origin ${currentBranch}`);
+        pushMessage = `and pushed to remote 'origin/${currentBranch}'`;
+      } catch (pushErr: any) {
+        pushMessage = `(Note: Local commit succeeded, but push to remote origin failed: ${pushErr.message})`;
+      }
+
+      // Restore stash if any
       if (stashed) {
         try { runGit('git stash pop'); } catch (_) {}
       }
+
+      let latestCommit = '';
+      try {
+        latestCommit = runGit('git rev-parse --short HEAD');
+      } catch (_) {}
+
       return {
-        success: false,
-        message: `Could not fetch Jules changes from origin. No PR ref or head branch found for session ${sessionId}.`,
+        success: true,
+        message: `Successfully applied Jules patch for "${session.title || sessionId}", committed locally as ${latestCommit}, ${pushMessage}! Both local workspace and GitHub are fully synchronized.`,
+        branch: currentBranch,
+        commitHash: latestCommit,
       };
     }
 
-    // 4. Merge into current local branch
-    try {
-      const commitMsg = prNumber
-        ? `Merge Jules PR #${prNumber} (${session.title || sessionId}) into ${currentBranch}`
-        : `Merge Jules task ${session.title || sessionId} into ${currentBranch}`;
+    // ── PATHWAY B: GitHub Pull Request / Remote Branch ──────────────────────
+    if (prNumber || headBranch) {
+      try {
+        runGit('git fetch origin');
+      } catch (_) {}
 
-      runGit(`git merge ${tempBranch} --no-edit -m "${commitMsg}"`);
-    } catch (mergeErr: any) {
-      try { runGit('git merge --abort'); } catch (_) {}
-      if (stashed) {
-        try { runGit('git stash pop'); } catch (_) {}
+      const tempBranch = prNumber ? `jules-pr-${prNumber}` : (headBranch || `jules-task-${sessionId.slice(0, 8)}`);
+      let fetched = false;
+
+      if (prNumber) {
+        try {
+          runGit(`git fetch origin pull/${prNumber}/head:${tempBranch} --force`);
+          fetched = true;
+        } catch (err: any) {
+          console.warn(`Could not fetch via pull/${prNumber}/head ref, attempting branch fetch:`, err.message);
+        }
       }
-      return {
-        success: false,
-        message: `Merge conflict encountered between local branch '${currentBranch}' and Jules PR. Merge was aborted. You can inspect branch '${tempBranch}'.`,
-      };
+
+      if (!fetched && headBranch) {
+        try {
+          runGit(`git fetch origin ${headBranch}:${tempBranch} --force`);
+          fetched = true;
+        } catch (_) {}
+      }
+
+      if (fetched) {
+        // Merge into current branch
+        try {
+          const commitMsg = prNumber
+            ? `Merge Jules PR #${prNumber} (${session.title || sessionId}) into ${currentBranch}`
+            : `Merge Jules task ${session.title || sessionId} into ${currentBranch}`;
+
+          runGit(`git merge ${tempBranch} --no-edit -m "${commitMsg}"`);
+        } catch (mergeErr: any) {
+          try { runGit('git merge --abort'); } catch (_) {}
+          if (stashed) {
+            try { runGit('git stash pop'); } catch (_) {}
+          }
+          return {
+            success: false,
+            message: `Merge conflict encountered between local branch '${currentBranch}' and Jules PR. Merge was aborted. You can inspect branch '${tempBranch}'.`,
+          };
+        }
+
+        // Push merged branch
+        let pushMessage = '';
+        try {
+          runGit(`git push origin ${currentBranch}`);
+          pushMessage = `and successfully pushed to remote 'origin/${currentBranch}'`;
+        } catch (pushErr: any) {
+          pushMessage = `(Note: Local merge succeeded, but push to remote origin failed: ${pushErr.message})`;
+        }
+
+        // Cleanup temporary branch
+        try {
+          runGit(`git branch -D ${tempBranch}`);
+        } catch (_) {}
+
+        if (stashed) {
+          try { runGit('git stash pop'); } catch (_) {}
+        }
+
+        let latestCommit = '';
+        try {
+          latestCommit = runGit('git rev-parse --short HEAD');
+        } catch (_) {}
+
+        return {
+          success: true,
+          message: `Successfully pulled and merged Jules changes (${prUrl || `PR #${prNumber}`}) into local '${currentBranch}' ${pushMessage}! Both local and remote repositories are now fully synchronized (HEAD at ${latestCommit}).`,
+          branch: currentBranch,
+          prNumber,
+          commitHash: latestCommit,
+        };
+      }
     }
 
-    // 5. Push merged branch to remote origin to sync both!
-    let pushMessage = '';
-    try {
-      runGit(`git push origin ${currentBranch}`);
-      pushMessage = `and successfully pushed to remote 'origin/${currentBranch}'`;
-    } catch (pushErr: any) {
-      pushMessage = `(Note: Local merge succeeded, but push to remote origin failed: ${pushErr.message})`;
-    }
-
-    // 6. Cleanup temporary branch
-    try {
-      runGit(`git branch -D ${tempBranch}`);
-    } catch (_) {}
-
-    // 7. Restore stash if any
     if (stashed) {
       try { runGit('git stash pop'); } catch (_) {}
     }
 
-    let latestCommit = '';
-    try {
-      latestCommit = runGit('git rev-parse --short HEAD');
-    } catch (_) {}
-
     return {
-      success: true,
-      message: `Successfully pulled and merged Jules changes (${prUrl || `PR #${prNumber}`}) into local '${currentBranch}' ${pushMessage}! Both local and remote repositories are now fully synchronized (HEAD at ${latestCommit}).`,
-      branch: currentBranch,
-      prNumber,
-      commitHash: latestCommit,
+      success: false,
+      message: `Could not find a Git patch, PR ref, or remote head branch in Jules session ${sessionId} outputs to merge.`,
     };
   } catch (err: any) {
     return {

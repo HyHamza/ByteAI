@@ -299,15 +299,6 @@ SUPERVISOR DIRECTIVES FOR BYTE:
       }
     }
 
-    // Automatically pull and merge changes to local workspace and remote origin!
-    let mergeReport = '';
-    try {
-      const mergeRes = await syncAndMergeJulesSession(s.id);
-      mergeReport = `\n\n${mergeRes.message}`;
-    } catch (err: any) {
-      mergeReport = `\n\n(Auto-sync attempt encountered: ${err.message || String(err)})`;
-    }
-
     // Find and update matching chat session
     const store = DataStore.getInstance();
     const existing = store.getSessions();
@@ -318,8 +309,41 @@ SUPERVISOR DIRECTIVES FOR BYTE:
         (cs.title && cs.title.toLowerCase().includes((s.title || '').toLowerCase()))
     );
 
+    const targetDir = chatSession?.workspacePath || store.getSettings().activeWorkspacePath || undefined;
+
+    // Automatically pull and merge changes to local workspace and remote origin!
+    let mergeReport = '';
+    let mergeSucceeded = false;
+    try {
+      const mergeRes = await syncAndMergeJulesSession(s.id, targetDir);
+      mergeReport = `\n\n${mergeRes.message}`;
+      mergeSucceeded = mergeRes.success;
+    } catch (err: any) {
+      mergeReport = `\n\n(Auto-sync attempt encountered: ${err.message || String(err)})`;
+    }
+
     if (chatSession) {
-      const summaryMsg = `[JULES TASK COMPLETED & SYNCED]\nTask: ${s.title || s.id}\nStatus: COMPLETED\n${s.prUrl ? `Pull Request: ${s.prUrl}` : 'The remote worker has finished the task.'}${mergeReport}\n\nPlease inspect the merged code and confirm that local and remote repositories are fully synchronized.`;
+      const syncHeader = mergeSucceeded 
+        ? '[JULES TASK COMPLETED & FULLY SYNCHRONIZED]' 
+        : '[JULES TASK COMPLETED - LOCAL MERGE REQUIRED]';
+
+      const syncDirectives = mergeSucceeded
+        ? `DIRECTIVES FOR BYTE:
+1. Jules changes have been pulled/merged into local workspace and pushed to remote origin.
+2. Confirm the merge status honestly with the user and offer to run verification or tests.`
+        : `DIRECTIVES FOR BYTE:
+1. Jules has completed the task in cloud, but local repository sync reported: ${mergeReport}
+2. You can inspect the full patch/diff with 'jules_inspect_diff'.
+3. Attempt to run 'jules_sync_and_merge' with session_id: "${s.id}" to apply the changes.
+4. DO NOT hallucinate or falsely claim code changes are present locally until you empirically verify them!`;
+
+      const summaryMsg = `${syncHeader}
+Task: ${s.title || s.id}
+Status: COMPLETED
+${s.prUrl ? `Pull Request: ${s.prUrl}` : 'The remote worker has finished the task.'}${mergeReport}
+
+${syncDirectives}`;
+
       AgentOrchestrator.getInstance().runAutonomousTurn(chatSession.id, summaryMsg).catch(console.error);
     }
   }
