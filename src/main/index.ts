@@ -8,6 +8,7 @@ import { JulesPoller } from './services/jules/poller';
 import { AgentOrchestrator } from './agent/orchestrator';
 import { detectGitRepo } from './services/git/detector';
 import { syncAndMergeJulesSession } from './services/git/merger';
+import { TaskManager } from './services/task/manager';
 import type { AppMode, ChatSession, AttachmentFile } from '../shared/types';
 
 let mainWindow: BrowserWindow | null = null;
@@ -306,5 +307,14 @@ function setupIpcHandlers() {
 
   ipcMain.handle('jules:merge', async (_, { sessionId }: { sessionId: string }) => {
     return syncAndMergeJulesSession(sessionId);
+  });
+
+  // ── Background Tasks IPC
+  ipcMain.handle('task:get-logs', async (_, { taskId }: { taskId: string }) => {
+    return TaskManager.getInstance().getTaskLogs(taskId);
+  });
+
+  ipcMain.handle('task:kill', async (_, { taskId }: { taskId: string }) => {
+    return TaskManager.getInstance().killTask(taskId);
   });
 }

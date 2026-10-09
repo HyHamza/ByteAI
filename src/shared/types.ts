@@ -167,4 +167,8 @@ export interface ElectronAPI {
   julesSendFollowup: (sessionId: string, prompt: string) => Promise<boolean>;
   julesMergeSession: (sessionId: string) => Promise<{ success: boolean; message: string }>;
   onJulesUpdate: (callback: (update: JulesSessionSummary) => void) => () => void;
+
+  // Background Tasks API
+  getTaskLogs?: (taskId: string) => Promise<{ status: string; exitCode: number | null; output: string; logPath: string; isRunning: boolean }>;
+  killTask?: (taskId: string) => Promise<string>;
 }

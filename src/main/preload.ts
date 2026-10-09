@@ -87,6 +87,10 @@ const api: ElectronAPI = {
     ipcRenderer.on('jules:update', handler);
     return () => ipcRenderer.removeListener('jules:update', handler);
   },
+
+  // Background Tasks
+  getTaskLogs: (taskId: string) => ipcRenderer.invoke('task:get-logs', { taskId }),
+  killTask: (taskId: string) => ipcRenderer.invoke('task:kill', { taskId }),
 };
 
 contextBridge.exposeInMainWorld('electronAPI', api);

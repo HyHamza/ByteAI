@@ -275,6 +275,39 @@ Log: file:///${normalizedLogPath}
     return results.sort((a, b) => b.startTime - a.startTime);
   }
 
+  public getTaskLogs(taskId: string): { status: string; exitCode: number | null; output: string; logPath: string; isRunning: boolean } {
+    const task = this.tasks.get(taskId);
+    if (!task) {
+      const logPath = path.join(TASKS_DIR, `${taskId}.log`);
+      if (fs.existsSync(logPath)) {
+        try {
+          const content = fs.readFileSync(logPath, 'utf-8');
+          return { status: 'completed', exitCode: 0, output: content, logPath, isRunning: false };
+        } catch (_) {}
+      }
+      return { status: 'not_found', exitCode: null, output: `Task "${taskId}" not found.`, logPath: '', isRunning: false };
+    }
+
+    let output = '';
+    if (fs.existsSync(task.logPath)) {
+      try {
+        output = fs.readFileSync(task.logPath, 'utf-8');
+      } catch (_) {
+        output = task.stdout + (task.stderr ? `\n[STDERR]\n${task.stderr}` : '');
+      }
+    } else {
+      output = task.stdout + (task.stderr ? `\n[STDERR]\n${task.stderr}` : '');
+    }
+
+    return {
+      status: task.status,
+      exitCode: task.exitCode,
+      output: output.trim(),
+      logPath: task.logPath,
+      isRunning: task.status === 'running',
+    };
+  }
+
   public getTaskStatus(taskId: string): string {
     const task = this.tasks.get(taskId);
     if (!task) {

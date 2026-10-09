@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Terminal, 
   FileText, 
@@ -287,7 +287,63 @@ export const AntigravityCommandItem: React.FC<{ tool: ToolExecutionRecord }> = (
   const { copiedType, copy } = useCopy();
   const { args = {}, status } = tool;
   const cmd = args.command || args.command_line || 'command';
-  const isBg = args.is_background || args.isBackground || (args.wait_ms_before_async === 0);
+
+  // Check if this tool spawned a background task
+  const taskIdMatch = tool.output ? tool.output.match(/task id:\s*([a-zA-Z0-9_-]+)/i) : null;
+  const taskId = taskIdMatch ? taskIdMatch[1] : null;
+
+  const [liveLogs, setLiveLogs] = useState<string | null>(null);
+  const [taskStatus, setTaskStatus] = useState<string | null>(null);
+  const [taskExitCode, setTaskExitCode] = useState<number | null>(null);
+  const [isLiveRunning, setIsLiveRunning] = useState<boolean>(Boolean(taskId && status === 'running'));
+  const [isKilling, setIsKilling] = useState<boolean>(false);
+
+  // Poll live logs whenever expanded and taskId is present
+  useEffect(() => {
+    if (!taskId) return;
+
+    let isMounted = true;
+    const fetchLogs = async () => {
+      try {
+        if (window.electronAPI?.getTaskLogs) {
+          const res = await window.electronAPI.getTaskLogs(taskId);
+          if (!isMounted) return;
+          if (res) {
+            setTaskStatus(res.status);
+            setTaskExitCode(res.exitCode);
+            setIsLiveRunning(res.isRunning);
+            if (res.output && res.output.trim().length > 0) {
+              setLiveLogs(res.output);
+            }
+          }
+        }
+      } catch (_) {}
+    };
+
+    fetchLogs();
+    // Poll every 1000ms if expanded or running
+    const interval = setInterval(fetchLogs, 1000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [isExpanded, taskId]);
+
+  const handleKill = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!taskId || !window.electronAPI?.killTask) return;
+    setIsKilling(true);
+    try {
+      await window.electronAPI.killTask(taskId);
+      setIsLiveRunning(false);
+      setTaskStatus('killed');
+    } catch (_) {} finally {
+      setIsKilling(false);
+    }
+  };
+
+  // Determine what output to display in the terminal drawer
+  const displayOutput = liveLogs || tool.output || '(Running in background...)';
 
   return (
     <div className="font-sans text-[13px] leading-relaxed select-none">
@@ -296,19 +352,34 @@ export const AntigravityCommandItem: React.FC<{ tool: ToolExecutionRecord }> = (
         className="flex items-center space-x-2 py-0.5 cursor-pointer hover:opacity-90 transition-opacity"
       >
         <span className="text-[#9ca3af] font-normal">
-          {isBg ? 'Ran background task' : 'Ran command'}
+          {taskId ? 'Ran background task' : (args.is_background ? 'Ran background task' : 'Ran command')}
         </span>
         <Terminal className="w-3.5 h-3.5 text-amber-400 shrink-0" />
         <span className="font-mono text-[#f1f3f9] text-[12px] truncate max-w-[420px]">
           $ {cmd}
         </span>
 
-        {status === 'running' && (
-          <Loader2 className="w-3 h-3 text-cyan-400 animate-spin ml-1" />
+        {/* Live Running Spinner */}
+        {(status === 'running' || isLiveRunning) && (
+          <div className="flex items-center space-x-1 text-cyan-400 text-xs font-medium ml-1">
+            <Loader2 className="w-3 h-3 animate-spin" />
+            <span className="text-[11px]">Running...</span>
+          </div>
         )}
-        {status === 'error' && (
+
+        {/* Completed status indicators */}
+        {!isLiveRunning && taskExitCode !== null && (
+          <span className={`text-[10.5px] font-mono px-1 py-0.2 rounded ${
+            taskExitCode === 0 ? 'text-emerald-400 bg-emerald-950/40' : 'text-rose-400 bg-rose-950/40'
+          }`}>
+            Exit {taskExitCode}
+          </span>
+        )}
+
+        {status === 'error' && !isLiveRunning && taskExitCode === null && (
           <AlertCircle className="w-3.5 h-3.5 text-rose-400 ml-1" />
         )}
+
         {isExpanded ? (
           <ChevronDown className="w-3.5 h-3.5 text-[#6b7280] ml-1" />
         ) : (
@@ -319,20 +390,45 @@ export const AntigravityCommandItem: React.FC<{ tool: ToolExecutionRecord }> = (
       {isExpanded && (
         <div className="mt-1 mb-2 pl-3 border-l border-[#2e313a] ml-1.5 font-mono text-[11px] animate-in fade-in duration-150">
           <div className="flex items-center justify-between text-[#8b8f9a] text-[10px] mb-1">
-            <span>Terminal Output:</span>
-            {tool.output && (
-              <button
-                type="button"
-                onClick={(e) => copy(e, tool.output!, 'cmdOut')}
-                className="flex items-center space-x-1 hover:text-white px-1.5 py-0.5 rounded hover:bg-[#25272e] transition-colors"
-              >
-                {copiedType === 'cmdOut' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                <span>{copiedType === 'cmdOut' ? 'Copied' : 'Copy'}</span>
-              </button>
-            )}
+            <div className="flex items-center space-x-2">
+              <span>Terminal Output:</span>
+              {taskId && (
+                <span className={`px-1.5 py-0.2 rounded text-[9.5px] uppercase font-semibold ${
+                  isLiveRunning ? 'bg-cyan-950/80 text-cyan-300 border border-cyan-800/50' : 
+                  taskStatus === 'completed' || taskExitCode === 0 ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-800/50' : 
+                  'bg-zinc-800 text-zinc-300'
+                }`}>
+                  {isLiveRunning ? 'LIVE STREAMING' : (taskStatus || 'TASK')} {taskExitCode !== null ? `(Exit ${taskExitCode})` : ''}
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center space-x-2">
+              {taskId && isLiveRunning && (
+                <button
+                  type="button"
+                  onClick={handleKill}
+                  disabled={isKilling}
+                  className="flex items-center space-x-1 text-rose-400 hover:text-rose-200 px-1.5 py-0.5 rounded hover:bg-rose-950/50 border border-rose-900/50 transition-colors"
+                >
+                  <AlertCircle className="w-3 h-3 text-rose-400" />
+                  <span>{isKilling ? 'Killing...' : 'Kill Task'}</span>
+                </button>
+              )}
+              {displayOutput && (
+                <button
+                  type="button"
+                  onClick={(e) => copy(e, displayOutput, 'cmdOut')}
+                  className="flex items-center space-x-1 hover:text-white px-1.5 py-0.5 rounded hover:bg-[#25272e] transition-colors"
+                >
+                  {copiedType === 'cmdOut' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                  <span>{copiedType === 'cmdOut' ? 'Copied' : 'Copy'}</span>
+                </button>
+              )}
+            </div>
           </div>
-          <pre className="bg-[#121316] border border-[#23252b] rounded p-2.5 text-[#cbd5e1] whitespace-pre-wrap max-h-[300px] overflow-y-auto select-text">
-            {tool.output || '(No output)'}
+          <pre className="bg-[#121316] border border-[#23252b] rounded p-2.5 text-[#cbd5e1] whitespace-pre-wrap max-h-[350px] overflow-y-auto select-text">
+            {displayOutput}
           </pre>
         </div>
       )}
