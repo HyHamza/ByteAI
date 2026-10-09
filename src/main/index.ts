@@ -55,6 +55,17 @@ function createWindow() {
     menu.popup();
   });
 
+  // Automatically permit microphone access for voice dictation
+  mainWindow.webContents.session.setPermissionCheckHandler((_, permission) => {
+    if (permission === 'media') return true;
+    return false;
+  });
+
+  mainWindow.webContents.session.setPermissionRequestHandler((_, permission, callback) => {
+    if (permission === 'media') return callback(true);
+    callback(false);
+  });
+
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show();
   });

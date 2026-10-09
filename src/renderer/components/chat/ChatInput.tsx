@@ -14,10 +14,12 @@ import {
   FileText,
   X,
   Paperclip,
-  Code
+  Code,
+  MicOff
 } from 'lucide-react';
 import type { AppMode, AttachmentFile } from '@/shared/types';
 import { api } from '../../api';
+import { useVoiceDictation } from '../../hooks/useVoiceDictation';
 
 interface ChatInputProps {
   onSendMessage: (text: string, attachments?: AttachmentFile[]) => void;
@@ -90,8 +92,26 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const hiddenFileInputRef = useRef<HTMLInputElement>(null);
 
+  const {
+    isListening,
+    audioLevel,
+    interimText,
+    error: voiceError,
+    toggleListening,
+    stopListening,
+  } = useVoiceDictation({
+    onFinalTranscript: (chunk) => {
+      setText((prev) => {
+        const trimmed = chunk.trim();
+        if (!trimmed) return prev;
+        return prev ? `${prev} ${trimmed}` : trimmed;
+      });
+    },
+  });
+
   const handleSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    if (isListening) stopListening();
     if ((!text.trim() && attachments.length === 0) || isStreaming || disabled) return;
     onSendMessage(text.trim(), attachments);
     setText('');
@@ -99,6 +119,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Escape' && isListening) {
+      e.preventDefault();
+      stopListening();
+      return;
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSubmit();
@@ -306,6 +331,56 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             </div>
           )}
 
+          {/* Live Voice Dictation Streaming Pill */}
+          {isListening && (
+            <div className="flex items-center justify-between px-3 py-1.5 mb-2 bg-[#1c1d24] border border-[#2d313d] rounded-xl text-xs animate-in fade-in slide-in-from-bottom-1 duration-150 shadow-lg select-none">
+              <div className="flex items-center space-x-2 min-w-0 flex-1 mr-2">
+                <span className="relative flex h-2 w-2 shrink-0">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                </span>
+                <span className="text-[#9ca3af] font-medium shrink-0">Listening:</span>
+                <span className="text-[#f1f3f9] font-medium truncate italic font-sans">
+                  {interimText ? `"${interimText}"` : 'Speak now...'}
+                </span>
+              </div>
+
+              {/* Dynamic Audio Waveform Bars (reacts to voice volume) */}
+              <div className="flex items-center space-x-0.5 shrink-0">
+                {[0.4, 0.7, 1, 0.6, 0.3].map((factor, i) => {
+                  const h = Math.max(3, Math.min(16, (audioLevel / 100) * 16 * factor + 3));
+                  return (
+                    <div
+                      key={i}
+                      style={{ height: `${h}px` }}
+                      className="w-0.5 bg-red-400 rounded-full transition-all duration-75"
+                    />
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={stopListening}
+                  className="ml-2.5 text-[10px] font-medium text-[#c4c7cf] hover:text-white px-2 py-0.5 rounded bg-[#272932] hover:bg-[#343743] transition-colors cursor-pointer"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          )}
+
+          {voiceError && (
+            <div className="flex items-center justify-between text-rose-400 text-[11px] px-3 py-1 mb-2 bg-rose-950/40 border border-rose-900/40 rounded-xl animate-in fade-in duration-100">
+              <span>{voiceError}</span>
+              <button 
+                type="button"
+                onClick={stopListening}
+                className="text-xs text-rose-300 hover:text-white cursor-pointer ml-2"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
           {/* Text input area */}
           <textarea
             ref={textareaRef}
@@ -444,10 +519,19 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             <div className="flex items-center space-x-2">
               <button
                 type="button"
-                className="w-7 h-7 rounded-full flex items-center justify-center text-[#8e9196] hover:text-white hover:bg-[#26282e] transition-colors cursor-pointer"
-                title="Voice input"
+                onClick={toggleListening}
+                className={`w-7 h-7 rounded-full flex items-center justify-center transition-all cursor-pointer ${
+                  isListening
+                    ? 'bg-red-500/20 text-red-400 ring-2 ring-red-500/40 animate-pulse'
+                    : 'text-[#8e9196] hover:text-white hover:bg-[#26282e]'
+                }`}
+                title={isListening ? 'Stop listening (Voice dictation active)' : 'Voice dictation (click to speak)'}
               >
-                <Mic className="w-4 h-4" />
+                {isListening ? (
+                  <MicOff className="w-4 h-4 text-red-400" />
+                ) : (
+                  <Mic className="w-4 h-4" />
+                )}
               </button>
 
               {isStreaming ? (
