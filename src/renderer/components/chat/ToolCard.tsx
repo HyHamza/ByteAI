@@ -120,13 +120,13 @@ export const AntigravityEditItem: React.FC<{ tool: ToolExecutionRecord }> = ({ t
         onClick={() => setIsExpanded(!isExpanded)}
         className="flex items-center space-x-2 py-0.5 cursor-pointer hover:opacity-90 transition-opacity"
       >
-        <span className="text-[#9ca3af] font-normal">
+        <span className="text-[var(--text-secondary)] font-normal">
           {isCreate ? 'Created' : 'Edited'}
         </span>
         <span className={`${badge.colorClass} font-semibold text-[11px] tracking-wide`}>
           {badge.label}
         </span>
-        <span className="font-medium text-[#f1f3f9] hover:underline">
+        <span className="font-medium text-[var(--text-primary)] hover:underline">
           {filename}
         </span>
         <span className="text-[#22c55e] font-mono text-[11.5px] font-medium">
@@ -145,13 +145,13 @@ export const AntigravityEditItem: React.FC<{ tool: ToolExecutionRecord }> = ({ t
       </div>
 
       {isExpanded && (
-        <div className="mt-1 mb-2 pl-3 border-l border-[#2e313a] ml-1.5 space-y-2 font-mono text-[11px] animate-in fade-in duration-150">
-          <div className="flex items-center justify-between text-[#8b8f9a] text-[10px] pr-2 pt-1">
+        <div className="mt-1 mb-2 pl-3 border-l border-[var(--border-subtle)] ml-1.5 space-y-2 font-mono text-[11px] animate-in fade-in duration-150">
+          <div className="flex items-center justify-between text-[var(--text-muted)] text-[10px] pr-2 pt-1">
             <span>{filePath}</span>
             <button
               type="button"
               onClick={(e) => copy(e, JSON.stringify(tool.args, null, 2), 'args')}
-              className="flex items-center space-x-1 hover:text-white px-1.5 py-0.5 rounded hover:bg-[#25272e] transition-colors"
+              className="flex items-center space-x-1 hover:text-[var(--text-primary)] px-1.5 py-0.5 rounded hover:bg-[var(--bg-surface-hover)] transition-colors"
             >
               {copiedType === 'args' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
               <span>{copiedType === 'args' ? 'Copied' : 'Copy'}</span>
@@ -159,21 +159,21 @@ export const AntigravityEditItem: React.FC<{ tool: ToolExecutionRecord }> = ({ t
           </div>
 
           {args.target_content && (
-            <div className="bg-[#1f1515] border border-rose-950/60 rounded p-2 text-rose-300 whitespace-pre-wrap select-text">
+            <div className="bg-[var(--bg-surface-hover)] border border-rose-950/60 rounded p-2 text-rose-300 whitespace-pre-wrap select-text">
               <div className="text-[10px] text-rose-500 font-semibold mb-1 uppercase tracking-wider">- Original</div>
               {args.target_content}
             </div>
           )}
 
           {args.replacement_content !== undefined && (
-            <div className="bg-[#121c15] border border-emerald-950/60 rounded p-2 text-emerald-300 whitespace-pre-wrap select-text">
+            <div className="bg-[var(--bg-surface-hover)] border border-emerald-950/60 rounded p-2 text-emerald-300 whitespace-pre-wrap select-text">
               <div className="text-[10px] text-emerald-500 font-semibold mb-1 uppercase tracking-wider">+ Replacement</div>
               {args.replacement_content}
             </div>
           )}
 
           {args.content && !args.target_content && (
-            <div className="bg-[#121c15] border border-emerald-950/60 rounded p-2 text-emerald-300 whitespace-pre-wrap select-text max-h-[300px] overflow-y-auto">
+            <div className="bg-[var(--bg-surface-hover)] border border-emerald-950/60 rounded p-2 text-emerald-300 whitespace-pre-wrap select-text max-h-[300px] overflow-y-auto">
               <div className="text-[10px] text-emerald-500 font-semibold mb-1 uppercase tracking-wider">+ File Content</div>
               {args.content}
             </div>
@@ -194,13 +194,13 @@ export const AntigravityExploredGroup: React.FC<{ tools: ToolExecutionRecord[] }
     <div className="font-sans text-[13px] leading-relaxed select-none">
       <div 
         onClick={() => setIsExpanded(!isExpanded)}
-        className="flex items-center space-x-1 py-0.5 cursor-pointer text-[#9ca3af] hover:text-[#e2e8f0] transition-colors group/explore w-fit"
+        className="flex items-center space-x-1 py-0.5 cursor-pointer text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors group/explore w-fit"
       >
         <span>{label}</span>
         {isExpanded ? (
-          <ChevronDown className="w-3.5 h-3.5 text-[#6b7280] group-hover/explore:text-[#c4c7cf] transition-transform" />
+          <ChevronDown className="w-3.5 h-3.5 text-[var(--text-muted)] group-hover/explore:text-[var(--text-primary)] transition-transform" />
         ) : (
-          <ChevronRight className="w-3.5 h-3.5 text-[#6b7280] group-hover/explore:text-[#c4c7cf] transition-transform" />
+          <ChevronRight className="w-3.5 h-3.5 text-[var(--text-muted)] group-hover/explore:text-[var(--text-primary)] transition-transform" />
         )}
         {tools.some(t => t.status === 'running') && (
           <Loader2 className="w-3 h-3 text-cyan-400 animate-spin ml-1" />
@@ -208,7 +208,7 @@ export const AntigravityExploredGroup: React.FC<{ tools: ToolExecutionRecord[] }
       </div>
 
       {isExpanded && (
-        <div className="mt-1 mb-2 pl-3 border-l border-[#2e313a] ml-1.5 space-y-1 animate-in fade-in duration-150">
+        <div className="mt-1 mb-2 pl-3 border-l border-[var(--border-subtle)] ml-1.5 space-y-1 animate-in fade-in duration-150">
           {tools.map((t) => (
             <ExploredSubItem key={t.id} tool={t} />
           ))}
@@ -249,24 +249,24 @@ const ExploredSubItem: React.FC<{ tool: ToolExecutionRecord }> = ({ tool }) => {
     <div className="text-xs">
       <div 
         onClick={() => setShowDetail(!showDetail)}
-        className="flex items-center space-x-1.5 py-0.5 text-[#a0a3ad] hover:text-[#f1f3f9] cursor-pointer transition-colors"
+        className="flex items-center space-x-1.5 py-0.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer transition-colors"
       >
         {icon}
-        <span className="font-medium text-[#e3e5ec]">{title}</span>
+        <span className="font-medium text-[var(--text-primary)]">{title}</span>
         {subdetail && title !== subdetail && (
-          <span className="text-[#6c707a] text-[11px] font-mono truncate max-w-[340px]">{subdetail}</span>
+          <span className="text-[var(--text-muted)] text-[11px] font-mono truncate max-w-[340px]">{subdetail}</span>
         )}
       </div>
 
       {showDetail && (
-        <div className="bg-[#141518] border border-[#23252b] rounded p-2 my-1 text-[11px] font-mono space-y-1.5">
+        <div className="bg-[var(--bg-sidebar)] border border-[var(--border-subtle)] rounded p-2 my-1 text-[11px] font-mono space-y-1.5">
           <div className="flex items-center justify-between text-[#787c88]">
             <span>Output:</span>
             {tool.output && (
               <button
                 type="button"
                 onClick={(e) => copy(e, tool.output!, 'out')}
-                className="hover:text-white px-1 py-0.5 rounded hover:bg-[#202228] transition-colors"
+                className="hover:text-[var(--text-primary)] px-1 py-0.5 rounded hover:bg-[var(--bg-surface-hover)] transition-colors"
               >
                 {copiedType === 'out' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
               </button>
@@ -351,11 +351,11 @@ export const AntigravityCommandItem: React.FC<{ tool: ToolExecutionRecord }> = (
         onClick={() => setIsExpanded(!isExpanded)}
         className="flex items-center space-x-2 py-0.5 cursor-pointer hover:opacity-90 transition-opacity"
       >
-        <span className="text-[#9ca3af] font-normal">
+        <span className="text-[var(--text-secondary)] font-normal">
           {taskId ? 'Ran background task' : (args.is_background ? 'Ran background task' : 'Ran command')}
         </span>
         <Terminal className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-        <span className="font-mono text-[#f1f3f9] text-[12px] truncate max-w-[420px]">
+        <span className="font-mono text-[var(--text-primary)] text-[12px] truncate max-w-[420px]">
           $ {cmd}
         </span>
 
@@ -381,15 +381,15 @@ export const AntigravityCommandItem: React.FC<{ tool: ToolExecutionRecord }> = (
         )}
 
         {isExpanded ? (
-          <ChevronDown className="w-3.5 h-3.5 text-[#6b7280] ml-1" />
+          <ChevronDown className="w-3.5 h-3.5 text-[var(--text-muted)] ml-1" />
         ) : (
-          <ChevronRight className="w-3.5 h-3.5 text-[#6b7280] ml-1" />
+          <ChevronRight className="w-3.5 h-3.5 text-[var(--text-muted)] ml-1" />
         )}
       </div>
 
       {isExpanded && (
-        <div className="mt-1 mb-2 pl-3 border-l border-[#2e313a] ml-1.5 font-mono text-[11px] animate-in fade-in duration-150">
-          <div className="flex items-center justify-between text-[#8b8f9a] text-[10px] mb-1">
+        <div className="mt-1 mb-2 pl-3 border-l border-[var(--border-subtle)] ml-1.5 font-mono text-[11px] animate-in fade-in duration-150">
+          <div className="flex items-center justify-between text-[var(--text-muted)] text-[10px] mb-1">
             <div className="flex items-center space-x-2">
               <span>Terminal Output:</span>
               {taskId && (
@@ -419,7 +419,7 @@ export const AntigravityCommandItem: React.FC<{ tool: ToolExecutionRecord }> = (
                 <button
                   type="button"
                   onClick={(e) => copy(e, displayOutput, 'cmdOut')}
-                  className="flex items-center space-x-1 hover:text-white px-1.5 py-0.5 rounded hover:bg-[#25272e] transition-colors"
+                  className="flex items-center space-x-1 hover:text-[var(--text-primary)] px-1.5 py-0.5 rounded hover:bg-[var(--bg-surface-hover)] transition-colors"
                 >
                   {copiedType === 'cmdOut' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
                   <span>{copiedType === 'cmdOut' ? 'Copied' : 'Copy'}</span>
@@ -427,7 +427,7 @@ export const AntigravityCommandItem: React.FC<{ tool: ToolExecutionRecord }> = (
               )}
             </div>
           </div>
-          <pre className="bg-[#121316] border border-[#23252b] rounded p-2.5 text-[#cbd5e1] whitespace-pre-wrap max-h-[350px] overflow-y-auto select-text">
+          <pre className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded p-2.5 text-[var(--text-primary)] whitespace-pre-wrap max-h-[350px] overflow-y-auto select-text">
             {displayOutput}
           </pre>
         </div>
@@ -467,7 +467,7 @@ export const AntigravityGenericItem: React.FC<{ tool: ToolExecutionRecord }> = (
         className="flex items-center space-x-2 py-0.5 cursor-pointer hover:opacity-90 transition-opacity"
       >
         {icon}
-        <span className="font-medium text-[#f1f3f9]">{title}</span>
+        <span className="font-medium text-[var(--text-primary)]">{title}</span>
         {status === 'running' && (
           <Loader2 className="w-3 h-3 text-cyan-400 animate-spin ml-1" />
         )}
@@ -475,28 +475,28 @@ export const AntigravityGenericItem: React.FC<{ tool: ToolExecutionRecord }> = (
           <AlertCircle className="w-3.5 h-3.5 text-rose-400 ml-1" />
         )}
         {isExpanded ? (
-          <ChevronDown className="w-3.5 h-3.5 text-[#6b7280] ml-1" />
+          <ChevronDown className="w-3.5 h-3.5 text-[var(--text-muted)] ml-1" />
         ) : (
-          <ChevronRight className="w-3.5 h-3.5 text-[#6b7280] ml-1" />
+          <ChevronRight className="w-3.5 h-3.5 text-[var(--text-muted)] ml-1" />
         )}
       </div>
 
       {isExpanded && (
-        <div className="mt-1 mb-2 pl-3 border-l border-[#2e313a] ml-1.5 font-mono text-[11px] animate-in fade-in duration-150 space-y-1.5">
-          <div className="flex items-center justify-between text-[#8b8f9a] text-[10px]">
+        <div className="mt-1 mb-2 pl-3 border-l border-[var(--border-subtle)] ml-1.5 font-mono text-[11px] animate-in fade-in duration-150 space-y-1.5">
+          <div className="flex items-center justify-between text-[var(--text-muted)] text-[10px]">
             <span>Details:</span>
             {tool.output && (
               <button
                 type="button"
                 onClick={(e) => copy(e, tool.output!, 'genOut')}
-                className="flex items-center space-x-1 hover:text-white px-1.5 py-0.5 rounded hover:bg-[#25272e] transition-colors"
+                className="flex items-center space-x-1 hover:text-[var(--text-primary)] px-1.5 py-0.5 rounded hover:bg-[var(--bg-surface-hover)] transition-colors"
               >
                 {copiedType === 'genOut' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
                 <span>{copiedType === 'genOut' ? 'Copied' : 'Copy'}</span>
               </button>
             )}
           </div>
-          <pre className="bg-[#121316] border border-[#23252b] rounded p-2 text-[#cbd5e1] whitespace-pre-wrap max-h-[250px] overflow-y-auto select-text">
+          <pre className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded p-2 text-[var(--text-primary)] whitespace-pre-wrap max-h-[250px] overflow-y-auto select-text">
             {tool.output || JSON.stringify(tool.args, null, 2)}
           </pre>
         </div>

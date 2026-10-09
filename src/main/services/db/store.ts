@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import type { AppSettings, ChatSession, ChatMessage, ProjectInfo } from '@/shared/types';
+import type { AppSettings, ChatSession, ChatMessage, ProjectInfo, DutyShift } from '@/shared/types';
 
 // Native built-in SQLite in Node 22+ / Electron
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -64,6 +64,10 @@ export class DataStore {
   private stmtGetAllProjects: any;
   private stmtUpsertProject: any;
   private stmtDeleteProject: any;
+  private stmtGetActiveDutyShift: any;
+  private stmtGetActiveDutyShiftBySession: any;
+  private stmtGetDutyShiftById: any;
+  private stmtUpsertDutyShift: any;
 
   private constructor() {
     this.ensureDir();
@@ -138,6 +142,24 @@ export class DataStore {
       );
 
       CREATE INDEX IF NOT EXISTS idx_projects_path ON projects(path);
+
+      CREATE TABLE IF NOT EXISTS duty_shifts (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL,
+        mission_prompt TEXT NOT NULL,
+        total_hours REAL NOT NULL,
+        duration_ms INTEGER NOT NULL,
+        started_at INTEGER NOT NULL,
+        target_end_at INTEGER NOT NULL,
+        status TEXT NOT NULL,
+        phases_completed TEXT NOT NULL,
+        last_check_at INTEGER NOT NULL,
+        metadata TEXT,
+        FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_duty_shifts_status ON duty_shifts(status);
+      CREATE INDEX IF NOT EXISTS idx_duty_shifts_session ON duty_shifts(session_id);
     `);
 
     // Prepare reusable statements
@@ -187,6 +209,25 @@ export class DataStore {
         git_branch = excluded.git_branch
     `);
     this.stmtDeleteProject = this.db.prepare('DELETE FROM projects WHERE path = ?');
+
+    this.stmtGetActiveDutyShift = this.db.prepare("SELECT * FROM duty_shifts WHERE status = 'active' ORDER BY started_at DESC LIMIT 1");
+    this.stmtGetActiveDutyShiftBySession = this.db.prepare("SELECT * FROM duty_shifts WHERE session_id = ? AND status = 'active' LIMIT 1");
+    this.stmtGetDutyShiftById = this.db.prepare('SELECT * FROM duty_shifts WHERE id = ?');
+    this.stmtUpsertDutyShift = this.db.prepare(`
+      INSERT INTO duty_shifts (id, session_id, mission_prompt, total_hours, duration_ms, started_at, target_end_at, status, phases_completed, last_check_at, metadata)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        session_id = excluded.session_id,
+        mission_prompt = excluded.mission_prompt,
+        total_hours = excluded.total_hours,
+        duration_ms = excluded.duration_ms,
+        started_at = excluded.started_at,
+        target_end_at = excluded.target_end_at,
+        status = excluded.status,
+        phases_completed = excluded.phases_completed,
+        last_check_at = excluded.last_check_at,
+        metadata = excluded.metadata
+    `);
   }
 
   /**
@@ -515,5 +556,77 @@ export class DataStore {
       this.db.exec('ROLLBACK');
       console.error('[DataStore] Failed to insert message in SQLite:', err);
     }
+  }
+
+  // ── Duty Shifts (Long-Running Tasks) ──────────────────────────────
+  private mapDutyShiftRow(row: any): DutyShift {
+    let phases: any[] = [];
+    try {
+      phases = JSON.parse(row.phases_completed || '[]');
+    } catch (_) {}
+
+    return {
+      id: row.id,
+      sessionId: row.session_id,
+      missionPrompt: row.mission_prompt,
+      totalHours: Number(row.total_hours),
+      durationMs: Number(row.duration_ms),
+      startedAt: Number(row.started_at),
+      targetEndAt: Number(row.target_end_at),
+      status: row.status,
+      phasesCompleted: phases,
+      lastCheckAt: Number(row.last_check_at),
+    };
+  }
+
+  public getActiveDutyShift(sessionId?: string): DutyShift | null {
+    try {
+      const row = sessionId
+        ? this.stmtGetActiveDutyShiftBySession.get(sessionId)
+        : this.stmtGetActiveDutyShift.get();
+      return row ? this.mapDutyShiftRow(row) : null;
+    } catch (err) {
+      console.error('[DataStore] Error getting active duty shift:', err);
+      return null;
+    }
+  }
+
+  public getDutyShiftById(id: string): DutyShift | null {
+    try {
+      const row = this.stmtGetDutyShiftById.get(id);
+      return row ? this.mapDutyShiftRow(row) : null;
+    } catch (err) {
+      console.error('[DataStore] Error getting duty shift by id:', err);
+      return null;
+    }
+  }
+
+  public saveDutyShift(shift: DutyShift): DutyShift {
+    try {
+      this.stmtUpsertDutyShift.run(
+        shift.id,
+        shift.sessionId,
+        shift.missionPrompt,
+        shift.totalHours,
+        shift.durationMs,
+        shift.startedAt,
+        shift.targetEndAt,
+        shift.status,
+        JSON.stringify(shift.phasesCompleted || []),
+        shift.lastCheckAt || Date.now(),
+        null
+      );
+    } catch (err) {
+      console.error('[DataStore] Failed to save duty shift:', err);
+    }
+    return shift;
+  }
+
+  public updateDutyShift(id: string, updates: Partial<DutyShift>): DutyShift | null {
+    const existing = this.getDutyShiftById(id);
+    if (!existing) return null;
+
+    const merged: DutyShift = { ...existing, ...updates };
+    return this.saveDutyShift(merged);
   }
 }

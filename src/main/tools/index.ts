@@ -9,6 +9,7 @@ import { DataStore } from '../services/db/store';
 import { detectGitRepo } from '../services/git/detector';
 import { syncAndMergeJulesSession } from '../services/git/merger';
 import { TaskManager } from '../services/task/manager';
+import { DutyManager } from '../services/duty/manager';
 
 // ─── Standard Tool Definitions (Antigravity Mode) ──────────────────────────────
 export const STANDARD_TOOL_DEFS: LLMToolDefinition[] = [
@@ -255,6 +256,34 @@ export const STANDARD_TOOL_DEFS: LLMToolDefinition[] = [
           session_id: { type: 'string', description: 'The Jules session ID' },
         },
         required: ['session_id'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'jules_start_duty_shift',
+      description: 'Activate an autonomous continuous Duty Shift (e.g. 2h, 4h, 8h, all-night, 10h) in Jules Lead Mode. Byte will continuously supervise Jules, chain phases, and merge code without stopping until duty hours expire.',
+      parameters: {
+        type: 'object',
+        properties: {
+          hours: { type: 'number', description: 'Total duration in hours (e.g. 2, 4, 8, 10). Defaults to 8.' },
+          mission_prompt: { type: 'string', description: 'The overarching mission or long-running objective to accomplish during the shift' },
+        },
+        required: ['mission_prompt'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'jules_stop_duty_shift',
+      description: 'Stop or end the active long-running Duty Shift.',
+      parameters: {
+        type: 'object',
+        properties: {
+          shift_id: { type: 'string', description: 'Optional ID of the duty shift to stop' },
+        },
       },
     },
   },
@@ -619,6 +648,21 @@ Repository: ${session.sourceContext?.source || ''} (${session.sourceContext?.git
 
 Recent Activity:
 ${recent || '(No activity recorded yet)'}`;
+      }
+
+      case 'jules_start_duty_shift': {
+        const dutyManager = DutyManager.getInstance();
+        const hours = args.hours || 8;
+        const shift = dutyManager.startShift(sessionId || 'default', args.mission_prompt, hours);
+        return `Duty Shift activated successfully (ID: ${shift.id}) for ${hours} hours! Byte is now on continuous duty. Concurrently formulate Phase 1 and dispatch it via 'jules_create_task'.`;
+      }
+
+      case 'jules_stop_duty_shift': {
+        const dutyManager = DutyManager.getInstance();
+        const active = dutyManager.getActiveShift(sessionId);
+        if (!active) return 'No active duty shift found to stop.';
+        dutyManager.stopShift(active.id);
+        return `Duty Shift ${active.id} stopped successfully.`;
       }
 
       default:

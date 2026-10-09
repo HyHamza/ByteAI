@@ -15,11 +15,14 @@ import {
   X,
   Paperclip,
   Code,
-  MicOff
+  MicOff,
+  Moon,
+  Clock
 } from 'lucide-react';
 import type { AppMode, AttachmentFile } from '@/shared/types';
 import { api } from '../../api';
 import { useVoiceDictation } from '../../hooks/useVoiceDictation';
+import { useDutyShift } from '../../hooks/useDutyShift';
 
 interface ChatInputProps {
   onSendMessage: (text: string, attachments?: AttachmentFile[]) => void;
@@ -35,9 +38,10 @@ interface ChatInputProps {
   onSelectWorkspace: () => void;
   disabled?: boolean;
   isCenteredLayout?: boolean;
+  sessionId?: string;
 }
 
-export function formatModelDisplayName(modelId: string): string {
+function formatModelDisplayName(modelId: string): string {
   if (!modelId) return 'Auto Router';
   if (modelId === 'auto') return 'Auto Router';
   
@@ -82,6 +86,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   onSelectWorkspace,
   disabled = false,
   isCenteredLayout = false,
+  sessionId,
 }) => {
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<AttachmentFile[]>([]);
@@ -89,8 +94,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [isModeDropdownOpen, setIsModeDropdownOpen] = useState(false);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const [isDutyDropdownOpen, setIsDutyDropdownOpen] = useState(false);
+  const [isDutyShiftEnabled, setIsDutyShiftEnabled] = useState(false);
+  const [dutyHours, setDutyHours] = useState(8);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const hiddenFileInputRef = useRef<HTMLInputElement>(null);
+
+  const { activeShift, remainingTimeDisplay, startShift, stopShift } = useDutyShift(sessionId);
 
   const {
     isListening,
@@ -113,9 +123,27 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     if (e) e.preventDefault();
     if (isListening) stopListening();
     if ((!text.trim() && attachments.length === 0) || isStreaming || disabled) return;
-    onSendMessage(text.trim(), attachments);
+
+    const submittedText = text.trim();
+    const isOvernightDetected = /work for \d+ hours|all night|overnight|\b\d+\s*hours?\s*duty\b/i.test(submittedText);
+
+    if ((isDutyShiftEnabled || isOvernightDetected) && mode === 'jules') {
+      let hoursToSet = dutyHours;
+      const match = submittedText.match(/(\d+(?:\.\d+)?)\s*hours?/i);
+      if (match) {
+        hoursToSet = parseFloat(match[1]);
+      } else if (/all night|overnight/i.test(submittedText)) {
+        hoursToSet = 8;
+      }
+      if (sessionId) {
+        startShift(sessionId, submittedText, hoursToSet);
+      }
+    }
+
+    onSendMessage(submittedText, attachments);
     setText('');
     setAttachments([]);
+    setIsDutyShiftEnabled(false);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -282,11 +310,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       {isCenteredLayout && (
         <button
           onClick={onSelectWorkspace}
-          className="flex items-center space-x-1.5 px-3 py-1.5 mb-5 rounded-full text-xs font-medium text-[#c4c7cf] hover:text-white bg-[#1a1b1f] hover:bg-[#23242a] border border-[#2b2d34] transition-colors cursor-pointer"
+          className="flex items-center space-x-1.5 px-3 py-1.5 mb-5 rounded-full text-xs font-medium text-[var(--text-primary)] hover:text-[var(--text-primary)] bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] border border-[var(--border-card)] transition-colors cursor-pointer"
         >
-          <Folder className="w-3.5 h-3.5 text-[#8e9196]" />
+          <Folder className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
           <span>{workspaceName || 'Select Workspace'}</span>
-          <ChevronDown className="w-3 h-3 text-[#70747e]" />
+          <ChevronDown className="w-3 h-3 text-[var(--text-muted)]" />
         </button>
       )}
 
@@ -295,16 +323,16 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        className={`w-full ${isCenteredLayout ? 'max-w-2xl' : 'max-w-3xl'} bg-[#1c1d21] border ${isDraggingOver ? 'border-[#38bdf8] bg-[#1e232d]' : 'border-[#2c2e35]'} rounded-2xl p-3 shadow-2xl transition-all focus-within:border-[#3d404a] relative`}
+        className={`w-full ${isCenteredLayout ? 'max-w-2xl' : 'max-w-3xl'} bg-[var(--bg-surface-hover)] border ${isDraggingOver ? 'border-[var(--border-subtle)] bg-[var(--bg-surface-hover)]' : 'border-[var(--border-card)]'} rounded-2xl p-3 shadow-2xl transition-all focus-within:border-[var(--border-subtle)] relative`}
       >
         <form onSubmit={handleSubmit} className="flex flex-col">
           {/* Attachment Preview Chips */}
           {attachments.length > 0 && (
-            <div className="flex flex-wrap gap-2 pb-2 mb-1.5 border-b border-[#26282f] animate-in fade-in duration-150">
+            <div className="flex flex-wrap gap-2 pb-2 mb-1.5 border-b border-[var(--border-subtle)] animate-in fade-in duration-150">
               {attachments.map((att) => (
                 <div 
                   key={att.id}
-                  className="flex items-center space-x-2 bg-[#25272e] border border-[#343740] hover:border-[#444754] text-[#d1d5db] px-2.5 py-1 rounded-xl text-xs group/att transition-all shadow-sm max-w-[220px]"
+                  className="flex items-center space-x-2 bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] hover:border-[var(--border-subtle)] text-[var(--text-primary)] px-2.5 py-1 rounded-xl text-xs group/att transition-all shadow-sm max-w-[220px]"
                 >
                   {att.type === 'image' && att.dataUrl ? (
                     <img 
@@ -317,11 +345,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   ) : (
                     <FileText className="w-4 h-4 text-amber-400 shrink-0" />
                   )}
-                  <span className="truncate font-mono text-[11px] text-[#e2e8f0]">{att.name}</span>
+                  <span className="truncate font-mono text-[11px] text-[var(--text-primary)]">{att.name}</span>
                   <button
                     type="button"
                     onClick={() => handleRemoveAttachment(att.id)}
-                    className="text-[#8e9196] hover:text-white hover:bg-white/10 p-0.5 rounded-full transition-colors cursor-pointer"
+                    className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/10 p-0.5 rounded-full transition-colors cursor-pointer"
                     title="Remove attachment"
                   >
                     <X className="w-3 h-3" />
@@ -333,14 +361,14 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
           {/* Live Voice Dictation Streaming Pill */}
           {isListening && (
-            <div className="flex items-center justify-between px-3 py-1.5 mb-2 bg-[#1c1d24] border border-[#2d313d] rounded-xl text-xs animate-in fade-in slide-in-from-bottom-1 duration-150 shadow-lg select-none">
+            <div className="flex items-center justify-between px-3 py-1.5 mb-2 bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl text-xs animate-in fade-in slide-in-from-bottom-1 duration-150 shadow-lg select-none">
               <div className="flex items-center space-x-2 min-w-0 flex-1 mr-2">
                 <span className="relative flex h-2 w-2 shrink-0">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
                 </span>
-                <span className="text-[#9ca3af] font-medium shrink-0">Listening:</span>
-                <span className="text-[#f1f3f9] font-medium truncate italic font-sans">
+                <span className="text-[var(--text-secondary)] font-medium shrink-0">Listening:</span>
+                <span className="text-[var(--text-primary)] font-medium truncate italic font-sans">
                   {interimText ? `"${interimText}"` : 'Speak now...'}
                 </span>
               </div>
@@ -360,7 +388,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 <button
                   type="button"
                   onClick={stopListening}
-                  className="ml-2.5 text-[10px] font-medium text-[#c4c7cf] hover:text-white px-2 py-0.5 rounded bg-[#272932] hover:bg-[#343743] transition-colors cursor-pointer"
+                  className="ml-2.5 text-[10px] font-medium text-[var(--text-primary)] hover:text-[var(--text-primary)] px-2 py-0.5 rounded bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] transition-colors cursor-pointer"
                 >
                   Done
                 </button>
@@ -374,7 +402,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               <button 
                 type="button"
                 onClick={stopListening}
-                className="text-xs text-rose-300 hover:text-white cursor-pointer ml-2"
+                className="text-xs text-rose-300 hover:text-[var(--text-primary)] cursor-pointer ml-2"
               >
                 ✕
               </button>
@@ -390,11 +418,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             placeholder={attachments.length > 0 ? "Add instructions or press Enter to analyze attachments..." : "Ask anything, @ to mention, / for actions"}
             disabled={disabled || isStreaming}
             rows={isCenteredLayout ? 2 : 1}
-            className="w-full bg-transparent text-[#e3e3e3] placeholder-[#6c707a] text-[13px] resize-none focus:outline-none p-1 font-sans leading-relaxed min-h-[44px]"
+            className="w-full bg-transparent text-[var(--text-primary)] placeholder-[#6c707a] text-[13px] resize-none focus:outline-none p-1 font-sans leading-relaxed min-h-[44px]"
           />
 
           {/* Bottom Card Controls Row */}
-          <div className="flex items-center justify-between pt-2 mt-1 border-t border-[#25272e]/60">
+          <div className="flex items-center justify-between pt-2 mt-1 border-t border-[var(--border-subtle)]/60">
             {/* Left Tools: + attachment & Model Selector Pill */}
             <div className="flex items-center space-x-2 relative">
               {/* Context Attachment Button (+) with Popover Menu */}
@@ -404,8 +432,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   onClick={() => setIsAttachMenuOpen(!isAttachMenuOpen)}
                   className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors cursor-pointer ${
                     isAttachMenuOpen || attachments.length > 0
-                      ? 'text-[#38bdf8] bg-[#38bdf8]/10 border border-[#38bdf8]/30'
-                      : 'text-[#8e9196] hover:text-white hover:bg-[#26282e]'
+                      ? 'text-[#38bdf8] bg-[var(--bg-surface-hover)]/10 border border-[var(--border-subtle)]/30'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)]'
                   }`}
                   title="Attach files, images, or code"
                 >
@@ -415,17 +443,17 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 {/* Attachment Type Menu Popover */}
                 {isAttachMenuOpen && (
                   <div 
-                    className="absolute bottom-9 left-0 w-48 bg-[#1a1b20] border border-[#2d2f38] rounded-2xl shadow-2xl py-1 text-xs text-[#c4c7cf] z-50 animate-in fade-in zoom-in-95 duration-100"
+                    className="absolute bottom-9 left-0 w-48 bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-2xl shadow-2xl py-1 text-xs text-[var(--text-primary)] z-50 animate-in fade-in zoom-in-95 duration-100"
                     onMouseLeave={() => setIsAttachMenuOpen(false)}
                   >
-                    <div className="px-3 py-1.5 text-[10px] font-semibold text-[#6c707a] uppercase tracking-wider border-b border-[#25272e]">
+                    <div className="px-3 py-1.5 text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider border-b border-[var(--border-subtle)]">
                       Add Attachment
                     </div>
 
                     <button
                       type="button"
                       onClick={() => handlePickFiles('images')}
-                      className="w-full flex items-center space-x-2.5 px-3 py-2 text-left hover:bg-[#26282f] hover:text-white transition-colors cursor-pointer"
+                      className="w-full flex items-center space-x-2.5 px-3 py-2 text-left hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
                     >
                       <ImageIcon className="w-4 h-4 text-sky-400" />
                       <span>Upload Images</span>
@@ -434,7 +462,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                     <button
                       type="button"
                       onClick={() => handlePickFiles('code')}
-                      className="w-full flex items-center space-x-2.5 px-3 py-2 text-left hover:bg-[#26282f] hover:text-white transition-colors cursor-pointer"
+                      className="w-full flex items-center space-x-2.5 px-3 py-2 text-left hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
                     >
                       <Code className="w-4 h-4 text-emerald-400" />
                       <span>Code & Text Files</span>
@@ -443,7 +471,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                     <button
                       type="button"
                       onClick={() => handlePickFiles('all')}
-                      className="w-full flex items-center space-x-2.5 px-3 py-2 text-left hover:bg-[#26282f] hover:text-white transition-colors cursor-pointer border-t border-[#25272e]"
+                      className="w-full flex items-center space-x-2.5 px-3 py-2 text-left hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] transition-colors cursor-pointer border-t border-[var(--border-subtle)]"
                     >
                       <Paperclip className="w-4 h-4 text-amber-400" />
                       <span>Browse All Files...</span>
@@ -457,19 +485,19 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
-                  className="flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[11.5px] font-medium text-[#c4c7cf] hover:text-white bg-[#24262b] hover:bg-[#2b2d34] border border-[#30333b] transition-colors cursor-pointer"
+                  className="flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[11.5px] font-medium text-[var(--text-primary)] hover:text-[var(--text-primary)] bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] transition-colors cursor-pointer"
                 >
                   <span>{activeModelDisplay}</span>
                   <ShieldCheck className="w-3.5 h-3.5 text-[#fbbf24]" />
-                  <ChevronDown className="w-3 h-3 text-[#7a7e88]" />
+                  <ChevronDown className="w-3 h-3 text-[var(--text-muted)]" />
                 </button>
 
                 {isModelDropdownOpen && (
                   <div 
-                    className="absolute bottom-9 left-0 w-64 bg-[#1b1c20] border border-[#2b2d33] rounded-2xl shadow-2xl py-1 text-xs text-[#c4c7cf] z-50 max-h-64 overflow-y-auto"
+                    className="absolute bottom-9 left-0 w-64 bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-2xl shadow-2xl py-1 text-xs text-[var(--text-primary)] z-50 max-h-64 overflow-y-auto"
                     onMouseLeave={() => setIsModelDropdownOpen(false)}
                   >
-                    <div className="px-3 py-1.5 text-[10px] font-semibold text-[#6c707a] uppercase tracking-wider border-b border-[#25272e]">
+                    <div className="px-3 py-1.5 text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider border-b border-[var(--border-subtle)]">
                       Available Models
                     </div>
 
@@ -487,8 +515,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                               onChangeModel(m, isAuto);
                               setIsModelDropdownOpen(false);
                             }}
-                            className={`w-full flex items-center justify-between px-3 py-2 text-left hover:bg-[#26282e] transition-colors cursor-pointer ${
-                              isSelected ? 'bg-[#22242b] text-[#70a6ff]' : 'text-[#c4c7cf]'
+                            className={`w-full flex items-center justify-between px-3 py-2 text-left hover:bg-[var(--bg-surface-hover)] transition-colors cursor-pointer ${
+                              isSelected ? 'bg-[var(--bg-surface-hover)] text-[#70a6ff]' : 'text-[var(--text-primary)]'
                             }`}
                           >
                             <div className="flex flex-col min-w-0 pr-2">
@@ -496,7 +524,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                                 <span>{friendlyName}</span>
                                 {isAuto && <span className="text-[10px] text-[#fbbf24] font-normal">(Smart)</span>}
                               </span>
-                              <span className="text-[10px] text-[#6c707a] font-mono truncate">{m}</span>
+                              <span className="text-[10px] text-[var(--text-muted)] font-mono truncate">{m}</span>
                             </div>
 
                             <div className="shrink-0 flex items-center space-x-1">
@@ -513,6 +541,132 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   </div>
                 )}
               </div>
+
+              {/* Duty Shift Pill & Popover (Jules Mode Only) */}
+              {mode === 'jules' && (
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setIsDutyDropdownOpen(!isDutyDropdownOpen)}
+                    className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[11.5px] font-medium border transition-colors cursor-pointer ${
+                      activeShift && activeShift.status === 'active'
+                        ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 shadow-sm'
+                        : isDutyShiftEnabled
+                        ? 'bg-indigo-500/15 text-indigo-300 border-indigo-500/40 shadow-sm'
+                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-[var(--bg-surface-hover)] border-[var(--border-subtle)]'
+                    }`}
+                    title="Continuous Long-Running Duty Shift (Jules Lead Mode)"
+                  >
+                    <Moon className={`w-3.5 h-3.5 ${activeShift ? 'text-amber-400' : isDutyShiftEnabled ? 'text-indigo-400' : 'text-[var(--text-muted)]'}`} />
+                    <span>
+                      {activeShift && activeShift.status === 'active'
+                        ? `Duty: ${remainingTimeDisplay || 'Active'}`
+                        : isDutyShiftEnabled
+                        ? `Duty (${dutyHours}h)`
+                        : 'Duty Shift'}
+                    </span>
+                    <ChevronDown className="w-3 h-3 text-[var(--text-muted)]" />
+                  </button>
+
+                  {isDutyDropdownOpen && (
+                    <div 
+                      className="absolute bottom-9 left-0 w-72 bg-[var(--bg-sidebar)] border border-[var(--border-subtle)] rounded-2xl shadow-2xl p-3.5 text-xs text-[var(--text-primary)] z-50 animate-in fade-in zoom-in-95 duration-150"
+                      onMouseLeave={() => setIsDutyDropdownOpen(false)}
+                    >
+                      <div className="flex items-center justify-between pb-2 mb-2 border-b border-[var(--border-subtle)]">
+                        <div className="flex items-center space-x-1.5 font-semibold text-[12px] text-[var(--text-primary)]">
+                          <Moon className="w-4 h-4 text-amber-400" />
+                          <span>Autonomous Duty Shift</span>
+                        </div>
+                        {activeShift && activeShift.status === 'active' && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-mono">
+                            ACTIVE
+                          </span>
+                        )}
+                      </div>
+
+                      <p className="text-[11px] text-[var(--text-muted)] leading-relaxed mb-3">
+                        Byte operates on continuous duty as Lead Engineer. It will supervise Jules, chain phases, and merge code without stopping.
+                      </p>
+
+                      {activeShift && activeShift.status === 'active' ? (
+                        <div className="space-y-2">
+                          <div className="p-2.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex items-center justify-between">
+                            <span className="text-[11px] text-[var(--text-secondary)]">Remaining Duty:</span>
+                            <span className="font-mono font-medium text-amber-300 text-xs">{remainingTimeDisplay}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              stopShift();
+                              setIsDutyDropdownOpen(false);
+                            }}
+                            className="w-full py-1.5 rounded-lg bg-red-600/20 hover:bg-red-600/30 text-red-300 border border-red-500/30 text-xs font-medium transition-colors cursor-pointer"
+                          >
+                            Stop Duty Shift
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <label className="text-[11px] font-medium text-[var(--text-secondary)]">
+                              Enable for this task:
+                            </label>
+                            <input
+                              type="checkbox"
+                              checked={isDutyShiftEnabled}
+                              onChange={(e) => setIsDutyShiftEnabled(e.target.checked)}
+                              className="rounded border-[var(--border-subtle)] text-indigo-500 focus:ring-0 cursor-pointer h-4 w-4"
+                            />
+                          </div>
+
+                          <div>
+                            <div className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-1.5">
+                              Shift Duration
+                            </div>
+                            <div className="grid grid-cols-4 gap-1.5">
+                              {[2, 4, 8, 12].map((h) => (
+                                <button
+                                  key={h}
+                                  type="button"
+                                  onClick={() => {
+                                    setDutyHours(h);
+                                    setIsDutyShiftEnabled(true);
+                                  }}
+                                  className={`py-1.5 rounded-lg text-center text-xs font-medium transition-colors cursor-pointer border ${
+                                    dutyHours === h && isDutyShiftEnabled
+                                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
+                                      : 'bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border-[var(--border-subtle)]'
+                                  }`}
+                                >
+                                  {h === 8 ? '8h (Night)' : `${h}h`}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center space-x-2 pt-1">
+                            <span className="text-[11px] text-[var(--text-muted)]">Custom:</span>
+                            <input
+                              type="number"
+                              min="0.5"
+                              max="24"
+                              step="0.5"
+                              value={dutyHours}
+                              onChange={(e) => {
+                                setDutyHours(parseFloat(e.target.value) || 8);
+                                setIsDutyShiftEnabled(true);
+                              }}
+                              className="w-16 px-2 py-1 rounded bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-xs text-[var(--text-primary)] font-mono text-center"
+                            />
+                            <span className="text-[11px] text-[var(--text-muted)]">hours</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Right Tools: Mic & Send Arrow */}
@@ -523,7 +677,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 className={`w-7 h-7 rounded-full flex items-center justify-center transition-all cursor-pointer ${
                   isListening
                     ? 'bg-red-500/20 text-red-400 ring-2 ring-red-500/40 animate-pulse'
-                    : 'text-[#8e9196] hover:text-white hover:bg-[#26282e]'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)]'
                 }`}
                 title={isListening ? 'Stop listening (Voice dictation active)' : 'Voice dictation (click to speak)'}
               >
@@ -538,7 +692,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 <button
                   type="button"
                   onClick={onCancel}
-                  className="w-7 h-7 rounded-full flex items-center justify-center bg-red-600 hover:bg-red-500 text-white transition-colors cursor-pointer shadow"
+                  className="w-7 h-7 rounded-full flex items-center justify-center bg-red-600 hover:bg-red-500 text-[var(--text-primary)] transition-colors cursor-pointer shadow"
                   title="Stop generating"
                 >
                   <Square className="w-3 h-3 fill-current" />
@@ -549,8 +703,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   disabled={!canSubmit}
                   className={`w-7 h-7 rounded-full flex items-center justify-center transition-all cursor-pointer ${
                     canSubmit
-                      ? 'bg-[#1a73e8] text-white hover:bg-[#165ec2] shadow-md'
-                      : 'bg-[#282a30] text-[#5e626a] cursor-not-allowed'
+                      ? 'bg-[var(--bg-surface-hover)] text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)] shadow-md'
+                      : 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)] cursor-not-allowed'
                   }`}
                   title="Send message"
                 >
@@ -568,7 +722,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           <button
             type="button"
             onClick={() => setIsModeDropdownOpen(!isModeDropdownOpen)}
-            className="flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-medium text-[#9da0a8] hover:text-[#e3e3e3] hover:bg-[#1c1d21] transition-colors cursor-pointer"
+            className="flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)] transition-colors cursor-pointer"
           >
             {mode === 'jules' ? (
               <>
@@ -581,12 +735,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 <span>Local</span>
               </>
             )}
-            <ChevronDown className="w-3 h-3 text-[#70747e]" />
+            <ChevronDown className="w-3 h-3 text-[var(--text-muted)]" />
           </button>
 
           {isModeDropdownOpen && (
             <div 
-              className="absolute top-8 left-1/2 -translate-x-1/2 w-48 bg-[#1b1c20] border border-[#2b2d33] rounded-xl shadow-2xl py-1 text-xs text-[#c4c7cf] z-50"
+              className="absolute top-8 left-1/2 -translate-x-1/2 w-48 bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl shadow-2xl py-1 text-xs text-[var(--text-primary)] z-50"
               onMouseLeave={() => setIsModeDropdownOpen(false)}
             >
               <button
@@ -595,7 +749,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   onToggleMode('standard');
                   setIsModeDropdownOpen(false);
                 }}
-                className={`w-full flex items-center space-x-2 px-3 py-2 hover:bg-[#26282e] ${mode === 'standard' ? 'text-emerald-400 font-medium' : ''}`}
+                className={`w-full flex items-center space-x-2 px-3 py-2 hover:bg-[var(--bg-surface-hover)] ${mode === 'standard' ? 'text-emerald-400 font-medium' : ''}`}
               >
                 <Bot className="w-3.5 h-3.5" />
                 <span>Local Autonomous</span>
@@ -606,7 +760,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   onToggleMode('jules');
                   setIsModeDropdownOpen(false);
                 }}
-                className={`w-full flex items-center space-x-2 px-3 py-2 hover:bg-[#26282e] ${mode === 'jules' ? 'text-sky-400 font-medium' : ''}`}
+                className={`w-full flex items-center space-x-2 px-3 py-2 hover:bg-[var(--bg-surface-hover)] ${mode === 'jules' ? 'text-sky-400 font-medium' : ''}`}
               >
                 <Sparkles className="w-3.5 h-3.5" />
                 <span>Jules Lead (Google Labs)</span>

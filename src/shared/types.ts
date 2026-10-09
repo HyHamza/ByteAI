@@ -26,7 +26,7 @@ export interface AppSettings {
   securityPreset?: 'turbo' | 'confirm';
   planReviewPolicy?: 'proceed' | 'review';
   queuedMessages?: 'queue' | 'immediate';
-  theme?: 'obsidian' | 'contrast';
+  theme?: 'obsidian' | 'contrast' | 'whiteTheme';
   vadEnabled?: boolean;
   userName?: string;
   userEmail?: string;
@@ -182,5 +182,35 @@ export interface ElectronAPI {
 
   // Speech Dictation API (Groq Whisper)
   transcribeAudio?: (audioData: ArrayBuffer | Uint8Array, mimeType?: string) => Promise<{ text: string; error?: string }>;
+
+  // Duty Shift API (Long-Running Autonomous Jules Shifts)
+  startDutyShift: (sessionId: string, missionPrompt: string, hours: number) => Promise<DutyShift>;
+  stopDutyShift: (shiftId: string) => Promise<boolean>;
+  pauseDutyShift: (shiftId: string) => Promise<boolean>;
+  resumeDutyShift: (shiftId: string) => Promise<boolean>;
+  getActiveDutyShift: (sessionId?: string) => Promise<DutyShift | null>;
+  onDutyShiftUpdated: (callback: (shift: DutyShift | null) => void) => () => void;
 }
+
+export interface DutyShiftPhase {
+  sessionId: string;
+  title: string;
+  prUrl?: string;
+  summary?: string;
+  completedAt: number;
+}
+
+export interface DutyShift {
+  id: string;
+  sessionId: string;
+  missionPrompt: string;
+  totalHours: number;
+  durationMs: number;
+  startedAt: number;
+  targetEndAt: number;
+  status: 'active' | 'paused' | 'completed' | 'stopped';
+  phasesCompleted: DutyShiftPhase[];
+  lastCheckAt: number;
+}
+
 

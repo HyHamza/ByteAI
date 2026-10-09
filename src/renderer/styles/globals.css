@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./themes/whiteTheme.css";
 
 @layer base {
   :root {
@@ -12,6 +13,16 @@
     --text-secondary: #8e9196;
     --text-muted: #5e626a;
     --accent-blue: #1a73e8;
+    --bg-card: #1c140a;
+    --border-highlight: #3b2713;
+    --bg-highlight: #101924;
+    --border-highlight-blue: #1c2c40;
+    --bg-highlight-purple: #171024;
+    --border-highlight-purple: #2e2047;
+    --bg-highlight-amber: #20150b;
+    --border-highlight-amber: #422e17;
+    --bg-header: #111214;
+
   }
 
   body {

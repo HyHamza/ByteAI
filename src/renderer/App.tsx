@@ -53,6 +53,16 @@ export const App: React.FC = () => {
   const [retryStatus, setRetryStatus] = useState<{ attempt: number; maxRetries: number; delayMs: number; reason: string } | null>(null);
 
   // Load initial settings, workspace & sessions concurrently
+  
+  // Update body class based on theme
+  useEffect(() => {
+    if (settings.theme === 'whiteTheme') {
+      document.body.classList.add('theme-white');
+    } else {
+      document.body.classList.remove('theme-white');
+    }
+  }, [settings.theme]);
+
   useEffect(() => {
     let isMounted = true;
 
@@ -384,7 +394,7 @@ export const App: React.FC = () => {
   );
 
   return (
-    <div className="flex flex-col h-screen w-full bg-[#131314] text-[#e3e3e3] overflow-hidden font-sans">
+    <div className="flex flex-col h-screen w-full bg-[var(--bg-canvas)] text-[var(--text-primary)] overflow-hidden font-sans">
       <Header
         settings={settings}
         availableModels={availableModels}
@@ -428,16 +438,16 @@ export const App: React.FC = () => {
         )}
 
         {/* Center Main Canvas */}
-        <main className="flex-1 flex flex-col bg-[#131314] overflow-hidden relative">
+        <main className="flex-1 flex flex-col bg-[var(--bg-canvas)] overflow-hidden relative">
           {/* Antigravity Loading & Activity Banner for Agent Running / Retrying */}
           {isCurrentAgentRunning && (
             <div className="shrink-0 z-10">
               {retryStatus ? (
                 <>
-                  <div className="w-full h-[2.5px] bg-[#2a1b0c] overflow-hidden">
+                  <div className="w-full h-[2.5px] bg-[var(--bg-surface)] overflow-hidden">
                     <div className="h-full w-full bg-gradient-to-r from-transparent via-amber-400 to-orange-500 animate-shimmer-fast" />
                   </div>
-                  <div className="px-5 py-2.5 bg-[#1c140a] border-b border-[#3b2713] flex items-center justify-between text-xs text-[#f5d0a6]">
+                  <div className="px-5 py-2.5 bg-[var(--bg-card)] border-b border-[var(--border-highlight)] flex items-center justify-between text-xs text-[var(--text-secondary)]">
                     <div className="flex items-center space-x-2.5 min-w-0">
                       <div className="relative flex items-center justify-center shrink-0">
                         <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping absolute" />
@@ -454,7 +464,7 @@ export const App: React.FC = () => {
                     </div>
                     <button
                       onClick={handleCancelExecution}
-                      className="shrink-0 px-2.5 py-0.5 bg-[#2c1d10] hover:bg-[#3d2917] text-amber-300 hover:text-white text-[11px] rounded border border-[#4d331c] transition-colors cursor-pointer"
+                      className="shrink-0 px-2.5 py-0.5 bg-[var(--bg-surface)] hover:bg-[var(--bg-surface)] text-amber-300 hover:text-[var(--text-primary)] text-[11px] rounded border border-[var(--border-card)] transition-colors cursor-pointer"
                     >
                       Cancel
                     </button>
@@ -462,21 +472,21 @@ export const App: React.FC = () => {
                 </>
               ) : (
                 <>
-                  <div className="w-full h-[2.5px] bg-[#121c27] overflow-hidden">
+                  <div className="w-full h-[2.5px] bg-[var(--bg-surface-hover)] overflow-hidden">
                     <div className="h-full w-full bg-gradient-to-r from-transparent via-cyan-400 to-blue-500 animate-shimmer-fast" />
                   </div>
-                  <div className="px-5 py-2 bg-[#101924] border-b border-[#1c2c40] flex items-center justify-between text-xs text-[#a0c2e6]">
+                  <div className="px-5 py-2 bg-[var(--bg-highlight)] border-b border-[var(--border-highlight-blue)] flex items-center justify-between text-xs text-[var(--text-secondary)]">
                     <div className="flex items-center space-x-2.5">
                       <div className="relative flex items-center justify-center">
                         <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping absolute" />
                         <span className="w-2 h-2 rounded-full bg-cyan-400" />
                       </div>
-                      <span className="font-semibold text-white">Byte is running</span>
-                      <span className="text-[#6d8aab] text-[11px]">• Thinking & executing autonomous tools</span>
+                      <span className="font-semibold text-[var(--text-primary)]">Byte is running</span>
+                      <span className="text-[var(--text-secondary)] text-[11px]">• Thinking & executing autonomous tools</span>
                     </div>
                     <button
                       onClick={handleCancelExecution}
-                      className="px-2.5 py-0.5 bg-[#1e2a3b] hover:bg-[#2b3a4f] text-red-400 hover:text-red-300 text-[11px] rounded border border-[#2f425c] transition-colors cursor-pointer"
+                      className="px-2.5 py-0.5 bg-[var(--bg-surface)] hover:bg-[var(--bg-surface)] text-red-400 hover:text-red-300 text-[11px] rounded border border-[var(--border-card)] transition-colors cursor-pointer"
                     >
                       Cancel
                     </button>
@@ -489,20 +499,20 @@ export const App: React.FC = () => {
           {/* Antigravity Loading & Activity Banner for Waiting for Jules */}
           {isCurrentWaitingJules && (
             <div className="shrink-0 z-10">
-              <div className="w-full h-[2.5px] bg-[#1a1226] overflow-hidden">
+              <div className="w-full h-[2.5px] bg-[var(--bg-surface)] overflow-hidden">
                 <div className="h-full w-full bg-gradient-to-r from-transparent via-fuchsia-400 to-purple-500 animate-shimmer-medium" />
               </div>
-              <div className="px-5 py-2 bg-[#171024] border-b border-[#2e2047] flex items-center justify-between text-xs text-[#d3bbf5]">
+              <div className="px-5 py-2 bg-[var(--bg-highlight-purple)] border-b border-[var(--border-highlight-purple)] flex items-center justify-between text-xs text-[var(--text-secondary)]">
                 <div className="flex items-center space-x-2.5">
                   <div className="relative flex items-center justify-center">
                     <span className="w-2 h-2 rounded-full bg-purple-400 animate-pulse absolute" />
                     <span className="w-2 h-2 rounded-full bg-purple-400" />
                   </div>
-                  <span className="font-semibold text-white">Waiting for Jules Worker</span>
-                  <span className="text-[#8c74b0] text-[11px]">• Task running remotely in Google Cloud (Byte supervising)</span>
+                  <span className="font-semibold text-[var(--text-primary)]">Waiting for Jules Worker</span>
+                  <span className="text-[var(--text-secondary)] text-[11px]">• Task running remotely in Google Cloud (Byte supervising)</span>
                 </div>
                 {activeMatchedJules && (
-                  <span className="text-[10px] font-mono text-[#c0a2f5] bg-[#271b3e] px-2 py-0.5 rounded border border-[#432e69]">
+                  <span className="text-[10px] font-mono text-[var(--text-secondary)] bg-[var(--bg-surface)] px-2 py-0.5 rounded border border-[var(--border-card)]">
                     Session: {activeMatchedJules.id.slice(0, 10)}...
                   </span>
                 )}
@@ -513,16 +523,16 @@ export const App: React.FC = () => {
           {/* Antigravity Loading & Activity Banner for Jules Awaiting Direction */}
           {isCurrentAwaitingFeedback && (
             <div className="shrink-0 z-10">
-              <div className="w-full h-[2.5px] bg-[#24170d] overflow-hidden">
+              <div className="w-full h-[2.5px] bg-[var(--bg-surface)] overflow-hidden">
                 <div className="h-full w-full bg-amber-400 animate-pulse" />
               </div>
-              <div className="px-5 py-2 bg-[#20150b] border-b border-[#422e17] flex items-center justify-between text-xs text-[#fed7aa]">
+              <div className="px-5 py-2 bg-[var(--bg-highlight-amber)] border-b border-[var(--border-highlight-amber)] flex items-center justify-between text-xs text-[var(--text-secondary)]">
                 <div className="flex items-center space-x-2.5">
                   <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
-                  <span className="font-semibold text-white">Jules Worker Needs Direction</span>
-                  <span className="text-[#a48455] text-[11px]">• Byte is reviewing report / awaiting supervisor reply</span>
+                  <span className="font-semibold text-[var(--text-primary)]">Jules Worker Needs Direction</span>
+                  <span className="text-[var(--text-secondary)] text-[11px]">• Byte is reviewing report / awaiting supervisor reply</span>
                 </div>
-                <span className="text-[10px] font-mono text-amber-300 bg-[#352514] px-2 py-0.5 rounded border border-[#5a3f1e]">
+                <span className="text-[10px] font-mono text-amber-300 bg-[var(--bg-surface)] px-2 py-0.5 rounded border border-[var(--border-card)]">
                   Needs Input
                 </span>
               </div>
@@ -544,6 +554,7 @@ export const App: React.FC = () => {
                 onSelectWorkspace={handleSelectWorkspace}
                 disabled={!activeSessionId}
                 isCenteredLayout={true}
+                sessionId={activeSessionId || activeSession?.id}
               />
             </div>
           ) : (
@@ -570,6 +581,7 @@ export const App: React.FC = () => {
                 onSelectWorkspace={handleSelectWorkspace}
                 disabled={!activeSessionId}
                 isCenteredLayout={false}
+                sessionId={activeSessionId || activeSession?.id}
               />
             </>
           )}

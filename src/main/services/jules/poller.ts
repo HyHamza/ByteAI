@@ -7,6 +7,7 @@ import type { JulesSessionSummary } from '../../../shared/types';
 import { DataStore } from '../db/store';
 import { AgentOrchestrator } from '../../agent/orchestrator';
 import { syncAndMergeJulesSession } from '../git/merger';
+import { DutyManager } from '../duty/manager';
 
 const STATE_FILE = path.join(os.homedir(), '.seniorengineer', 'jules_supervisor_state.json');
 
@@ -369,6 +370,13 @@ SUPERVISOR DIRECTIVES FOR BYTE:
     }
 
     if (chatSession) {
+      // Check if an autonomous Duty Shift is currently active!
+      const activeShift = DutyManager.getInstance().getActiveShift(chatSession.id);
+      if (activeShift && activeShift.status === 'active') {
+        await DutyManager.getInstance().onJulesSessionMerged(s.id, s.title, s.prUrl);
+        return;
+      }
+
       const syncHeader = mergeSucceeded 
         ? '[JULES TASK COMPLETED & FULLY SYNCHRONIZED]' 
         : '[JULES TASK COMPLETED - LOCAL MERGE REQUIRED]';

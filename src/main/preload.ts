@@ -94,6 +94,18 @@ const api: ElectronAPI = {
 
   // Speech Dictation (Groq Whisper)
   transcribeAudio: (audioBuffer: ArrayBuffer | Uint8Array, mimeType?: string) => ipcRenderer.invoke('speech:transcribe', { audioBuffer, mimeType }),
+
+  // Duty Shifts (Long-Running Tasks)
+  startDutyShift: (sessionId: string, missionPrompt: string, hours: number) => ipcRenderer.invoke('duty:start', { sessionId, missionPrompt, hours }),
+  stopDutyShift: (shiftId: string) => ipcRenderer.invoke('duty:stop', { shiftId }),
+  pauseDutyShift: (shiftId: string) => ipcRenderer.invoke('duty:pause', { shiftId }),
+  resumeDutyShift: (shiftId: string) => ipcRenderer.invoke('duty:resume', { shiftId }),
+  getActiveDutyShift: (sessionId?: string) => ipcRenderer.invoke('duty:get-active', { sessionId }),
+  onDutyShiftUpdated: (callback: (shift: any) => void) => {
+    const handler = (_: any, shift: any) => callback(shift);
+    ipcRenderer.on('duty:updated', handler);
+    return () => ipcRenderer.removeListener('duty:updated', handler);
+  },
 };
 
 contextBridge.exposeInMainWorld('electronAPI', api);

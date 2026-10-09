@@ -10,6 +10,7 @@ import { detectGitRepo } from './services/git/detector';
 import { syncAndMergeJulesSession } from './services/git/merger';
 import { TaskManager } from './services/task/manager';
 import { GroqSpeechTranscriber } from './services/speech/groq';
+import { DutyManager } from './services/duty/manager';
 import type { AppMode, ChatSession, AttachmentFile } from '../shared/types';
 
 let mainWindow: BrowserWindow | null = null;
@@ -334,6 +335,28 @@ function setupIpcHandlers() {
   ipcMain.handle('speech:transcribe', async (_, { audioBuffer, mimeType }: { audioBuffer: ArrayBuffer | Uint8Array; mimeType?: string }) => {
     return GroqSpeechTranscriber.getInstance().transcribe(audioBuffer, mimeType);
   });
+
+  // ── Duty Shifts IPC (Long-Running Tasks)
+  ipcMain.handle('duty:start', async (_, { sessionId, missionPrompt, hours }: { sessionId: string; missionPrompt: string; hours: number }) => {
+    return DutyManager.getInstance().startShift(sessionId, missionPrompt, hours);
+  });
+
+  ipcMain.handle('duty:stop', async (_, { shiftId }: { shiftId: string }) => {
+    return DutyManager.getInstance().stopShift(shiftId);
+  });
+
+  ipcMain.handle('duty:pause', async (_, { shiftId }: { shiftId: string }) => {
+    return DutyManager.getInstance().pauseShift(shiftId);
+  });
+
+  ipcMain.handle('duty:resume', async (_, { shiftId }: { shiftId: string }) => {
+    return DutyManager.getInstance().resumeShift(shiftId);
+  });
+
+  ipcMain.handle('duty:get-active', async (_, { sessionId }: { sessionId?: string }) => {
+    return DutyManager.getInstance().getActiveShift(sessionId);
+  });
 }
+
 
 

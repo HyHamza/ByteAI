@@ -162,6 +162,23 @@ const mockAPI: ElectronAPI = {
   onJulesAllSessions: () => () => {},
   onJulesUpdate: () => () => {},
   transcribeAudio: async () => ({ text: 'Mock transcribed text' }),
+  startDutyShift: async (sessionId: string, missionPrompt: string, hours: number) => ({
+    id: `shift_${Date.now()}`,
+    sessionId,
+    missionPrompt,
+    totalHours: hours || 8,
+    durationMs: (hours || 8) * 3600 * 1000,
+    startedAt: Date.now(),
+    targetEndAt: Date.now() + (hours || 8) * 3600 * 1000,
+    status: 'active',
+    phasesCompleted: [],
+    lastCheckAt: Date.now(),
+  }),
+  stopDutyShift: async () => true,
+  pauseDutyShift: async () => true,
+  resumeDutyShift: async () => true,
+  getActiveDutyShift: async () => null,
+  onDutyShiftUpdated: () => () => {},
 };
 
 export const api: ElectronAPI =

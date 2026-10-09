@@ -301,36 +301,36 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <>
-      <aside className="w-64 bg-[#141517] border-r border-[#202226] flex flex-col h-full shrink-0 select-none text-[12px] text-[#8e9196]">
+      <aside className="w-64 bg-[var(--bg-sidebar)] border-r border-[var(--border-subtle)] flex flex-col h-full shrink-0 select-none text-[12px] text-[var(--text-secondary)]">
         {/* Top Action: + New Conversation */}
         <div className="p-3 pb-2">
           <button
             onClick={onCreateSession}
-            className="w-full flex items-center space-x-2 py-2 px-3.5 bg-[#1e1f23] hover:bg-[#26282e] text-[#e3e5ec] rounded-xl border border-[#2b2d34] transition-all text-xs font-medium shadow-sm cursor-pointer"
+            className="w-full flex items-center space-x-2 py-2 px-3.5 bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-primary)] rounded-xl border border-[var(--border-card)] transition-all text-xs font-medium shadow-sm cursor-pointer"
           >
-            <Plus className="w-4 h-4 text-[#8e9196]" />
+            <Plus className="w-4 h-4 text-[var(--text-secondary)]" />
             <span>New Conversation</span>
           </button>
         </div>
 
         {/* Navigation section: Conversation History & Scheduled Tasks */}
         <div className="px-2 py-1 space-y-0.5">
-          <div className="flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-[#9da0a8] hover:bg-[#1c1d21] hover:text-[#e1e3ea] transition-colors cursor-pointer">
-            <History className="w-4 h-4 text-[#757882]" />
+          <div className="flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] transition-colors cursor-pointer">
+            <History className="w-4 h-4 text-[var(--text-secondary)]" />
             <span>Conversation History</span>
           </div>
-          <div className="flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-[#9da0a8] hover:bg-[#1c1d21] hover:text-[#e1e3ea] transition-colors cursor-pointer">
-            <Clock className="w-4 h-4 text-[#757882]" />
+          <div className="flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] transition-colors cursor-pointer">
+            <Clock className="w-4 h-4 text-[var(--text-secondary)]" />
             <span>Scheduled Tasks</span>
           </div>
         </div>
 
         {/* Projects Section Header */}
-        <div className="px-3 pt-3 pb-1 flex items-center justify-between text-[11px] font-medium text-[#737680] relative">
+        <div className="px-3 pt-3 pb-1 flex items-center justify-between text-[11px] font-medium text-[var(--text-muted)] relative">
           <span>Projects</span>
-          <div className="flex items-center space-x-1.5 text-[#5e616a]">
+          <div className="flex items-center space-x-1.5 text-[var(--text-muted)]">
             <button 
-              className="p-1 hover:text-[#c4c7cf] rounded hover:bg-[#1c1d21] transition-colors" 
+              className="p-1 hover:text-[var(--text-primary)] rounded hover:bg-[var(--bg-surface-hover)] transition-colors" 
               title="Sort / Filter"
             >
               <SlidersHorizontal className="w-3.5 h-3.5" />
@@ -345,8 +345,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 }}
                 className={`p-1 rounded transition-colors ${
                   isNewProjectMenuOpen 
-                    ? 'text-white bg-[#26282e]' 
-                    : 'hover:text-[#c4c7cf] hover:bg-[#1c1d21]'
+                    ? 'text-[var(--text-primary)] bg-[var(--bg-surface-hover)]' 
+                    : 'hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)]'
                 }`}
                 title="Add or Open Project"
               >
@@ -356,7 +356,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {/* Antigravity-Style New Project Dropdown (Screenshot 2) */}
               {isNewProjectMenuOpen && (
                 <div 
-                  className="absolute right-0 top-7 z-50 bg-[#1c1d21] border border-[#2c2e35] rounded-xl shadow-2xl py-1 text-xs min-w-[170px] animate-in fade-in zoom-in-95 duration-100"
+                  className="absolute right-0 top-7 z-50 bg-[var(--bg-surface-hover)] border border-[var(--border-card)] rounded-xl shadow-2xl py-1 text-xs min-w-[170px] animate-in fade-in zoom-in-95 duration-100"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <button
@@ -364,9 +364,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       setIsNewProjectMenuOpen(false);
                       onAddProject?.();
                     }}
-                    className="w-full flex items-center space-x-2.5 px-3 py-2 text-[#c4c7cf] hover:bg-[#26282e] hover:text-white transition-colors cursor-pointer text-left"
+                    className="w-full flex items-center space-x-2.5 px-3 py-2 text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] transition-colors cursor-pointer text-left"
                   >
-                    <FolderPlus className="w-4 h-4 text-[#8e9196]" />
+                    <FolderPlus className="w-4 h-4 text-[var(--text-secondary)]" />
                     <span>New Project</span>
                   </button>
                   <button
@@ -374,9 +374,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       setIsNewProjectMenuOpen(false);
                       onSelectWorkspace();
                     }}
-                    className="w-full flex items-center space-x-2.5 px-3 py-2 text-[#c4c7cf] hover:bg-[#26282e] hover:text-white transition-colors cursor-pointer text-left"
+                    className="w-full flex items-center space-x-2.5 px-3 py-2 text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] transition-colors cursor-pointer text-left"
                   >
-                    <Compass className="w-4 h-4 text-[#8e9196]" />
+                    <Compass className="w-4 h-4 text-[var(--text-secondary)]" />
                     <span>Quick Start</span>
                   </button>
                 </div>
@@ -400,19 +400,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 {/* Project Header Row (Screenshot 3) */}
                 <div
                   onClick={() => toggleFolder(folderName)}
-                  className="group flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[#c4c7cf] hover:bg-[#1c1d21] cursor-pointer transition-colors font-medium text-xs relative"
+                  className="group flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)] cursor-pointer transition-colors font-medium text-xs relative"
                 >
                   <div className="flex items-center space-x-2 truncate flex-1 mr-2">
                     {isExpanded ? (
-                      <FolderOpen className="w-3.5 h-3.5 text-[#8e9196] shrink-0" />
+                      <FolderOpen className="w-3.5 h-3.5 text-[var(--text-secondary)] shrink-0" />
                     ) : (
-                      <Folder className="w-3.5 h-3.5 text-[#8e9196] shrink-0" />
+                      <Folder className="w-3.5 h-3.5 text-[var(--text-secondary)] shrink-0" />
                     )}
                     <span className="truncate">{folderName}</span>
                     {isExpanded ? (
-                      <ChevronDown className="w-3 h-3 text-[#5e616a] shrink-0" />
+                      <ChevronDown className="w-3 h-3 text-[var(--text-muted)] shrink-0" />
                     ) : (
-                      <ChevronRight className="w-3 h-3 text-[#5e616a] shrink-0" />
+                      <ChevronRight className="w-3 h-3 text-[var(--text-muted)] shrink-0" />
                     )}
                   </div>
 
@@ -428,8 +428,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       }}
                       className={`p-1 rounded transition-colors ${
                         isMenuOpen 
-                          ? 'text-white bg-[#282a30]' 
-                          : 'text-[#6e727c] hover:text-[#e1e3ea] hover:bg-[#26282e]'
+                          ? 'text-[var(--text-primary)] bg-[var(--bg-surface-hover)]' 
+                          : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)]'
                       }`}
                       title="Project options"
                     >
@@ -441,7 +441,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         e.stopPropagation();
                         handleCreateInProject(folderName);
                       }}
-                      className="w-5 h-5 flex items-center justify-center rounded bg-[#202227] hover:bg-[#2b2d35] text-[#8e9196] hover:text-[#e1e3ea] border border-[#2b2d34] transition-all cursor-pointer shadow-sm"
+                      className="w-5 h-5 flex items-center justify-center rounded bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-card)] transition-all cursor-pointer shadow-sm"
                       title={`New conversation in ${folderName}`}
                     >
                       <Plus className="w-3.5 h-3.5" />
@@ -453,43 +453,43 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 {isMenuOpen && (
                   <div 
                     ref={contextMenuRef}
-                    className="absolute right-2 top-8 z-50 bg-[#1c1d21] border border-[#2c2e35] rounded-xl shadow-2xl py-1 text-xs min-w-[190px] animate-in fade-in zoom-in-95 duration-100"
+                    className="absolute right-2 top-8 z-50 bg-[var(--bg-surface-hover)] border border-[var(--border-card)] rounded-xl shadow-2xl py-1 text-xs min-w-[190px] animate-in fade-in zoom-in-95 duration-100"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <button
                       onClick={() => handleCopyProjectName(folderName)}
-                      className="w-full flex items-center space-x-2.5 px-3 py-2 text-[#c4c7cf] hover:bg-[#26282e] hover:text-white transition-colors cursor-pointer text-left"
+                      className="w-full flex items-center space-x-2.5 px-3 py-2 text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] transition-colors cursor-pointer text-left"
                     >
                       {copiedFolder === folderName ? (
                         <Check className="w-4 h-4 text-emerald-400" />
                       ) : (
-                        <Copy className="w-4 h-4 text-[#8e9196]" />
+                        <Copy className="w-4 h-4 text-[var(--text-secondary)]" />
                       )}
                       <span>{copiedFolder === folderName ? 'Copied!' : 'Copy Project Name'}</span>
                     </button>
 
                     <button
                       onClick={() => handleOpenProjectSettings(folderName)}
-                      className="w-full flex items-center space-x-2.5 px-3 py-2 text-[#c4c7cf] hover:bg-[#26282e] hover:text-white transition-colors cursor-pointer text-left"
+                      className="w-full flex items-center space-x-2.5 px-3 py-2 text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] transition-colors cursor-pointer text-left"
                     >
-                      <SettingsIcon className="w-4 h-4 text-[#8e9196]" />
+                      <SettingsIcon className="w-4 h-4 text-[var(--text-secondary)]" />
                       <span>Project Settings</span>
                     </button>
 
                     <button
                       onClick={() => handleShowInExplorer(folderName)}
-                      className="w-full flex items-center space-x-2.5 px-3 py-2 text-[#c4c7cf] hover:bg-[#26282e] hover:text-white transition-colors cursor-pointer text-left"
+                      className="w-full flex items-center space-x-2.5 px-3 py-2 text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] transition-colors cursor-pointer text-left"
                     >
                       {/* Windows Yellow Folder Icon as in Screenshot 4 */}
                       <Folder className="w-4 h-4 text-amber-400 fill-amber-400/30" />
                       <span>Show in File Explorer</span>
                     </button>
 
-                    <div className="h-[1px] bg-[#282a30] my-1" />
+                    <div className="h-[1px] bg-[var(--bg-surface-hover)] my-1" />
 
                     <button
                       onClick={() => handleDeleteProjectClick(folderName)}
-                      className="w-full flex items-center space-x-2.5 px-3 py-2 text-red-400 hover:bg-[#26282e] hover:text-red-300 transition-colors cursor-pointer text-left"
+                      className="w-full flex items-center space-x-2.5 px-3 py-2 text-red-400 hover:bg-[var(--bg-surface-hover)] hover:text-red-300 transition-colors cursor-pointer text-left"
                     >
                       <Trash2 className="w-4 h-4 text-red-400" />
                       <span>Delete Project</span>
@@ -499,9 +499,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
                 {/* Sessions indented under project */}
                 {isExpanded && (
-                  <div className="pl-4 space-y-0.5 border-l border-[#24262b] ml-4 my-1">
+                  <div className="pl-4 space-y-0.5 border-l border-[var(--border-subtle)] ml-4 my-1">
                     {folderSessions.length === 0 ? (
-                      <div className="px-2 py-2 text-[11px] text-[#5e616a] italic">
+                      <div className="px-2 py-2 text-[11px] text-[var(--text-muted)] italic">
                         No conversations yet
                       </div>
                     ) : (
@@ -514,22 +514,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           const isWaitingJules = taskInfo.state === 'waiting_jules';
                           const isFeedback = taskInfo.state === 'awaiting_feedback';
 
-                          let itemStyle = 'text-[#8e9196] hover:bg-[#1a1b1f] hover:text-[#d1d4dc] border border-transparent';
+                          let itemStyle = 'text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] border border-transparent';
                           if (isActive) {
-                            itemStyle = 'bg-[#202227] text-white font-medium border border-[#2c2e35] shadow-sm';
+                            itemStyle = 'bg-[var(--bg-surface-hover)] text-[var(--text-primary)] font-medium border border-[var(--border-card)] shadow-sm';
                           }
                           if (isAgentRunning) {
                             itemStyle = isActive 
-                              ? 'bg-[#14202e] text-white font-medium border border-cyan-500/50 shadow-sm shadow-cyan-950/30' 
-                              : 'bg-[#101924] text-cyan-200 hover:bg-[#14202e] border border-cyan-600/30';
+                              ? 'bg-[var(--bg-surface-hover)] text-[var(--text-primary)] font-medium border border-cyan-500/50 shadow-sm shadow-cyan-950/30' 
+                              : 'bg-[var(--bg-highlight)] text-cyan-200 hover:bg-[var(--bg-surface-hover)] border border-cyan-600/30';
                           } else if (isWaitingJules) {
                             itemStyle = isActive 
-                              ? 'bg-[#1f162e] text-white font-medium border border-purple-500/50 shadow-sm shadow-purple-950/30' 
-                              : 'bg-[#191226] text-purple-200 hover:bg-[#1f162e] border border-purple-600/30';
+                              ? 'bg-[var(--bg-surface-hover)] text-[var(--text-primary)] font-medium border border-purple-500/50 shadow-sm shadow-purple-950/30' 
+                              : 'bg-[var(--bg-surface-hover)] text-purple-200 hover:bg-[var(--bg-surface-hover)] border border-purple-600/30';
                           } else if (isFeedback) {
                             itemStyle = isActive
-                              ? 'bg-[#291e14] text-white font-medium border border-amber-500/50 shadow-sm shadow-amber-950/30'
-                              : 'bg-[#20170f] text-amber-200 hover:bg-[#291e14] border border-amber-600/40';
+                              ? 'bg-[var(--bg-surface-hover)] text-[var(--text-primary)] font-medium border border-amber-500/50 shadow-sm shadow-amber-950/30'
+                              : 'bg-[var(--bg-surface-hover)] text-amber-200 hover:bg-[var(--bg-surface-hover)] border border-amber-600/40';
                           }
 
                           return (
@@ -559,7 +559,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                     <span>Needs Input</span>
                                   </div>
                                 ) : (
-                                  <span className="text-[10px] text-[#5e616a] group-hover:hidden">
+                                  <span className="text-[10px] text-[var(--text-muted)] group-hover:hidden">
                                     {timeStr}
                                   </span>
                                 )}
@@ -569,7 +569,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                     e.stopPropagation();
                                     onDeleteSession(s.id);
                                   }}
-                                  className="hidden group-hover:block text-[#5e616a] hover:text-red-400 p-0.5 rounded transition-colors"
+                                  className="hidden group-hover:block text-[var(--text-muted)] hover:text-red-400 p-0.5 rounded transition-colors"
                                   title="Delete Conversation"
                                 >
                                   <Trash2 className="w-3 h-3" />
@@ -578,21 +578,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
                               {/* Antigravity Loading Bar: Agent Running */}
                               {isAgentRunning && (
-                                <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#121c27] overflow-hidden">
+                                <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-[var(--bg-surface-hover)] overflow-hidden">
                                   <div className="h-full w-full bg-gradient-to-r from-transparent via-cyan-400 to-blue-500 animate-shimmer-fast" />
                                 </div>
                               )}
 
                               {/* Antigravity Loading Bar: Waiting for Jules */}
                               {isWaitingJules && (
-                                <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#1a1226] overflow-hidden">
+                                <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-[var(--bg-surface)] overflow-hidden">
                                   <div className="h-full w-full bg-gradient-to-r from-transparent via-fuchsia-400 to-purple-500 animate-shimmer-medium" />
                                 </div>
                               )}
 
                               {/* Antigravity Loading Bar: Jules Awaiting Direction */}
                               {isFeedback && (
-                                <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#24170d] overflow-hidden">
+                                <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-[var(--bg-surface)] overflow-hidden">
                                   <div className="h-full w-full bg-amber-400 animate-pulse" />
                                 </div>
                               )}
@@ -607,7 +607,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                               e.stopPropagation();
                               toggleShowAll(folderName);
                             }}
-                            className="w-full text-left px-2.5 py-1.5 text-[11.5px] text-[#737680] hover:text-[#c4c7cf] hover:bg-[#1a1b1f] rounded-lg transition-colors cursor-pointer"
+                            className="w-full text-left px-2.5 py-1.5 text-[11.5px] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)] rounded-lg transition-colors cursor-pointer"
                           >
                             {isShowAll ? 'Show less' : `See all (${folderSessions.length})`}
                           </button>
@@ -622,12 +622,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {/* Pinned Bottom: Settings */}
-        <div className="p-2 border-t border-[#1e2024]">
+        <div className="p-2 border-t border-[var(--border-subtle)]">
           <button
             onClick={onOpenSettings}
-            className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-lg text-[#8e9196] hover:bg-[#1c1d21] hover:text-[#e1e3ea] transition-colors cursor-pointer text-xs"
+            className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] transition-colors cursor-pointer text-xs"
           >
-            <SettingsIcon className="w-4 h-4 text-[#757882]" />
+            <SettingsIcon className="w-4 h-4 text-[var(--text-secondary)]" />
             <span>Settings</span>
           </button>
         </div>
@@ -640,17 +640,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
           onClick={() => setSettingsModalProject(null)}
         >
           <div 
-            className="bg-[#18191d] border border-[#2b2d35] rounded-2xl shadow-2xl w-full max-w-md overflow-hidden text-[#e1e3ea]"
+            className="bg-[var(--bg-surface-hover)] border border-[var(--border-card)] rounded-2xl shadow-2xl w-full max-w-md overflow-hidden text-[var(--text-primary)]"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between px-5 py-4 border-b border-[#24262c]">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border-subtle)]">
               <div className="flex items-center space-x-2.5">
-                <Folder className="w-4 h-4 text-[#8e9196]" />
+                <Folder className="w-4 h-4 text-[var(--text-secondary)]" />
                 <h3 className="font-semibold text-sm">Project Settings</h3>
               </div>
               <button 
                 onClick={() => setSettingsModalProject(null)}
-                className="p-1 hover:text-white rounded hover:bg-[#25272e] text-[#757882] transition-colors"
+                className="p-1 hover:text-[var(--text-primary)] rounded hover:bg-[var(--bg-surface-hover)] text-[var(--text-secondary)] transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -658,33 +658,33 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
             <div className="p-5 space-y-4 text-xs">
               <div>
-                <label className="text-[11px] font-medium text-[#7d808b] uppercase tracking-wider block mb-1.5">
+                <label className="text-[11px] font-medium text-[var(--text-muted)] uppercase tracking-wider block mb-1.5">
                   Project Name
                 </label>
-                <div className="px-3 py-2 rounded-lg bg-[#202227] border border-[#2c2e35] text-[#e3e5ec] font-medium">
+                <div className="px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-card)] text-[var(--text-primary)] font-medium">
                   {settingsModalProject.name}
                 </div>
               </div>
 
               <div>
-                <label className="text-[11px] font-medium text-[#7d808b] uppercase tracking-wider block mb-1.5">
+                <label className="text-[11px] font-medium text-[var(--text-muted)] uppercase tracking-wider block mb-1.5">
                   Directory Path
                 </label>
-                <div className="px-3 py-2 rounded-lg bg-[#202227] border border-[#2c2e35] font-mono text-[11px] text-[#a4a7b2] break-all select-text">
+                <div className="px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-card)] font-mono text-[11px] text-[var(--text-muted)] break-all select-text">
                   {settingsModalProject.path || '(Not set)'}
                 </div>
               </div>
 
               {settingsModalProject.gitRepo && (
                 <div>
-                  <label className="text-[11px] font-medium text-[#7d808b] uppercase tracking-wider block mb-1.5">
+                  <label className="text-[11px] font-medium text-[var(--text-muted)] uppercase tracking-wider block mb-1.5">
                     Git Repository
                   </label>
-                  <div className="flex items-center space-x-2 px-3 py-2 rounded-lg bg-[#202227] border border-[#2c2e35] text-[#93c5fd]">
+                  <div className="flex items-center space-x-2 px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-card)] text-[#93c5fd]">
                     <GitBranch className="w-3.5 h-3.5 shrink-0 text-[#60a5fa]" />
                     <span className="truncate">{settingsModalProject.gitRepo}</span>
                     {settingsModalProject.gitBranch && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#2b3547] text-[#93c5fd]">
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--bg-surface-hover)] text-[#93c5fd]">
                         {settingsModalProject.gitBranch}
                       </span>
                     )}
@@ -692,14 +692,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </div>
               )}
 
-              <div className="pt-2 flex items-center justify-between border-t border-[#24262c]">
+              <div className="pt-2 flex items-center justify-between border-t border-[var(--border-subtle)]">
                 <button
                   onClick={() => {
                     if (settingsModalProject.path) {
                       api.showInExplorer(settingsModalProject.path);
                     }
                   }}
-                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-[#22242a] hover:bg-[#2b2d35] text-[#c4c7cf] border border-[#2e3038] transition-colors cursor-pointer text-xs"
+                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-primary)] border border-[var(--border-subtle)] transition-colors cursor-pointer text-xs"
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
                   <span>Show in File Explorer</span>
@@ -707,7 +707,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
                 <button
                   onClick={() => setSettingsModalProject(null)}
-                  className="px-4 py-1.5 rounded-lg bg-[#26282e] hover:bg-[#30333b] text-white font-medium transition-colors cursor-pointer text-xs"
+                  className="px-4 py-1.5 rounded-lg bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-primary)] font-medium transition-colors cursor-pointer text-xs"
                 >
                   Close
                 </button>
