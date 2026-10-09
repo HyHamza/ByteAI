@@ -438,7 +438,7 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
                               );
                             }
 
-                            const codeId = `code_${Math.random().toString(36).substring(7)}`;
+                            const codeId = `code_${match ? match[1] : 'snippet'}_${codeString.length}_${codeString.slice(0, 10).replace(/\W/g, '')}`;
 
                             return (
                               <div className="relative group/code my-2 rounded-xl overflow-hidden border border-[var(--border-card)] bg-[var(--bg-sidebar)]">

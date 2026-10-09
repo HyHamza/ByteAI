@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 import { Header } from './components/layout/Header';
 import { Sidebar } from './components/layout/Sidebar';
@@ -125,10 +125,16 @@ export const App: React.FC = () => {
     };
   }, []);
 
+  // Stable ref for activeSessionId to avoid re-subscribing IPC listeners on session switch
+  const activeSessionIdRef = useRef(activeSessionId);
+  useEffect(() => {
+    activeSessionIdRef.current = activeSessionId;
+  }, [activeSessionId]);
+
   // Listen for IPC streaming tokens, tool calls, and background states
   useEffect(() => {
     const unsubToken = api.onStreamToken((payload: StreamTokenPayload) => {
-      if (payload.sessionId === activeSessionId) {
+      if (payload.sessionId === activeSessionIdRef.current) {
         setIsStreaming(true);
         setRetryStatus(null);
         setStreamingContent((prev) => prev + payload.delta);
@@ -136,7 +142,7 @@ export const App: React.FC = () => {
     });
 
     const unsubRetry = api.onStreamRetry?.((payload) => {
-      if (payload.sessionId === activeSessionId) {
+      if (payload.sessionId === activeSessionIdRef.current) {
         setRetryStatus({
           attempt: payload.attempt,
           maxRetries: payload.maxRetries,
@@ -147,7 +153,7 @@ export const App: React.FC = () => {
     });
 
     const unsubTool = api.onToolCallUpdate((payload: ToolCallPayload) => {
-      if (payload.sessionId === activeSessionId) {
+      if (payload.sessionId === activeSessionIdRef.current) {
         setRetryStatus(null);
         if (
           payload.toolCall.toolName === 'jules_continue_session' ||
@@ -169,7 +175,7 @@ export const App: React.FC = () => {
     });
 
     const unsubCompleted = api.onExecutionCompleted((sessId: string) => {
-      if (sessId === activeSessionId) {
+      if (sessId === activeSessionIdRef.current) {
         setIsStreaming(false);
         setRetryStatus(null);
         setStreamingContent('');
@@ -197,7 +203,7 @@ export const App: React.FC = () => {
         else next.delete(sessionId);
         return next;
       });
-      if (sessionId === activeSessionId && status !== 'running') {
+      if (sessionId === activeSessionIdRef.current && status !== 'running') {
         setIsStreaming(false);
       }
     });
@@ -229,7 +235,7 @@ export const App: React.FC = () => {
       unsubJulesAll?.();
       unsubJulesUpdate?.();
     };
-  }, [activeSessionId]);
+  }, []);
 
   const activeSession = sessions.find((s) => s.id === activeSessionId);
 
@@ -387,25 +393,32 @@ export const App: React.FC = () => {
     return clean === 'new task' || clean === 'new conversation' || clean === 'initial task' || clean === 'untitled';
   };
 
-  const activeMatchedJules = activeSession ? (
+  const activeMatchedJules = useMemo(() => {
+    if (!activeSession) return undefined;
     // 1. Explicit link on session
-    (activeSession.julesSessionId ? julesSessions.find((js) => js.id === activeSession.julesSessionId) : undefined) ||
+    if (activeSession.julesSessionId) {
+      return julesSessions.find((js) => js.id === activeSession.julesSessionId);
+    }
     // 2. Referenced in messages or matched by specific non-generic title (only if session has substantive history)
-    (activeSession.messages && activeSession.messages.length > 0
-      ? julesSessions.find((js) => {
-          if (activeSession.messages.some((m) => {
-            if (m.content && m.content.includes(js.id)) return true;
-            if (m.toolCalls?.some((tc) => JSON.stringify(tc).includes(js.id))) return true;
-            return false;
-          })) return true;
-          if (activeSession.title && js.title && !isGenericTitle(activeSession.title) && !isGenericTitle(js.title)) {
-            if (activeSession.title.trim().toLowerCase() === js.title.trim().toLowerCase()) return true;
-            if (activeSession.title.includes(js.title.slice(0, 20)) || js.title.includes(activeSession.title.slice(0, 20))) return true;
-          }
+    if (!activeSession.messages || activeSession.messages.length === 0) return undefined;
+    return julesSessions.find((js) => {
+      if (activeSession.messages.some((m) => {
+        if (m.content && m.content.includes(js.id)) return true;
+        if (m.toolCalls?.some((tc) => {
+          if (tc.id === js.id) return true;
+          if (tc.args?.session_id === js.id) return true;
+          if (typeof tc.output === 'string' && tc.output.includes(js.id)) return true;
           return false;
-        })
-      : undefined)
-  ) : undefined;
+        })) return true;
+        return false;
+      })) return true;
+      if (activeSession.title && js.title && !isGenericTitle(activeSession.title) && !isGenericTitle(js.title)) {
+        if (activeSession.title.trim().toLowerCase() === js.title.trim().toLowerCase()) return true;
+        if (activeSession.title.includes(js.title.slice(0, 20)) || js.title.includes(activeSession.title.slice(0, 20))) return true;
+      }
+      return false;
+    });
+  }, [activeSession?.id, activeSession?.julesSessionId, activeSession?.title, activeSession?.messages?.length, julesSessions]);
 
   const isCurrentWaitingJules = !!activeMatchedJules && (
     activeMatchedJules.state === 'IN_PROGRESS' ||

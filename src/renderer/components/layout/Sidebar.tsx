@@ -70,41 +70,33 @@ function formatRelativeTime(timestamp: number): string {
 function getSessionTaskState(
   s: ChatSession,
   runningAgentSessionIds: Set<string>,
-  julesSessions: JulesSessionSummary[]
+  julesMap: Map<string, JulesSessionSummary>
 ): {
   state: TaskState;
   julesSession?: JulesSessionSummary;
 } {
-  // Find matching Jules session
-  const matched = julesSessions.find((js) => {
-    if (s.julesSessionId && s.julesSessionId === js.id) return true;
-    if (s.title && js.title && s.title.trim().toLowerCase() === js.title.trim().toLowerCase()) return true;
-    if (s.title && js.title && (s.title.includes(js.title.slice(0, 20)) || js.title.includes(s.title.slice(0, 20)))) return true;
-    return s.messages?.some((m) => {
-      if (m.content && m.content.includes(js.id)) return true;
-      if (m.toolCalls?.some((tc) => JSON.stringify(tc).includes(js.id))) return true;
-      return false;
-    });
-  });
-
-  if (matched) {
-    if (
-      matched.state === 'AWAITING_USER_FEEDBACK' ||
-      matched.state === 'AWAITING_USER_INPUT' ||
-      matched.state === 'PAUSED'
-    ) {
-      return { state: 'awaiting_feedback', julesSession: matched };
-    }
-    if (
-      matched.state === 'IN_PROGRESS' ||
-      matched.state === 'PLANNING' ||
-      matched.state === 'CODING' ||
-      matched.state === 'INITIALIZING'
-    ) {
-      return { state: 'waiting_jules', julesSession: matched };
-    }
-    if (matched.state === 'COMPLETED' && !runningAgentSessionIds.has(s.id)) {
-      return { state: 'completed', julesSession: matched };
+  // O(1) Fast lookup by explicit Jules session ID
+  if (s.julesSessionId) {
+    const matched = julesMap.get(s.julesSessionId);
+    if (matched) {
+      if (
+        matched.state === 'AWAITING_USER_FEEDBACK' ||
+        matched.state === 'AWAITING_USER_INPUT' ||
+        matched.state === 'PAUSED'
+      ) {
+        return { state: 'awaiting_feedback', julesSession: matched };
+      }
+      if (
+        matched.state === 'IN_PROGRESS' ||
+        matched.state === 'PLANNING' ||
+        matched.state === 'CODING' ||
+        matched.state === 'INITIALIZING'
+      ) {
+        return { state: 'waiting_jules', julesSession: matched };
+      }
+      if (matched.state === 'COMPLETED' && !runningAgentSessionIds.has(s.id)) {
+        return { state: 'completed', julesSession: matched };
+      }
     }
   }
 
@@ -115,7 +107,7 @@ function getSessionTaskState(
   return { state: 'idle' };
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({
+export const Sidebar: React.FC<SidebarProps> = React.memo(({
   sessions,
   activeSessionId,
   workspaceName,
@@ -132,6 +124,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenSettings,
   onSelectWorkspace,
 }) => {
+  // Fast O(1) lookup map for Jules sessions
+  const julesMap = useMemo(() => new Map(julesSessions.map((js) => [js.id, js])), [julesSessions]);
+
   // Folder expanded state: default is always open (true) unless explicitly set to false
   const [isProjectsExpanded, setIsProjectsExpanded] = useState<Record<string, boolean>>(() => loadFolderExpandedState());
   const [showAllFolders, setShowAllFolders] = useState<Record<string, boolean>>({});
@@ -151,16 +146,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const newProjectMenuRef = useRef<HTMLDivElement>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
+  const isAnyMenuOpenRef = useRef(false);
 
-  // Close menus on outside click
+  useEffect(() => {
+    isAnyMenuOpenRef.current = isNewProjectMenuOpen || !!activeContextMenuFolder;
+  }, [isNewProjectMenuOpen, activeContextMenuFolder]);
+
+  // Close menus on outside click without triggering re-renders when menus are already closed
   useEffect(() => {
     const handleDocumentClick = (e: MouseEvent) => {
-      if (newProjectMenuRef.current && !newProjectMenuRef.current.contains(e.target as Node)) {
-        setIsNewProjectMenuOpen(false);
+      if (!isAnyMenuOpenRef.current) return;
+      if (newProjectMenuRef.current && newProjectMenuRef.current.contains(e.target as Node)) {
+        return;
       }
-      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
-        setActiveContextMenuFolder(null);
+      if (contextMenuRef.current && contextMenuRef.current.contains(e.target as Node)) {
+        return;
       }
+      setIsNewProjectMenuOpen(false);
+      setActiveContextMenuFolder(null);
+      isAnyMenuOpenRef.current = false;
     };
     document.addEventListener('mousedown', handleDocumentClick);
     return () => document.removeEventListener('mousedown', handleDocumentClick);
@@ -513,7 +517,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         {visibleSessions.map((s) => {
                           const isActive = s.id === activeSessionId;
                           const timeStr = formatRelativeTime(s.updatedAt || s.createdAt);
-                          const taskInfo = getSessionTaskState(s, runningAgentSessionIds, julesSessions);
+                          const taskInfo = getSessionTaskState(s, runningAgentSessionIds, julesMap);
                           const isAgentRunning = taskInfo.state === 'running_agent';
                           const isWaitingJules = taskInfo.state === 'waiting_jules';
                           const isFeedback = taskInfo.state === 'awaiting_feedback';
@@ -722,4 +726,4 @@ export const Sidebar: React.FC<SidebarProps> = ({
       )}
     </>
   );
-};
+});
