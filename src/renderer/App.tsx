@@ -670,6 +670,7 @@ export const App: React.FC = () => {
                 isStreaming={isStreaming}
                 retryStatus={retryStatus}
                 mode={activeSession?.mode || settings.mode}
+                selectedModel={settings.selectedModel}
               />
               <ChatInput
                 onSendMessage={handleSendMessage}

@@ -53,6 +53,7 @@ export interface ChatMessage {
   executionDuration?: number;
   thinking?: string;
   isSystemNotification?: boolean;
+  model?: string;
 }
 
 export interface ToolExecutionRecord {

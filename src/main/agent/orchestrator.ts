@@ -551,6 +551,7 @@ DO NOT return conversational text or empty output without calling a tool. Invoke
           role: 'assistant',
           content: result.content || '',
           thinking: result.reasoning || undefined,
+          model: result.model || undefined,
           timestamp: Date.now(),
           executionDuration: Math.max(1, Math.round((Date.now() - turnStartTime) / 1000)),
         };
@@ -613,6 +614,7 @@ DO NOT return conversational text or empty output without calling a tool. Invoke
         role: 'assistant',
         content: result.content || '',
         thinking: result.reasoning || undefined,
+        model: result.model || undefined,
         timestamp: Date.now(),
         toolCalls: stepToolRecords,
         executionDuration: Math.max(1, Math.round((Date.now() - turnStartTime) / 1000)),

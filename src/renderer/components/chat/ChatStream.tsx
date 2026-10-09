@@ -31,6 +31,7 @@ interface ChatStreamProps {
   isStreaming: boolean;
   retryStatus?: { attempt: number; maxRetries: number; delayMs: number; reason: string } | null;
   mode: AppMode;
+  selectedModel?: string;
 }
 
 interface ConversationTurn {
@@ -120,6 +121,7 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
   isStreaming,
   retryStatus,
   mode,
+  selectedModel,
 }) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const latestUserMsgRef = useRef<HTMLDivElement>(null);
@@ -411,6 +413,7 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
           const turnTimestamp = lastAsst?.timestamp || turn.userMessage?.timestamp || Date.now();
           const timeFormatted = new Date(turnTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
           const asstTurnId = `asst_${turn.id}`;
+          const turnModel = turn.assistantMessages.find((m) => m.model)?.model || (isLiveInThisTurn ? selectedModel : undefined);
 
           return (
             <div key={turn.id} className="w-full space-y-3">
@@ -487,32 +490,41 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
                 <div className="w-full space-y-2 text-xs leading-relaxed group/asst pt-1">
                   {/* Single Unified "Worked for Xs >" Banner for the entire turn */}
                   {hasTrajectoryContent && (
-                    <div 
-                      onClick={() => toggleTrajectory(turn.id, defaultExpanded)}
-                      className="flex items-center space-x-2 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer select-none py-1 transition-colors w-fit group/trajectory font-medium"
-                    >
-                      {isLiveInThisTurn ? (
-                        retryStatus ? (
-                          <div className="flex items-center space-x-2 text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md animate-pulse">
-                            <Loader2 className="w-3 h-3 animate-spin text-amber-400" />
-                            <span>Retrying connection ({retryStatus.attempt}/{retryStatus.maxRetries})...</span>
-                            <span className="text-[10px] text-amber-300/80 font-mono">
-                              {Math.round(retryStatus.delayMs / 1000)}s backoff
-                            </span>
-                          </div>
+                    <div className="flex items-center space-x-2 py-1 w-fit select-none">
+                      <div 
+                        onClick={() => toggleTrajectory(turn.id, defaultExpanded)}
+                        className="flex items-center space-x-2 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer transition-colors group/trajectory font-medium"
+                      >
+                        {isLiveInThisTurn ? (
+                          retryStatus ? (
+                            <div className="flex items-center space-x-2 text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md animate-pulse">
+                              <Loader2 className="w-3 h-3 animate-spin text-amber-400" />
+                              <span>Retrying connection ({retryStatus.attempt}/{retryStatus.maxRetries})...</span>
+                              <span className="text-[10px] text-amber-300/80 font-mono">
+                                {Math.round(retryStatus.delayMs / 1000)}s backoff
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center space-x-1.5 text-cyan-400">
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                              <span>Working for {formatDuration(duration || 1)}...</span>
+                            </div>
+                          )
                         ) : (
-                          <div className="flex items-center space-x-1.5 text-cyan-400">
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                            <span>Working for {formatDuration(duration || 1)}...</span>
-                          </div>
-                        )
-                      ) : (
-                        <span>Worked for {formatDuration(duration || 1)}</span>
-                      )}
-                      {isExpanded ? (
-                        <ChevronDown className="w-3.5 h-3.5 text-[var(--text-muted)] group-hover/trajectory:text-[var(--text-primary)]" />
-                      ) : (
-                        <ChevronRight className="w-3.5 h-3.5 text-[var(--text-muted)] group-hover/trajectory:text-[var(--text-primary)]" />
+                          <span>Worked for {formatDuration(duration || 1)}</span>
+                        )}
+                        {isExpanded ? (
+                          <ChevronDown className="w-3.5 h-3.5 text-[var(--text-muted)] group-hover/trajectory:text-[var(--text-primary)]" />
+                        ) : (
+                          <ChevronRight className="w-3.5 h-3.5 text-[var(--text-muted)] group-hover/trajectory:text-[var(--text-primary)]" />
+                        )}
+                      </div>
+
+                      {turnModel && (
+                        <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[10.5px] font-mono text-[var(--text-muted)]">
+                          <Bot className="w-3 h-3 text-cyan-400/80 shrink-0" />
+                          <span>{turnModel}</span>
+                        </span>
                       )}
                     </div>
                   )}
@@ -660,10 +672,18 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
                     </div>
                   )}
 
-                  {/* Single Unified Turn Footer: Timestamp + Actions */}
+                  {/* Single Unified Turn Footer: Timestamp + Model Name + Actions */}
                   {!isLiveInThisTurn && responseText && (
                     <div className="flex items-center justify-between pt-2 select-none text-[11px] text-[var(--text-muted)]">
-                      <span>{timeFormatted}</span>
+                      <div className="flex items-center space-x-2">
+                        <span>{timeFormatted}</span>
+                        {turnModel && (
+                          <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[10.5px] font-mono text-[var(--text-secondary)]">
+                            <Bot className="w-3 h-3 text-cyan-400 shrink-0" />
+                            <span>{turnModel}</span>
+                          </span>
+                        )}
+                      </div>
 
                       <div className="flex items-center space-x-1 opacity-0 group-hover/asst:opacity-100 transition-opacity">
                         <button

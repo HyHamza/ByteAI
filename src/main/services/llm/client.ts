@@ -223,7 +223,7 @@ export class LLMClient {
     tools: LLMToolDefinition[] | undefined,
     callbacks: LLMStreamCallbacks,
     options?: { maxRetries?: number }
-  ): Promise<{ content: string; reasoning?: string; toolCalls: any[] }> {
+  ): Promise<{ content: string; reasoning?: string; toolCalls: any[]; model: string }> {
     const MAX_RETRIES = options?.maxRetries !== undefined ? options.maxRetries : 9;
     let attempt = 0;
 
@@ -333,7 +333,7 @@ export class LLMClient {
     tools: LLMToolDefinition[] | undefined,
     callbacks: LLMStreamCallbacks,
     overrideModel?: string
-  ): Promise<{ content: string; reasoning?: string; toolCalls: any[] }> {
+  ): Promise<{ content: string; reasoning?: string; toolCalls: any[]; model: string }> {
     const { baseUrl, apiKey, modelToUse } = this.getNormalizedConfig();
     const effectiveModel = overrideModel || modelToUse;
     const url = `${baseUrl}/chat/completions`;
@@ -461,6 +461,7 @@ export class LLMClient {
             content: completeContent,
             reasoning: completeReasoning || undefined,
             toolCalls: finalToolCalls,
+            model: effectiveModel,
           });
         });
       });
