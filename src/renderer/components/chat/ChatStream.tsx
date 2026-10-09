@@ -16,7 +16,9 @@ import {
   Clock,
   Image as ImageIcon,
   FileText,
-  AlertTriangle
+  AlertTriangle,
+  Brain,
+  ShieldAlert
 } from 'lucide-react';
 import type { ChatMessage, ToolExecutionRecord, AppMode, AttachmentFile } from '@/shared/types';
 import { ToolCard, AntigravityToolStream } from './ToolCard';
@@ -24,6 +26,7 @@ import { ToolCard, AntigravityToolStream } from './ToolCard';
 interface ChatStreamProps {
   messages: ChatMessage[];
   currentStreamContent: string;
+  streamingReasoning?: string;
   streamingTools?: ToolExecutionRecord[];
   isStreaming: boolean;
   retryStatus?: { attempt: number; maxRetries: number; delayMs: number; reason: string } | null;
@@ -34,6 +37,7 @@ interface ConversationTurn {
   id: string;
   userMessage?: ChatMessage;
   assistantMessages: ChatMessage[];
+  systemMessages: ChatMessage[];
 }
 
 function formatDuration(seconds: number): string {
@@ -43,9 +47,75 @@ function formatDuration(seconds: number): string {
   return `${mins}m ${rem}s`;
 }
 
+const SystemEventCard: React.FC<{ message: ChatMessage }> = ({ message }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const text = message.content || '';
+  
+  const isDutyAlert = text.includes('DUTY SHIFT') || text.includes('WATCHDOG');
+  const isJulesEvent = text.includes('Jules') || text.includes('jules');
+  const isTaskFinished = text.includes('Task') && text.includes('finished');
+
+  const title = isDutyAlert
+    ? 'Autonomous Duty Shift Watchdog'
+    : isJulesEvent
+    ? 'Jules Cloud Supervisor Update'
+    : isTaskFinished
+    ? 'Background Task Completed'
+    : 'System Event Notification';
+
+  const preview = text.split('\n')[0].replace(/^<SYSTEM_MESSAGE>\s*/, '').slice(0, 100);
+  const isLong = text.length > 100 || text.includes('\n');
+
+  return (
+    <div className="w-full my-2 rounded-2xl border border-[var(--border-card)] bg-[var(--bg-surface)] text-xs overflow-hidden shadow-sm select-text">
+      <div 
+        onClick={() => isLong && setIsExpanded(!isExpanded)}
+        className={`flex items-center justify-between px-3.5 py-2.5 ${isLong ? 'cursor-pointer hover:bg-[var(--bg-surface-hover)]' : ''} transition-colors`}
+      >
+        <div className="flex items-center space-x-2.5 min-w-0">
+          <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${
+            isDutyAlert ? 'bg-amber-500/15 border border-amber-500/30' :
+            isJulesEvent ? 'bg-sky-500/15 border border-sky-500/30' :
+            'bg-cyan-500/15 border border-cyan-500/30'
+          }`}>
+            {isDutyAlert ? (
+              <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
+            ) : isJulesEvent ? (
+              <Sparkles className="w-3.5 h-3.5 text-sky-400" />
+            ) : (
+              <Terminal className="w-3.5 h-3.5 text-cyan-400" />
+            )}
+          </div>
+          <div className="flex flex-col min-w-0">
+            <span className="font-semibold text-[11.5px] text-[var(--text-primary)]">
+              {title}
+            </span>
+            {!isExpanded && (
+              <span className="text-[11px] text-[var(--text-muted)] font-mono truncate">
+                {preview}
+              </span>
+            )}
+          </div>
+        </div>
+        {isLong && (
+          <div className="text-[var(--text-muted)] ml-2">
+            {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+          </div>
+        )}
+      </div>
+      {(!isLong || isExpanded) && (
+        <div className="px-3.5 py-2.5 bg-[var(--bg-sidebar)]/80 border-t border-[var(--border-subtle)] font-mono text-[11.5px] text-[var(--text-secondary)] whitespace-pre-wrap leading-relaxed max-h-64 overflow-y-auto select-text">
+          {text.replace(/^<SYSTEM_MESSAGE>\s*/, '')}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const ChatStream: React.FC<ChatStreamProps> = ({
   messages,
   currentStreamContent,
+  streamingReasoning = '',
   streamingTools = [],
   isStreaming,
   retryStatus,
@@ -59,6 +129,7 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
   const [copiedFullChat, setCopiedFullChat] = useState(false);
   const [showScrollBottomBtn, setShowScrollBottomBtn] = useState(false);
   const [expandedTrajectories, setExpandedTrajectories] = useState<Record<string, boolean>>({});
+  const [expandedThinking, setExpandedThinking] = useState<Record<string, boolean>>({});
   const [feedbackMap, setFeedbackMap] = useState<Record<string, 'up' | 'down'>>({});
 
   // Active streaming timer
@@ -88,7 +159,19 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
     let activeTurn: ConversationTurn | null = null;
 
     for (const m of messages) {
-      if (m.role === 'user') {
+      const isSystem = m.role === 'system' || m.isSystemNotification;
+
+      if (isSystem) {
+        if (!activeTurn) {
+          activeTurn = {
+            id: m.id,
+            assistantMessages: [],
+            systemMessages: [m],
+          };
+        } else {
+          activeTurn.systemMessages.push(m);
+        }
+      } else if (m.role === 'user') {
         if (activeTurn) {
           list.push(activeTurn);
         }
@@ -96,12 +179,14 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
           id: m.id,
           userMessage: m,
           assistantMessages: [],
+          systemMessages: [],
         };
       } else if (m.role === 'assistant') {
         if (!activeTurn) {
           activeTurn = {
             id: m.id,
             assistantMessages: [m],
+            systemMessages: [],
           };
         } else {
           activeTurn.assistantMessages.push(m);
@@ -291,6 +376,18 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
             }
           }
 
+          // Gather thinking content
+          const thinkingParts: string[] = [];
+          for (const am of turn.assistantMessages) {
+            if (am.thinking && am.thinking.trim()) {
+              thinkingParts.push(am.thinking.trim());
+            }
+          }
+          if (isLiveInThisTurn && streamingReasoning && streamingReasoning.trim()) {
+            thinkingParts.push(streamingReasoning.trim());
+          }
+          const thinkingText = thinkingParts.join('\n\n---\n\n');
+
           // Calculate turn duration
           const lastAsst = turn.assistantMessages[turn.assistantMessages.length - 1];
           let duration = 0;
@@ -304,7 +401,11 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
             duration = turn.assistantMessages.length * 3;
           }
 
-          const hasAssistantActivity = turn.assistantMessages.length > 0 || isLiveInThisTurn;
+          const hasAssistantActivity =
+            turn.assistantMessages.length > 0 ||
+            (turn.systemMessages && turn.systemMessages.length > 0) ||
+            isLiveInThisTurn;
+          const hasTrajectoryContent = allToolCalls.length > 0 || duration > 0 || Boolean(thinkingText) || isLiveInThisTurn;
           const defaultExpanded = isLiveInThisTurn;
           const isExpanded = expandedTrajectories[turn.id] !== undefined ? expandedTrajectories[turn.id] : defaultExpanded;
           const turnTimestamp = lastAsst?.timestamp || turn.userMessage?.timestamp || Date.now();
@@ -372,11 +473,20 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
                 </div>
               )}
 
+              {/* Dedicated System Event Notifications (Background tasks, Duty alerts, Supervisor updates) */}
+              {turn.systemMessages && turn.systemMessages.length > 0 && (
+                <div className="space-y-1 py-0.5">
+                  {turn.systemMessages.map((sm) => (
+                    <SystemEventCard key={sm.id} message={sm} />
+                  ))}
+                </div>
+              )}
+
               {/* Assistant Turn Response: Unified with Single "Worked for Xs >" and Content */}
               {hasAssistantActivity && (
                 <div className="w-full space-y-2 text-xs leading-relaxed group/asst pt-1">
                   {/* Single Unified "Worked for Xs >" Banner for the entire turn */}
-                  {(allToolCalls.length > 0 || duration > 0 || isLiveInThisTurn) && (
+                  {hasTrajectoryContent && (
                     <div 
                       onClick={() => toggleTrajectory(turn.id, defaultExpanded)}
                       className="flex items-center space-x-2 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer select-none py-1 transition-colors w-fit group/trajectory font-medium"
@@ -407,9 +517,42 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
                     </div>
                   )}
 
-                  {/* Collapsible Tool Execution Records & Intermediate Steps */}
-                  {isExpanded && (allToolCalls.length > 0 || intermediateThoughts.length > 0) && (
-                    <div className="py-1 ml-0.5 animate-in fade-in duration-100">
+                  {/* Collapsible Tool Execution Records, Intermediate Steps, and Model Thought Process */}
+                  {isExpanded && (allToolCalls.length > 0 || intermediateThoughts.length > 0 || thinkingText) && (
+                    <div className="py-1 ml-0.5 animate-in fade-in duration-100 space-y-2">
+                      {thinkingText && (
+                        <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)]/40 overflow-hidden text-xs">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setExpandedThinking((prev) => ({
+                                ...prev,
+                                [turn.id]: prev[turn.id] !== undefined ? !prev[turn.id] : true,
+                              }));
+                            }}
+                            className="w-full flex items-center justify-between px-3.5 py-2 text-[11.5px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)] transition-colors select-none cursor-pointer"
+                          >
+                            <div className="flex items-center space-x-2">
+                              <Brain className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                              <span className="font-medium text-[var(--text-secondary)]">Thought Process</span>
+                              <span className="text-[10px] text-[var(--text-muted)] font-mono">
+                                ({Math.max(1, Math.round(thinkingText.length / 4))} tokens)
+                              </span>
+                            </div>
+                            {expandedThinking[turn.id] ? (
+                              <ChevronDown className="w-3.5 h-3.5 text-[var(--text-muted)]" />
+                            ) : (
+                              <ChevronRight className="w-3.5 h-3.5 text-[var(--text-muted)]" />
+                            )}
+                          </button>
+                          {expandedThinking[turn.id] && (
+                            <div className="p-3 bg-[var(--bg-sidebar)]/80 text-[11.5px] font-mono text-[var(--text-secondary)] whitespace-pre-wrap border-t border-[var(--border-subtle)] leading-relaxed max-h-72 overflow-y-auto select-text">
+                              {thinkingText}
+                            </div>
+                          )}
+                        </div>
+                      )}
                       {intermediateThoughts.map((thought, idx) => (
                         <div key={idx} className="text-[var(--text-muted)] italic text-xs py-0.5">
                           {thought}
@@ -511,7 +654,10 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
 
                   {/* Thinking indicator when streaming with no output yet */}
                   {isLiveInThisTurn && !responseText && !retryStatus && (!allToolCalls || allToolCalls.length === 0) && (
-                    <div className="text-[var(--text-muted)] italic text-xs pl-1">Thinking and analyzing...</div>
+                    <div className="flex items-center space-x-2 text-[var(--text-muted)] italic text-xs pl-1 animate-pulse">
+                      <Brain className="w-3.5 h-3.5 text-purple-400 shrink-0 animate-spin" />
+                      <span>{streamingReasoning ? 'Reasoning and analyzing...' : 'Thinking and planning...'}</span>
+                    </div>
                   )}
 
                   {/* Single Unified Turn Footer: Timestamp + Actions */}

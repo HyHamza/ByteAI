@@ -166,6 +166,10 @@ export class DataStore {
       CREATE INDEX IF NOT EXISTS idx_duty_shifts_session ON duty_shifts(session_id);
     `);
 
+    // Ensure columns for reasoning/thinking and system notifications exist
+    try { this.db.exec('ALTER TABLE messages ADD COLUMN thinking TEXT'); } catch (_) {}
+    try { this.db.exec('ALTER TABLE messages ADD COLUMN is_system_notification INTEGER DEFAULT 0'); } catch (_) {}
+
     // Prepare reusable statements
     this.stmtGetSetting = this.db.prepare('SELECT value FROM settings WHERE key = ?');
     this.stmtGetAllSettings = this.db.prepare('SELECT key, value FROM settings');
@@ -192,13 +196,15 @@ export class DataStore {
     `);
 
     this.stmtInsertMessage = this.db.prepare(`
-      INSERT INTO messages (id, session_id, role, content, timestamp, attachments, tool_calls, execution_duration)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO messages (id, session_id, role, content, timestamp, attachments, tool_calls, execution_duration, thinking, is_system_notification)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         content = excluded.content,
         attachments = excluded.attachments,
         tool_calls = excluded.tool_calls,
-        execution_duration = excluded.execution_duration
+        execution_duration = excluded.execution_duration,
+        thinking = excluded.thinking,
+        is_system_notification = excluded.is_system_notification
     `);
 
     this.stmtDeleteSession = this.db.prepare('DELETE FROM sessions WHERE id = ?');
@@ -487,6 +493,8 @@ export class DataStore {
       attachments: m.attachments ? JSON.parse(m.attachments) : undefined,
       toolCalls: m.tool_calls ? JSON.parse(m.tool_calls) : undefined,
       executionDuration: m.execution_duration || undefined,
+      thinking: m.thinking || undefined,
+      isSystemNotification: Boolean(m.is_system_notification),
     }));
 
     return {
@@ -529,7 +537,9 @@ export class DataStore {
             m.timestamp,
             m.attachments ? JSON.stringify(m.attachments) : null,
             m.toolCalls ? JSON.stringify(m.toolCalls) : null,
-            m.executionDuration || null
+            m.executionDuration || null,
+            m.thinking || null,
+            m.isSystemNotification ? 1 : 0
           );
         }
       }
@@ -580,7 +590,9 @@ export class DataStore {
         message.timestamp,
         message.attachments ? JSON.stringify(message.attachments) : null,
         message.toolCalls ? JSON.stringify(message.toolCalls) : null,
-        message.executionDuration || null
+        message.executionDuration || null,
+        message.thinking || null,
+        message.isSystemNotification ? 1 : 0
       );
       this.db.prepare('UPDATE sessions SET updated_at = ? WHERE id = ?').run(Date.now(), sessionId);
       this.db.exec('COMMIT');

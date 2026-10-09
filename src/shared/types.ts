@@ -51,6 +51,8 @@ export interface ChatMessage {
   toolCalls?: ToolExecutionRecord[];
   isStreaming?: boolean;
   executionDuration?: number;
+  thinking?: string;
+  isSystemNotification?: boolean;
 }
 
 export interface ToolExecutionRecord {
@@ -111,6 +113,12 @@ export interface StreamTokenPayload {
   delta: string;
 }
 
+export interface StreamReasoningPayload {
+  sessionId: string;
+  messageId: string;
+  delta: string;
+}
+
 export interface ToolCallPayload {
   sessionId: string;
   messageId: string;
@@ -140,6 +148,7 @@ export interface ElectronAPI {
   cancelExecution: (sessionId: string) => Promise<void>;
   pickFiles?: (types?: 'all' | 'images' | 'code') => Promise<AttachmentFile[]>;
   onStreamToken: (callback: (payload: StreamTokenPayload) => void) => () => void;
+  onStreamReasoning?: (callback: (payload: StreamReasoningPayload) => void) => () => void;
   onStreamRetry?: (callback: (payload: StreamRetryPayload) => void) => () => void;
   onToolCallUpdate: (callback: (payload: ToolCallPayload) => void) => () => void;
   onExecutionCompleted: (callback: (sessionId: string) => void) => () => void;

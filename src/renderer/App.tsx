@@ -49,6 +49,7 @@ export const App: React.FC = () => {
   // Streaming state
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
+  const [streamingReasoning, setStreamingReasoning] = useState('');
   const [streamingTools, setStreamingTools] = useState<ToolExecutionRecord[]>([]);
   const [retryStatus, setRetryStatus] = useState<{ attempt: number; maxRetries: number; delayMs: number; reason: string } | null>(null);
 
@@ -141,6 +142,14 @@ export const App: React.FC = () => {
       }
     });
 
+    const unsubReasoning = api.onStreamReasoning?.((payload) => {
+      if (payload.sessionId === activeSessionIdRef.current) {
+        setIsStreaming(true);
+        setRetryStatus(null);
+        setStreamingReasoning((prev) => prev + payload.delta);
+      }
+    });
+
     const unsubRetry = api.onStreamRetry?.((payload) => {
       if (payload.sessionId === activeSessionIdRef.current) {
         setRetryStatus({
@@ -179,6 +188,7 @@ export const App: React.FC = () => {
         setIsStreaming(false);
         setRetryStatus(null);
         setStreamingContent('');
+        setStreamingReasoning('');
         setStreamingTools([]);
         api.listSessions().then((list: ChatSession[]) => setSessions(list));
       }
@@ -193,6 +203,7 @@ export const App: React.FC = () => {
     const unsubSessions = api.onSessionsUpdated?.((newList: ChatSession[]) => {
       setSessions(newList);
       setStreamingContent('');
+      setStreamingReasoning('');
       setStreamingTools([]);
     });
 
@@ -226,6 +237,7 @@ export const App: React.FC = () => {
 
     return () => {
       unsubToken();
+      unsubReasoning?.();
       unsubRetry?.();
       unsubTool();
       unsubCompleted();
@@ -653,6 +665,7 @@ export const App: React.FC = () => {
               <ChatStream
                 messages={activeSession?.messages || []}
                 currentStreamContent={streamingContent}
+                streamingReasoning={streamingReasoning}
                 streamingTools={streamingTools}
                 isStreaming={isStreaming}
                 retryStatus={retryStatus}

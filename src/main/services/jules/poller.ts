@@ -292,7 +292,7 @@ SUPERVISOR DIRECTIVES FOR BYTE:
     this.processingActivities.add(agentMsgAct.id);
 
     try {
-      await AgentOrchestrator.getInstance().runAutonomousTurn(chatSession.id, supervisorPrompt);
+      await AgentOrchestrator.getInstance().runAutonomousTurn(chatSession.id, supervisorPrompt, undefined, true);
 
       // Verify if Jules received a reply
       const updatedActs = await client.listActivities(s.id).catch(() => []);
@@ -386,7 +386,7 @@ CRITICAL DIRECTIVES FOR BYTE:
    - If more phases/work remain: formulate the next specification and call 'jules_continue_session' NOW.
    - If ALL work on this task is completely finished, or if you are leaving this session: call 'jules_finalize_and_merge' with session_id: "${s.id}" to merge all commits into the local workspace and remote origin, then present your final summary to the user.`;
 
-      AgentOrchestrator.getInstance().runAutonomousTurn(chatSession.id, summaryMsg).catch(console.error);
+      AgentOrchestrator.getInstance().runAutonomousTurn(chatSession.id, summaryMsg, undefined, true).catch(console.error);
     }
   }
 }

@@ -20,6 +20,7 @@ export interface LLMToolDefinition {
 
 export interface LLMStreamCallbacks {
   onToken: (token: string) => void;
+  onReasoning?: (chunk: string) => void;
   onToolCallDelta?: (toolCall: any) => void;
   onRetry?: (attempt: number, maxRetries: number, delayMs: number, reason: string) => void;
 }
@@ -222,7 +223,7 @@ export class LLMClient {
     tools: LLMToolDefinition[] | undefined,
     callbacks: LLMStreamCallbacks,
     options?: { maxRetries?: number }
-  ): Promise<{ content: string; toolCalls: any[] }> {
+  ): Promise<{ content: string; reasoning?: string; toolCalls: any[] }> {
     const MAX_RETRIES = options?.maxRetries !== undefined ? options.maxRetries : 9;
     let attempt = 0;
 
@@ -332,7 +333,7 @@ export class LLMClient {
     tools: LLMToolDefinition[] | undefined,
     callbacks: LLMStreamCallbacks,
     overrideModel?: string
-  ): Promise<{ content: string; toolCalls: any[] }> {
+  ): Promise<{ content: string; reasoning?: string; toolCalls: any[] }> {
     const { baseUrl, apiKey, modelToUse } = this.getNormalizedConfig();
     const effectiveModel = overrideModel || modelToUse;
     const url = `${baseUrl}/chat/completions`;
@@ -366,6 +367,7 @@ export class LLMClient {
       };
 
       let completeContent = '';
+      let completeReasoning = '';
       const accumulatedToolCalls: Record<number, any> = {};
 
       const req = transport.request(reqOptions, (res) => {
@@ -399,9 +401,17 @@ export class LLMClient {
                 if (delta.content) {
                   completeContent += delta.content;
                   callbacks.onToken(delta.content);
-                } else if ((delta.reasoning || delta.thought || delta.reasoning_content) && !delta.tool_calls) {
-                  const reasoningChunk = delta.reasoning || delta.thought || delta.reasoning_content;
-                  callbacks.onToken(reasoningChunk);
+                }
+
+                // Handle model reasoning/thinking
+                const reasoningChunk = delta.reasoning || delta.thought || delta.reasoning_content;
+                if (reasoningChunk) {
+                  completeReasoning += reasoningChunk;
+                  if (callbacks.onReasoning) {
+                    callbacks.onReasoning(reasoningChunk);
+                  } else {
+                    callbacks.onToken(reasoningChunk);
+                  }
                 }
 
                 // Handle tool calls streaming
@@ -436,12 +446,20 @@ export class LLMClient {
 
         res.on('end', () => {
           const finalToolCalls = Object.values(accumulatedToolCalls);
-          if (!completeContent.trim() && finalToolCalls.length === 0) {
-            reject(new Error('Upstream model returned empty completion (0 tokens and 0 tool calls)'));
+          if (!completeContent.trim() && !completeReasoning.trim() && finalToolCalls.length === 0) {
+            reject(new Error('Upstream model returned empty completion (0 tokens, 0 reasoning, and 0 tool calls)'));
             return;
           }
+
+          // If the model produced reasoning but completeContent is empty and no tool calls:
+          // The model concluded its output directly inside reasoning!
+          if (!completeContent.trim() && completeReasoning.trim() && finalToolCalls.length === 0) {
+            completeContent = completeReasoning.trim();
+          }
+
           resolve({
             content: completeContent,
+            reasoning: completeReasoning || undefined,
             toolCalls: finalToolCalls,
           });
         });

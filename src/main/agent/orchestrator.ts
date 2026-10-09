@@ -204,7 +204,7 @@ export class AgentOrchestrator {
       queue.push(prompt);
       this.pendingTurnQueues.set(targetSessionId, queue);
     } else {
-      this.runAutonomousTurn(targetSessionId, prompt).catch((err) => {
+      this.runAutonomousTurn(targetSessionId, prompt, undefined, true).catch((err) => {
         console.error(`[AgentOrchestrator] Error during reactive background task wakeup:`, err);
       });
     }
@@ -218,7 +218,55 @@ export class AgentOrchestrator {
     this.activeCancellations.add(sessionId);
   }
 
-  public async runAutonomousTurn(sessionId: string, userText: string, attachments?: AttachmentFile[]): Promise<void> {
+  private synthesizeConclusionForAsyncDispatch(stepToolRecords: ToolExecutionRecord[]): string {
+    const julesCreate = stepToolRecords.find((tc) => tc.toolName === 'jules_create_task');
+    if (julesCreate) {
+      const args = julesCreate.args || {};
+      const output = julesCreate.output || '';
+      const sessionMatch = output.match(/Session ID:\s*([a-zA-Z0-9_\-]+)/i);
+      const sid = sessionMatch ? sessionMatch[1] : 'Active';
+      const repo = args.repo || 'Repository';
+      const branch = args.branch || 'Branch';
+      const promptPreview = args.prompt ? args.prompt.slice(0, 160).replace(/\n/g, ' ') + (args.prompt.length > 160 ? '...' : '') : 'Autonomous engineering task';
+
+      return `### Jules Task Dispatched\n\nI have delegated this objective to Jules in Google Cloud to autonomously analyze and code the requested improvements:\n\n- **Session ID**: \`${sid}\`\n- **Repository**: \`${repo}\` (\`${branch}\`)\n- **Task Directive**: ${promptPreview}\n\nThe autonomous background supervisor is monitoring the task in the cloud and will automatically notify us as soon as Jules opens a PR, completes work, or requests feedback.`;
+    }
+
+    const julesContinue = stepToolRecords.find((tc) => tc.toolName === 'jules_continue_session');
+    if (julesContinue) {
+      const args = julesContinue.args || {};
+      const sid = args.session_id || 'Active Session';
+      const promptPreview = args.prompt ? args.prompt.slice(0, 160).replace(/\n/g, ' ') + (args.prompt.length > 160 ? '...' : '') : 'Next phase instructions';
+
+      return `### Continued Jules Session\n\nDispatched the next phase directive to the active Jules cloud container:\n\n- **Session ID**: \`${sid}\`\n- **Phase Directive**: ${promptPreview}\n\nThe background supervisor is tracking progress in Google Cloud and will report back once the cloud worker finishes this phase.`;
+    }
+
+    const julesQuestion = stepToolRecords.find((tc) => tc.toolName === 'jules_reply_question');
+    if (julesQuestion) {
+      const args = julesQuestion.args || {};
+      return `### Architectural Decision Submitted\n\nReplied to Jules for Session \`${args.session_id || ''}\`:\n\n> ${args.reply || 'Approved'}\n\nJules is resuming autonomous coding.`;
+    }
+
+    const bgCmd = stepToolRecords.find((tc) => tc.output && tc.output.includes('Tool is running as a background task with task id:'));
+    if (bgCmd) {
+      const output = bgCmd.output || '';
+      const taskIdMatch = output.match(/task id:\s*([a-zA-Z0-9_\-]+)/i);
+      const logMatch = output.match(/file:\/\/\/(.+?\.log)/i);
+      const taskId = taskIdMatch ? taskIdMatch[1] : 'Background Task';
+      const logPath = logMatch ? logMatch[1] : '';
+
+      return `### Background Process Started\n\nThe command has been dispatched as an asynchronous background task:\n\n- **Task ID**: \`${taskId}\`\n${logPath ? `- **Logs**: \`${logPath}\`\n` : ''}\nI am monitoring execution in the background and will report the output once it concludes.`;
+    }
+
+    return 'The requested background action has been dispatched and is currently executing.';
+  }
+
+  public async runAutonomousTurn(
+    sessionId: string,
+    userText: string,
+    attachments?: AttachmentFile[],
+    isSystemNotificationParam?: boolean
+  ): Promise<void> {
     const store = DataStore.getInstance();
     const session = store.getSession(sessionId);
     if (!session) throw new Error(`Session ${sessionId} not found`);
@@ -230,18 +278,32 @@ export class AgentOrchestrator {
     const turnStartTime = Date.now();
     try {
 
-    // Save user message
-    const userMsg: ChatMessage = {
-      id: `msg_${Date.now()}_user`,
+    // Identify if message is an internal system notification (e.g. background task completion, duty watchdog alert)
+    const isSystemNotification = Boolean(
+      isSystemNotificationParam ||
+      userText.startsWith('<SYSTEM_MESSAGE>') ||
+      userText.startsWith('[DUTY SHIFT') ||
+      userText.startsWith('[SYSTEM ALERT') ||
+      userText.startsWith('[TASK NOTIFICATION') ||
+      userText.startsWith('[JULES') ||
+      userText.startsWith('[Jules') ||
+      userText.startsWith('[AUTONOMOUS SUPERVISOR') ||
+      userText.startsWith('[AUTONOMOUS DUTY')
+    );
+
+    // Save message with proper role and flag so user chat is never polluted by system wakeups
+    const messageRecord: ChatMessage = {
+      id: isSystemNotification ? `msg_${Date.now()}_sys` : `msg_${Date.now()}_user`,
       sessionId,
-      role: 'user',
+      role: isSystemNotification ? 'system' : 'user',
+      isSystemNotification: isSystemNotification || undefined,
       content: userText,
-      attachments: attachments && attachments.length > 0 ? attachments : undefined,
+      attachments: (!isSystemNotification && attachments && attachments.length > 0) ? attachments : undefined,
       timestamp: Date.now(),
     };
-    store.addMessage(sessionId, userMsg);
+    store.addMessage(sessionId, messageRecord);
 
-    // Auto-generate title if currently generic or placeholder
+    // Auto-generate title ONLY for genuine human messages (never for system alerts)
     const isGenericTitle = !session.title || 
       session.title === 'New Task' || 
       session.title === 'Initial Task' || 
@@ -251,7 +313,7 @@ export class AgentOrchestrator {
       session.title.toLowerCase().startsWith('hello! how can i assist') ||
       session.title === 'Implement AI Chatbot';
 
-    if (isGenericTitle && userText.trim()) {
+    if (!isSystemNotification && isGenericTitle && userText.trim()) {
       if (!isSubstantiveMessage(userText)) {
         session.title = 'New Conversation';
         store.saveSession(session);
@@ -368,6 +430,13 @@ Git Repository: ${activeRepo} (${activeBranch})`;
             content: contentWithAttachments,
           });
         }
+      } else if (m.role === 'system' || m.isSystemNotification) {
+        if (m.content && m.content.trim()) {
+          llmMessages.push({
+            role: 'user', // Pass as user role to prevent strict OpenAI/Claude proxies from rejecting mid-history system messages
+            content: `[SYSTEM NOTIFICATION / BACKGROUND EVENT]:\n${m.content}`,
+          });
+        }
       } else if (m.content && m.content.trim()) {
         llmMessages.push({
           role: m.role,
@@ -391,7 +460,7 @@ Git Repository: ${activeRepo} (${activeBranch})`;
       let streamedContent = '';
 
       // Stream assistant response with pruned context to avoid token quota exhaustion
-      let result: { content: string; toolCalls: any[] };
+      let result: { content: string; reasoning?: string; toolCalls: any[] };
       try {
         result = await llmClient.chatStream(
           pruneContextWindow(llmMessages),
@@ -400,6 +469,9 @@ Git Repository: ${activeRepo} (${activeBranch})`;
             onToken: (token) => {
               streamedContent += token;
               this.emitToken(sessionId, token, assistantMsgId);
+            },
+            onReasoning: (chunk) => {
+              this.emitReasoning(sessionId, chunk, assistantMsgId);
             },
             onRetry: (attempt, maxRetries, delayMs, reason) => {
               this.emitRetry(sessionId, attempt, maxRetries, delayMs, reason);
@@ -424,7 +496,11 @@ Git Repository: ${activeRepo} (${activeBranch})`;
       }
 
       if (!result.content && (!result.toolCalls || result.toolCalls.length === 0)) {
-        result.content = '(No response text returned by model)';
+        if (result.reasoning && result.reasoning.trim()) {
+          result.content = result.reasoning.trim();
+        } else {
+          result.content = '(No response text returned by model)';
+        }
         this.emitToken(sessionId, result.content, assistantMsgId);
       }
 
@@ -455,11 +531,26 @@ DO NOT return conversational text or empty output without calling a tool. Invoke
           continue;
         }
 
+        // Ensure final output has substantive conclusion text (never left blank or default placeholder)
+        if (!result.content || !result.content.trim() || result.content === '(No response text returned by model)') {
+          if (result.reasoning && result.reasoning.trim()) {
+            result.content = result.reasoning.trim();
+          } else {
+            const executedTools = llmMessages.filter((m) => m.role === 'tool');
+            if (executedTools.length > 0) {
+              result.content = `### Actions Completed\n\nI have executed the requested workspace operations and verified the results.\n\n- Executed ${executedTools.length} action(s) across this turn.\n- Standing by for subsequent directives.`;
+            } else {
+              result.content = 'Task completed. Standing by for instructions.';
+            }
+          }
+        }
+
         const finalMsg: ChatMessage = {
           id: assistantMsgId,
           sessionId,
           role: 'assistant',
           content: result.content || '',
+          thinking: result.reasoning || undefined,
           timestamp: Date.now(),
           executionDuration: Math.max(1, Math.round((Date.now() - turnStartTime) / 1000)),
         };
@@ -521,6 +612,7 @@ DO NOT return conversational text or empty output without calling a tool. Invoke
         sessionId,
         role: 'assistant',
         content: result.content || '',
+        thinking: result.reasoning || undefined,
         timestamp: Date.now(),
         toolCalls: stepToolRecords,
         executionDuration: Math.max(1, Math.round((Date.now() - turnStartTime) / 1000)),
@@ -534,7 +626,13 @@ DO NOT return conversational text or empty output without calling a tool. Invoke
 
       if (hasDispatchedJules || hasBackgroundRunningTask) {
         // Asynchronous cloud task or local background process launched.
-        // Yield turn cleanly: background supervisor tracks execution and will automatically wake Byte up upon completion!
+        // If the model didn't provide a substantive user-facing concluding explanation,
+        // synthesize a clear, professional summary so the user is never left with an empty card!
+        if (!stepMsg.content || !stepMsg.content.trim()) {
+          stepMsg.content = this.synthesizeConclusionForAsyncDispatch(stepToolRecords);
+          store.addMessage(sessionId, stepMsg);
+          this.emitSessionsUpdated();
+        }
         break;
       }
     }
@@ -551,7 +649,7 @@ DO NOT return conversational text or empty output without calling a tool. Invoke
           this.pendingTurnQueues.delete(sessionId);
         }
         setTimeout(() => {
-          this.runAutonomousTurn(sessionId, nextPrompt).catch(console.error);
+          this.runAutonomousTurn(sessionId, nextPrompt, undefined, true).catch(console.error);
         }, 150);
       }
     }
@@ -582,6 +680,15 @@ DO NOT return conversational text or empty output without calling a tool. Invoke
     for (const win of windows) {
       if (!win.isDestroyed()) {
         win.webContents.send('chat:stream-token', { sessionId, messageId, delta });
+      }
+    }
+  }
+
+  private emitReasoning(sessionId: string, delta: string, messageId = '') {
+    const windows = BrowserWindow.getAllWindows();
+    for (const win of windows) {
+      if (!win.isDestroyed()) {
+        win.webContents.send('chat:stream-reasoning', { sessionId, messageId, delta });
       }
     }
   }

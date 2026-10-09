@@ -148,7 +148,7 @@ You MUST continue working on the overarching mission: "${active.missionPrompt}".
 2. CRITICAL: YOU MUST CALL THE TOOL! DO NOT return conversational text without calling a tool!
 Invoke the tool NOW to continue duty!`;
 
-        orchestrator.runAutonomousTurn(active.sessionId, watchdogPrompt).catch(console.error);
+        orchestrator.runAutonomousTurn(active.sessionId, watchdogPrompt, undefined, true).catch(console.error);
       }
     }
   }
@@ -294,7 +294,7 @@ Previous phase (${title || julesSessionId.slice(0, 8)}) was successfully complet
 Formulate Phase ${active.phasesCompleted.length + 1} specification to continue the overarching mission ("${active.missionPrompt}") and call 'jules_create_task' NOW!`;
 
       // Trigger next autonomous turn on the chat session
-      AgentOrchestrator.getInstance().runAutonomousTurn(active.sessionId, nextPrompt).catch((err) => {
+      AgentOrchestrator.getInstance().runAutonomousTurn(active.sessionId, nextPrompt, undefined, true).catch((err) => {
         console.error('[DutyManager] Error triggering next duty turn:', err);
       });
       return true;
@@ -343,7 +343,7 @@ Generate a comprehensive, beautifully structured **Senior Engineer Shift Handove
 3. Key architectural decisions and enhancements.
 4. Next recommended steps for the user.`;
 
-    AgentOrchestrator.getInstance().runAutonomousTurn(shift.sessionId, handoverPrompt).catch((err) => {
+    AgentOrchestrator.getInstance().runAutonomousTurn(shift.sessionId, handoverPrompt, undefined, true).catch((err) => {
       console.error('[DutyManager] Error triggering handover report:', err);
     });
     return true;

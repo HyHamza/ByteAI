@@ -283,7 +283,7 @@ function setupIpcHandlers() {
 
   ipcMain.handle('chat:send-message', async (_, { sessionId, text, attachments }: { sessionId: string; text: string; attachments?: AttachmentFile[] }) => {
     // Run the autonomous agent loop in the background!
-    orchestrator.runAutonomousTurn(sessionId, text, attachments).catch((err) => {
+    orchestrator.runAutonomousTurn(sessionId, text, attachments, false).catch((err) => {
       console.error('Error during autonomous agent turn:', err);
     });
   });
