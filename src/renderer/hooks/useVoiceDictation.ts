@@ -8,7 +8,7 @@ interface VoiceDictationOptions {
 }
 
 export function useVoiceDictation(options: VoiceDictationOptions = {}) {
-  const { onFinalTranscript, onInterimTranscript, lang = 'en-US' } = options;
+  const { onFinalTranscript, onInterimTranscript } = options;
 
   const [isListening, setIsListening] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0); // 0 to 100 for live visualizer
@@ -16,49 +16,77 @@ export function useVoiceDictation(options: VoiceDictationOptions = {}) {
   const [error, setError] = useState<string | null>(null);
 
   const isListeningRef = useRef(false);
-  const audioContextRef = useRef<AudioContext | null>(null);
+  const isTranscribingRef = useRef(false);
   const mediaStreamRef = useRef<MediaStream | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const audioContextRef = useRef<AudioContext | null>(null);
   const animFrameRef = useRef<number | null>(null);
-  const recognitionRef = useRef<any>(null);
-  const unsubscribersRef = useRef<Array<() => void>>([]);
+  const hasSpokenRef = useRef(false);
+  const lastSpokenTimeRef = useRef(0);
+  const silenceTimerRef = useRef<any>(null);
 
-  const isNativeSupported = typeof window !== 'undefined' && Boolean((window as any).electronAPI?.startSpeech);
-  const isWebSpeechSupported = typeof window !== 'undefined' && Boolean((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
-  const isSupported = isNativeSupported || isWebSpeechSupported;
+  const isSupported = typeof window !== 'undefined' && 
+    typeof navigator !== 'undefined' && 
+    Boolean(navigator.mediaDevices) && 
+    typeof window.MediaRecorder !== 'undefined';
 
-  const stopListening = useCallback(() => {
+  const transcribeCurrentAudio = useCallback(async (blob: Blob) => {
+    if (!blob || blob.size < 1000) return;
+    if (!api.transcribeAudio) return;
+
+    try {
+      isTranscribingRef.current = true;
+      setInterimText('Transcribing with Whisper...');
+      onInterimTranscript?.('Transcribing with Whisper...');
+
+      const arrayBuffer = await blob.arrayBuffer();
+      const res = await api.transcribeAudio(arrayBuffer, blob.type || 'audio/webm');
+
+      if (res.error) {
+        setError(res.error);
+      } else if (res.text && res.text.trim()) {
+        const cleaned = res.text.trim();
+        onFinalTranscript?.(cleaned);
+        setError(null);
+      }
+    } catch (err: any) {
+      console.error('Groq Whisper transcription error:', err);
+      setError(`Transcription error: ${err.message || 'Failed to process audio'}`);
+    } finally {
+      isTranscribingRef.current = false;
+      setInterimText('');
+      onInterimTranscript?.('');
+    }
+  }, [onFinalTranscript, onInterimTranscript]);
+
+  const stopListening = useCallback(async () => {
+    if (!isListeningRef.current) return;
     isListeningRef.current = false;
     setIsListening(false);
-    setInterimText('');
     setAudioLevel(0);
 
-    // Unsubscribe native listeners
-    unsubscribersRef.current.forEach((unsub) => {
-      try {
-        unsub();
-      } catch (_) {}
-    });
-    unsubscribersRef.current = [];
-
-    // Stop native speech engine
-    if (isNativeSupported && api.stopSpeech) {
-      api.stopSpeech().catch(() => {});
+    if (silenceTimerRef.current) {
+      clearInterval(silenceTimerRef.current);
+      silenceTimerRef.current = null;
     }
 
-    // Stop browser web speech fallback
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch (_) {}
-      recognitionRef.current = null;
-    }
-
-    // Stop audio stream and visualizer context
     if (animFrameRef.current) {
       cancelAnimationFrame(animFrameRef.current);
       animFrameRef.current = null;
     }
 
+    // Stop MediaRecorder and trigger final transcription
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== 'inactive') {
+      try {
+        recorder.requestData();
+        recorder.stop();
+      } catch (_) {}
+    }
+    mediaRecorderRef.current = null;
+
+    // Stop microphone tracks
     if (mediaStreamRef.current) {
       mediaStreamRef.current.getTracks().forEach((track) => track.stop());
       mediaStreamRef.current = null;
@@ -68,167 +96,128 @@ export function useVoiceDictation(options: VoiceDictationOptions = {}) {
       audioContextRef.current.close().catch(() => {});
       audioContextRef.current = null;
     }
-  }, [isNativeSupported]);
+  }, []);
 
   const startListening = useCallback(async () => {
     setError(null);
     setInterimText('');
+    audioChunksRef.current = [];
+    hasSpokenRef.current = false;
+    lastSpokenTimeRef.current = 0;
 
     if (!isSupported) {
-      setError('Voice recognition is not supported on this platform.');
+      setError('Microphone audio recording is not supported in this environment.');
       return;
     }
 
-    // 1. Setup audio analyser for live waveform bars
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // 1. Request microphone access
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          channelCount: 1,
+          sampleRate: 16000,
+          echoCancellation: true,
+          noiseSuppression: true,
+        }
+      });
       mediaStreamRef.current = stream;
 
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-      if (AudioCtx) {
-        const audioCtx = new AudioCtx();
-        audioContextRef.current = audioCtx;
-        const source = audioCtx.createMediaStreamSource(stream);
-        const analyser = audioCtx.createAnalyser();
-        analyser.fftSize = 64;
-        source.connect(analyser);
+      // 2. Setup AudioContext for live 60fps waveform animation and VAD silence tracking
+      try {
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioCtx) {
+          const audioCtx = new AudioCtx();
+          audioContextRef.current = audioCtx;
+          const source = audioCtx.createMediaStreamSource(stream);
+          const analyser = audioCtx.createAnalyser();
+          analyser.fftSize = 64;
+          source.connect(analyser);
 
-        const dataArray = new Uint8Array(analyser.frequencyBinCount);
-        const updateAudioLevel = () => {
-          if (!isListeningRef.current) return;
-          analyser.getByteFrequencyData(dataArray);
-          let sum = 0;
-          for (let i = 0; i < dataArray.length; i++) {
-            sum += dataArray[i];
-          }
-          const average = sum / dataArray.length;
-          const normalized = Math.min(100, Math.round((average / 128) * 100));
-          setAudioLevel(normalized);
+          const dataArray = new Uint8Array(analyser.frequencyBinCount);
+          const updateAudioLevel = () => {
+            if (!isListeningRef.current) return;
+            analyser.getByteFrequencyData(dataArray);
+            let sum = 0;
+            for (let i = 0; i < dataArray.length; i++) {
+              sum += dataArray[i];
+            }
+            const average = sum / dataArray.length;
+            const normalized = Math.min(100, Math.round((average / 128) * 100));
+            setAudioLevel(normalized);
+
+            if (normalized > 14) {
+              hasSpokenRef.current = true;
+              lastSpokenTimeRef.current = Date.now();
+            }
+
+            animFrameRef.current = requestAnimationFrame(updateAudioLevel);
+          };
           animFrameRef.current = requestAnimationFrame(updateAudioLevel);
-        };
-        animFrameRef.current = requestAnimationFrame(updateAudioLevel);
+        }
+      } catch (audioErr) {
+        console.warn('AudioContext visualization setup note:', audioErr);
       }
-    } catch (micErr: any) {
-      console.warn('Microphone stream access note:', micErr);
-      if (micErr.name === 'NotAllowedError' || micErr.name === 'PermissionDeniedError') {
-        setError('Microphone access was denied. Please allow microphone permissions.');
-        return;
-      }
-    }
 
-    // 2. Prefer Native Electron Speech Engine (Windows native / offline / real-time streaming)
-    if (isNativeSupported && api.startSpeech) {
+      // 3. Setup MediaRecorder
+      let mimeType = 'audio/webm;codecs=opus';
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '';
+      }
+
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          audioChunksRef.current.push(e.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        if (audioChunksRef.current.length > 0) {
+          const recordedBlob = new Blob(audioChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+          audioChunksRef.current = [];
+          if (hasSpokenRef.current || recordedBlob.size > 2000) {
+            transcribeCurrentAudio(recordedBlob);
+          }
+        }
+      };
+
+      recorder.start(500); // chunk every 500ms
       isListeningRef.current = true;
       setIsListening(true);
 
-      const unsubs: Array<() => void> = [];
-
-      if (api.onSpeechInterim) {
-        unsubs.push(
-          api.onSpeechInterim(({ text }) => {
-            setInterimText(text);
-            onInterimTranscript?.(text);
-          })
-        );
-      }
-
-      if (api.onSpeechFinal) {
-        unsubs.push(
-          api.onSpeechFinal(({ text }) => {
-            if (text && text.trim()) {
-              onFinalTranscript?.(text.trim());
-            }
-            setInterimText('');
-          })
-        );
-      }
-
-      if (api.onSpeechStatus) {
-        unsubs.push(
-          api.onSpeechStatus((status) => {
-            if (!status.isListening && isListeningRef.current) {
-              stopListening();
-            }
-            if (status.error) {
-              setError(status.error);
-            }
-          })
-        );
-      }
-
-      if (api.onSpeechError) {
-        unsubs.push(
-          api.onSpeechError(({ error: errText }) => {
-            setError(errText);
-            stopListening();
-          })
-        );
-      }
-
-      unsubscribersRef.current = unsubs;
-
-      const res = await api.startSpeech(lang);
-      if (!res.success) {
-        setError(res.error || 'Failed to start native speech recognizer');
-        stopListening();
-      }
-      return;
-    }
-
-    // 3. Web Speech Fallback (if running outside Electron)
-    const SpeechRecognitionClass = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (SpeechRecognitionClass) {
-      const recognition = new SpeechRecognitionClass();
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.lang = lang || navigator.language || 'en-US';
-      recognition.maxAlternatives = 1;
-
-      recognition.onstart = () => {
-        isListeningRef.current = true;
-        setIsListening(true);
-        setError(null);
-      };
-
-      recognition.onresult = (event: any) => {
-        let currentInterim = '';
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          const chunk = event.results[i][0]?.transcript || '';
-          if (event.results[i].isFinal) {
-            if (chunk.trim()) onFinalTranscript?.(chunk);
-          } else {
-            currentInterim += chunk;
+      // 4. Auto-detect silence after speech (1.5 seconds of silence automatically commits transcription)
+      silenceTimerRef.current = setInterval(() => {
+        if (!isListeningRef.current || isTranscribingRef.current) return;
+        if (hasSpokenRef.current && lastSpokenTimeRef.current > 0) {
+          const elapsedSinceSpeech = Date.now() - lastSpokenTimeRef.current;
+          if (elapsedSinceSpeech > 1500 && audioChunksRef.current.length > 0) {
+            // Snapshot current audio and transcribe
+            recorder.requestData();
+            setTimeout(() => {
+              if (audioChunksRef.current.length > 0) {
+                const recordedBlob = new Blob(audioChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+                audioChunksRef.current = [];
+                hasSpokenRef.current = false;
+                lastSpokenTimeRef.current = 0;
+                transcribeCurrentAudio(recordedBlob);
+              }
+            }, 100);
           }
         }
-        setInterimText(currentInterim);
-        onInterimTranscript?.(currentInterim);
-      };
+      }, 300);
 
-      recognition.onerror = (event: any) => {
-        if (event.error === 'no-speech') return;
-        if (event.error === 'not-allowed') {
-          setError('Microphone permission denied.');
-        } else if (event.error === 'network') {
-          setError('Speech service unavailable in browser.');
-        } else {
-          setError(`Speech error: ${event.error}`);
-        }
-        stopListening();
-      };
-
-      recognition.onend = () => {
-        stopListening();
-      };
-
-      recognitionRef.current = recognition;
-      try {
-        recognition.start();
-      } catch (err: any) {
-        setError(err.message || 'Failed to start browser recognition');
-        stopListening();
+    } catch (err: any) {
+      console.error('Failed to access microphone:', err);
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        setError('Microphone access was denied. Please allow microphone permissions.');
+      } else {
+        setError(`Microphone error: ${err.message || 'Unable to access microphone'}`);
       }
+      stopListening();
     }
-  }, [lang, isNativeSupported, isSupported, onFinalTranscript, onInterimTranscript, stopListening]);
+  }, [isSupported, stopListening, transcribeCurrentAudio]);
 
   const toggleListening = useCallback(() => {
     if (isListening) {

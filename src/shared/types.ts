@@ -22,6 +22,7 @@ export interface AppSettings {
   julesDefaultBranch: string;
   maxAutonomousTurns: number;
   activeWorkspacePath: string | null;
+  groqApiKey?: string;
 }
 
 export interface AttachmentFile {
@@ -172,12 +173,7 @@ export interface ElectronAPI {
   getTaskLogs?: (taskId: string) => Promise<{ status: string; exitCode: number | null; output: string; logPath: string; isRunning: boolean }>;
   killTask?: (taskId: string) => Promise<string>;
 
-  // Speech Dictation API
-  startSpeech?: (lang?: string) => Promise<{ success: boolean; error?: string }>;
-  stopSpeech?: () => Promise<boolean>;
-  onSpeechInterim?: (callback: (payload: { text: string }) => void) => () => void;
-  onSpeechFinal?: (callback: (payload: { text: string }) => void) => () => void;
-  onSpeechStatus?: (callback: (payload: { isListening: boolean; error?: string }) => void) => () => void;
-  onSpeechError?: (callback: (payload: { error: string }) => void) => () => void;
+  // Speech Dictation API (Groq Whisper)
+  transcribeAudio?: (audioData: ArrayBuffer | Uint8Array, mimeType?: string) => Promise<{ text: string; error?: string }>;
 }
 

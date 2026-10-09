@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Save, Globe, Sparkles, Sliders } from 'lucide-react';
+import { X, Save, Globe, Sparkles, Sliders, Mic } from 'lucide-react';
 import type { AppSettings } from '@/shared/types';
 
 interface SettingsModalProps {
@@ -124,6 +124,38 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 placeholder="main"
                 className="w-full bg-[#121316] border border-[#282a30] rounded-lg px-3 py-1.5 text-[#e3e3e3] focus:outline-none focus:border-sky-500 font-mono text-xs"
               />
+            </div>
+          </div>
+
+          {/* Voice Dictation (Groq Whisper) */}
+          <div className="border-t border-[#24262b] pt-3.5 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-1.5 text-xs font-semibold text-[#f0f1f4]">
+                <Mic className="w-3.5 h-3.5 text-rose-400" />
+                <span>Voice Dictation (Groq Whisper AI)</span>
+              </div>
+              <a
+                href="https://console.groq.com/keys"
+                target="_blank"
+                rel="noreferrer"
+                className="text-[11px] text-[#70a6ff] hover:underline cursor-pointer"
+              >
+                Get Free API Key ↗
+              </a>
+            </div>
+
+            <div>
+              <label className="block text-[11px] text-[#8e9196] mb-1">Groq API Key</label>
+              <input
+                type="password"
+                value={form.groqApiKey || ''}
+                onChange={(e) => setForm({ ...form, groqApiKey: e.target.value })}
+                placeholder="gsk_..."
+                className="w-full bg-[#121316] border border-[#282a30] rounded-lg px-3 py-1.5 text-[#e3e3e3] focus:outline-none focus:border-rose-400 font-mono text-xs"
+              />
+              <span className="text-[10px] text-[#6c707a] mt-1 block">
+                Powers ultra-fast (~200ms) OpenAI Whisper Large v3 voice transcription. 100% free with no credit card required.
+              </span>
             </div>
           </div>
 

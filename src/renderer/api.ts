@@ -19,6 +19,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   julesDefaultBranch: 'main',
   maxAutonomousTurns: 50,
   activeWorkspacePath: null,
+  groqApiKey: '',
 };
 
 // Fallback in-memory storage for web browser preview or when Electron preload isn't attached
@@ -153,12 +154,7 @@ const mockAPI: ElectronAPI = {
   onAgentStatus: () => () => {},
   onJulesAllSessions: () => () => {},
   onJulesUpdate: () => () => {},
-  startSpeech: async () => ({ success: true }),
-  stopSpeech: async () => true,
-  onSpeechInterim: () => () => {},
-  onSpeechFinal: () => () => {},
-  onSpeechStatus: () => () => {},
-  onSpeechError: () => () => {},
+  transcribeAudio: async () => ({ text: 'Mock transcribed text' }),
 };
 
 export const api: ElectronAPI =

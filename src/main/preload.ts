@@ -92,29 +92,8 @@ const api: ElectronAPI = {
   getTaskLogs: (taskId: string) => ipcRenderer.invoke('task:get-logs', { taskId }),
   killTask: (taskId: string) => ipcRenderer.invoke('task:kill', { taskId }),
 
-  // Speech Dictation
-  startSpeech: (lang?: string) => ipcRenderer.invoke('speech:start', { lang }),
-  stopSpeech: () => ipcRenderer.invoke('speech:stop'),
-  onSpeechInterim: (callback: (payload: { text: string }) => void) => {
-    const handler = (_: any, payload: { text: string }) => callback(payload);
-    ipcRenderer.on('speech:interim', handler);
-    return () => ipcRenderer.removeListener('speech:interim', handler);
-  },
-  onSpeechFinal: (callback: (payload: { text: string }) => void) => {
-    const handler = (_: any, payload: { text: string }) => callback(payload);
-    ipcRenderer.on('speech:final', handler);
-    return () => ipcRenderer.removeListener('speech:final', handler);
-  },
-  onSpeechStatus: (callback: (payload: { isListening: boolean; error?: string }) => void) => {
-    const handler = (_: any, payload: { isListening: boolean; error?: string }) => callback(payload);
-    ipcRenderer.on('speech:status', handler);
-    return () => ipcRenderer.removeListener('speech:status', handler);
-  },
-  onSpeechError: (callback: (payload: { error: string }) => void) => {
-    const handler = (_: any, payload: { error: string }) => callback(payload);
-    ipcRenderer.on('speech:error', handler);
-    return () => ipcRenderer.removeListener('speech:error', handler);
-  },
+  // Speech Dictation (Groq Whisper)
+  transcribeAudio: (audioBuffer: ArrayBuffer | Uint8Array, mimeType?: string) => ipcRenderer.invoke('speech:transcribe', { audioBuffer, mimeType }),
 };
 
 contextBridge.exposeInMainWorld('electronAPI', api);

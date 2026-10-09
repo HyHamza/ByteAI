@@ -9,7 +9,7 @@ import { AgentOrchestrator } from './agent/orchestrator';
 import { detectGitRepo } from './services/git/detector';
 import { syncAndMergeJulesSession } from './services/git/merger';
 import { TaskManager } from './services/task/manager';
-import { SpeechRecognizerService } from './services/speech/recognizer';
+import { GroqSpeechTranscriber } from './services/speech/groq';
 import type { AppMode, ChatSession, AttachmentFile } from '../shared/types';
 
 let mainWindow: BrowserWindow | null = null;
@@ -70,8 +70,6 @@ function createWindow() {
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show();
   });
-
-  SpeechRecognizerService.getInstance().setMainWindowGetter(() => mainWindow);
 
   if (process.env.VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
@@ -332,18 +330,10 @@ function setupIpcHandlers() {
     return TaskManager.getInstance().killTask(taskId);
   });
 
-  // ── Speech Dictation IPC
-  ipcMain.handle('speech:start', async (_, { lang }: { lang?: string } = {}) => {
-    return SpeechRecognizerService.getInstance().start(lang);
-  });
-
-  ipcMain.handle('speech:stop', async () => {
-    await SpeechRecognizerService.getInstance().stop();
-    return true;
+  // ── Speech Dictation IPC (Groq Whisper)
+  ipcMain.handle('speech:transcribe', async (_, { audioBuffer, mimeType }: { audioBuffer: ArrayBuffer | Uint8Array; mimeType?: string }) => {
+    return GroqSpeechTranscriber.getInstance().transcribe(audioBuffer, mimeType);
   });
 }
 
-app.on('before-quit', () => {
-  SpeechRecognizerService.getInstance().stop();
-});
 

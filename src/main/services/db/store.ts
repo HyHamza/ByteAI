@@ -17,6 +17,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   julesDefaultBranch: 'main',
   maxAutonomousTurns: 50,
   activeWorkspacePath: null,
+  groqApiKey: '',
 };
 
 const GREETINGS = new Set([
