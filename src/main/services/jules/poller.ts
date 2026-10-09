@@ -18,8 +18,9 @@ interface SupervisorState {
 export class JulesPoller {
   private static instance: JulesPoller;
   private intervalId: NodeJS.Timeout | null = null;
-  private handledActivities: Set<string> = new Set();
   private handledCompletions: Set<string> = new Set();
+  private handledActivities: Set<string> = new Set();
+  private processingActivities: Set<string> = new Set();
   private isProcessingTurn = false;
 
   private constructor() {
@@ -176,16 +177,17 @@ export class JulesPoller {
         (a) => a.metadata?.originator === 'user' || a.metadata?.userMessaged || a.type === 'USER_MESSAGE'
       );
       if (subsequentUserMsg) {
+        if (!this.handledActivities.has(agentMsgAct.id)) {
+          this.handledActivities.add(agentMsgAct.id);
+          this.saveState();
+        }
         return; // Already answered
       }
     }
 
-    if (this.handledActivities.has(agentMsgAct.id)) {
-      return; // Already reviewed and handled this message
+    if (this.handledActivities.has(agentMsgAct.id) || this.processingActivities.has(agentMsgAct.id)) {
+      return; // Already reviewed or currently processing
     }
-
-    this.handledActivities.add(agentMsgAct.id);
-    this.saveState();
 
     const julesMessage = 
       agentMsgAct.metadata?.agentMessaged?.agentMessage ||
@@ -193,11 +195,15 @@ export class JulesPoller {
       agentMsgAct.description ||
       'Jules is waiting for your input to continue working.';
 
+    const isAwaitingFeedback = s.state === 'AWAITING_USER_FEEDBACK';
+    const isQuestion = julesMessage.includes('?') || 
+      /does this sound|should i|can you confirm|how would you|do you prefer|please confirm|what do you think|your thoughts/i.test(julesMessage);
+
     // 1. Show OS native Desktop Notification (even if window is minimized or hidden)
     if (Notification.isSupported()) {
       try {
         const notif = new Notification({
-          title: 'Byte - Jules Worker Update',
+          title: isQuestion ? 'Byte - Jules Awaiting Decision' : 'Byte - Jules Worker Update',
           body: `Task: ${s.title || s.id}\n${julesMessage.slice(0, 120)}...`,
           silent: false,
         });
@@ -238,8 +244,29 @@ export class JulesPoller {
       }
     }
 
-    // 3. Wake up Byte (Orchestrator) in the background to formulate architectural response
-    const supervisorPrompt = `[AUTONOMOUS JULES WORKER UPDATE]
+    // 3. Formulate autonomous supervisor prompt
+    let supervisorPrompt = '';
+    if (isAwaitingFeedback || isQuestion) {
+      supervisorPrompt = `[CRITICAL ACTION REQUIRED: JULES WORKER IS BLOCKED AND WAITING FOR YOU]
+Jules Session ID: ${s.id}
+Task Title: ${s.title || 'Ongoing Task'}
+Current Status: ${s.state || 'AWAITING_USER_FEEDBACK'}
+
+Jules Worker asked:
+"""
+${julesMessage}
+"""
+
+AUTONOMOUS LEAD DIRECTIVES FOR BYTE:
+1. Jules is currently PAUSED in Google Cloud and CANNOT proceed until you provide architectural direction!
+2. JULES CANNOT READ CHAT TEXT. YOU MUST CALL THE 'jules_reply_question' TOOL:
+   - Tool: jules_reply_question
+   - session_id: "${s.id}"
+   - answer: "<Your clear engineering decision, approval, or architectural directions for Jules>"
+3. Review Jules' proposal above: if it is architecturally sound and aligns with the user's objective, APPROVE IT AND INSTRUCT JULES TO PROCEED IMMEDIATELY!
+4. Call 'jules_reply_question' NOW to unblock Jules. Then give a concise 1-line update to the user.`;
+    } else {
+      supervisorPrompt = `[AUTONOMOUS JULES WORKER UPDATE]
 Jules Session ID: ${s.id}
 Task Title: ${s.title || 'Ongoing Task'}
 Current Status: ${s.state || 'IN_PROGRESS'}
@@ -252,19 +279,38 @@ ${julesMessage}
 SUPERVISOR DIRECTIVES FOR BYTE:
 1. You are the Senior Lead Architect supervising this Jules worker.
 2. Review Jules' findings/report above against the user's objective.
-3. IF Jules has delivered the requested analysis, report, answer, or code changes:
-   - Present the COMPLETE findings, report, and breakdown directly to the USER in clean, comprehensive markdown!
-   - DO NOT call 'jules_reply_question' to generate unsolicited extra plans, checklists, or work unless the user explicitly requested them.
-   - Conclude by asking the user if they would like to proceed with any of the recommended updates or implementation steps.
-4. ONLY IF Jules asked a specific question, is blocked, or explicitly requested user/lead direction to proceed:
-   - Formulate your architectural decision.
-   - Call the 'jules_reply_question' tool with session_id: "${s.id}" and your answer.
-   - Provide a concise summary to the user explaining what you directed Jules to do.`;
+3. If Jules has completed its task or phase, report the findings clearly to the user.
+4. If Jules requires guidance, call 'jules_reply_question' with session_id: "${s.id}" and your answer.`;
+    }
 
     this.isProcessingTurn = true;
+    this.processingActivities.add(agentMsgAct.id);
+
     try {
       await AgentOrchestrator.getInstance().runAutonomousTurn(chatSession.id, supervisorPrompt);
+
+      // Verify if Jules received a reply
+      const updatedActs = await client.listActivities(s.id).catch(() => []);
+      const hasReplied = updatedActs.some(
+        (a) => a.metadata?.originator === 'user' || a.metadata?.userMessaged || a.type === 'USER_MESSAGE'
+      );
+
+      if (!hasReplied && (isAwaitingFeedback || isQuestion)) {
+        // Fallback: If the model generated text in chat instead of calling the tool, auto-forward it to Jules!
+        const refreshedSession = store.getSession(chatSession.id);
+        const lastMsg = refreshedSession?.messages[refreshedSession.messages.length - 1];
+        if (lastMsg && lastMsg.role === 'assistant' && lastMsg.content && lastMsg.content.trim()) {
+          console.log(`[JulesPoller] Auto-forwarding assistant reply to unblock Jules session ${s.id}`);
+          await client.sendFollowup(s.id, lastMsg.content.trim()).catch(() => {});
+          this.handledActivities.add(agentMsgAct.id);
+          this.saveState();
+        }
+      } else if (hasReplied) {
+        this.handledActivities.add(agentMsgAct.id);
+        this.saveState();
+      }
     } finally {
+      this.processingActivities.delete(agentMsgAct.id);
       this.isProcessingTurn = false;
     }
   }
