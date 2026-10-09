@@ -23,6 +23,7 @@ export interface LLMStreamCallbacks {
   onReasoning?: (chunk: string) => void;
   onToolCallDelta?: (toolCall: any) => void;
   onRetry?: (attempt: number, maxRetries: number, delayMs: number, reason: string) => void;
+  onModelResolved?: (model: string) => void;
 }
 
 export class LLMClient {
@@ -274,9 +275,11 @@ export class LLMClient {
             fallbackIndex++;
             activeOverrideModel = picked;
             console.log(`[LLMClient] Auto-healing: selecting verified available model: ${picked}`);
+            callbacks.onModelResolved?.(picked);
           } else if (fallbackIndex < staticCandidates.length) {
             activeOverrideModel = staticCandidates[fallbackIndex++];
             console.log(`[LLMClient] Auto-healing from static candidates: ${activeOverrideModel}`);
+            callbacks.onModelResolved?.(activeOverrideModel);
           }
         }
 
@@ -368,6 +371,7 @@ export class LLMClient {
 
       let completeContent = '';
       let completeReasoning = '';
+      let realModelName = '';
       const accumulatedToolCalls: Record<number, any> = {};
 
       const req = transport.request(reqOptions, (res) => {
@@ -378,6 +382,21 @@ export class LLMClient {
           res.on('data', (d) => (errData += d));
           res.on('end', () => reject(new Error(`LLM API returned status ${res.statusCode}: ${errData}`)));
           return;
+        }
+
+        // Check response headers for upstream routed model name
+        const headerModel = (
+          res.headers['x-routed-via'] ||
+          res.headers['x-model'] ||
+          res.headers['x-selected-model'] ||
+          res.headers['openai-model'] ||
+          res.headers['x-routed-model']
+        ) as string | undefined;
+
+        if (headerModel && typeof headerModel === 'string' && headerModel.trim() && headerModel.toLowerCase() !== 'auto') {
+          const cleanHeader = headerModel.trim().split('/').pop() || headerModel.trim();
+          realModelName = cleanHeader;
+          callbacks.onModelResolved?.(realModelName);
         }
 
         res.on('data', (chunk) => {
@@ -394,6 +413,17 @@ export class LLMClient {
               const jsonStr = trimmed.slice(6);
               try {
                 const parsed = JSON.parse(jsonStr);
+
+                // Detect actual routed model from upstream SSE payload
+                const chunkModel = parsed.model || parsed.response_model || parsed.selected_model || parsed.routed_model;
+                if (chunkModel && typeof chunkModel === 'string' && chunkModel.trim() && chunkModel.toLowerCase() !== 'auto') {
+                  const cleanChunkModel = chunkModel.trim().split('/').pop() || chunkModel.trim();
+                  if (!realModelName || realModelName === 'auto') {
+                    realModelName = cleanChunkModel;
+                    callbacks.onModelResolved?.(realModelName);
+                  }
+                }
+
                 const delta = parsed.choices?.[0]?.delta;
                 if (!delta) continue;
 
@@ -461,7 +491,7 @@ export class LLMClient {
             content: completeContent,
             reasoning: completeReasoning || undefined,
             toolCalls: finalToolCalls,
-            model: effectiveModel,
+            model: realModelName || (effectiveModel !== 'auto' ? effectiveModel : (overrideModel || 'auto')),
           });
         });
       });

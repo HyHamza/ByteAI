@@ -120,6 +120,12 @@ export interface StreamReasoningPayload {
   delta: string;
 }
 
+export interface ModelResolvedPayload {
+  sessionId: string;
+  model: string;
+  messageId?: string;
+}
+
 export interface ToolCallPayload {
   sessionId: string;
   messageId: string;
@@ -151,6 +157,7 @@ export interface ElectronAPI {
   onStreamToken: (callback: (payload: StreamTokenPayload) => void) => () => void;
   onStreamReasoning?: (callback: (payload: StreamReasoningPayload) => void) => () => void;
   onStreamRetry?: (callback: (payload: StreamRetryPayload) => void) => () => void;
+  onModelResolved?: (callback: (payload: ModelResolvedPayload) => void) => () => void;
   onToolCallUpdate: (callback: (payload: ToolCallPayload) => void) => () => void;
   onExecutionCompleted: (callback: (sessionId: string) => void) => () => void;
   onTitleUpdated?: (callback: (payload: { sessionId: string; title: string }) => void) => () => void;

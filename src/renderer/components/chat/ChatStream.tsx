@@ -32,6 +32,7 @@ interface ChatStreamProps {
   retryStatus?: { attempt: number; maxRetries: number; delayMs: number; reason: string } | null;
   mode: AppMode;
   selectedModel?: string;
+  liveResolvedModel?: string | null;
 }
 
 interface ConversationTurn {
@@ -122,6 +123,7 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
   retryStatus,
   mode,
   selectedModel,
+  liveResolvedModel,
 }) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const latestUserMsgRef = useRef<HTMLDivElement>(null);
@@ -413,7 +415,13 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
           const turnTimestamp = lastAsst?.timestamp || turn.userMessage?.timestamp || Date.now();
           const timeFormatted = new Date(turnTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
           const asstTurnId = `asst_${turn.id}`;
-          const turnModel = turn.assistantMessages.find((m) => m.model)?.model || (isLiveInThisTurn ? selectedModel : undefined);
+          const persistedModel = turn.assistantMessages.find((m) => m.model && m.model !== 'auto')?.model
+            || turn.assistantMessages.find((m) => m.model)?.model;
+          const turnModel = (isLiveInThisTurn && liveResolvedModel)
+            ? liveResolvedModel
+            : (persistedModel && persistedModel !== 'auto')
+              ? persistedModel
+              : (isLiveInThisTurn ? (liveResolvedModel || selectedModel) : (persistedModel || undefined));
 
           return (
             <div key={turn.id} className="w-full space-y-3">

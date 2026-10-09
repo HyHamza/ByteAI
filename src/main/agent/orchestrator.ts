@@ -460,7 +460,7 @@ Git Repository: ${activeRepo} (${activeBranch})`;
       let streamedContent = '';
 
       // Stream assistant response with pruned context to avoid token quota exhaustion
-      let result: { content: string; reasoning?: string; toolCalls: any[] };
+      let result: { content: string; reasoning?: string; toolCalls: any[]; model: string };
       try {
         result = await llmClient.chatStream(
           pruneContextWindow(llmMessages),
@@ -476,8 +476,14 @@ Git Repository: ${activeRepo} (${activeBranch})`;
             onRetry: (attempt, maxRetries, delayMs, reason) => {
               this.emitRetry(sessionId, attempt, maxRetries, delayMs, reason);
             },
+            onModelResolved: (resolvedModel) => {
+              this.emitModelResolved(sessionId, resolvedModel, assistantMsgId);
+            },
           }
         );
+        if (result.model) {
+          this.emitModelResolved(sessionId, result.model, assistantMsgId);
+        }
       } catch (err: any) {
         const errorText = `⚠️ LLM Error: ${err?.message || String(err)}\n\nPlease check your API Base URL, API Key, or Model in Settings.`;
         this.emitToken(sessionId, errorText, assistantMsgId);
@@ -700,6 +706,15 @@ DO NOT return conversational text or empty output without calling a tool. Invoke
     for (const win of windows) {
       if (!win.isDestroyed()) {
         win.webContents.send('chat:stream-retry', { sessionId, attempt, maxRetries, delayMs, reason });
+      }
+    }
+  }
+
+  private emitModelResolved(sessionId: string, model: string, messageId = '') {
+    const windows = BrowserWindow.getAllWindows();
+    for (const win of windows) {
+      if (!win.isDestroyed()) {
+        win.webContents.send('chat:model-resolved', { sessionId, model, messageId });
       }
     }
   }

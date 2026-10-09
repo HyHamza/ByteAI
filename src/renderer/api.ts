@@ -76,6 +76,8 @@ const mockAPI: ElectronAPI = {
   cancelExecution: async () => {},
   onStreamToken: () => () => {},
   onStreamReasoning: () => () => {},
+  onStreamRetry: () => () => {},
+  onModelResolved: () => () => {},
   onToolCallUpdate: () => () => {},
   onExecutionCompleted: () => () => {},
 

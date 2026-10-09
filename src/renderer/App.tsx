@@ -52,6 +52,7 @@ export const App: React.FC = () => {
   const [streamingReasoning, setStreamingReasoning] = useState('');
   const [streamingTools, setStreamingTools] = useState<ToolExecutionRecord[]>([]);
   const [retryStatus, setRetryStatus] = useState<{ attempt: number; maxRetries: number; delayMs: number; reason: string } | null>(null);
+  const [liveResolvedModel, setLiveResolvedModel] = useState<string | null>(null);
 
   // Load initial settings, workspace & sessions concurrently
   
@@ -161,6 +162,12 @@ export const App: React.FC = () => {
       }
     });
 
+    const unsubModelResolved = api.onModelResolved?.((payload) => {
+      if (payload.sessionId === activeSessionIdRef.current) {
+        setLiveResolvedModel(payload.model);
+      }
+    });
+
     const unsubTool = api.onToolCallUpdate((payload: ToolCallPayload) => {
       if (payload.sessionId === activeSessionIdRef.current) {
         setRetryStatus(null);
@@ -190,6 +197,7 @@ export const App: React.FC = () => {
         setStreamingContent('');
         setStreamingReasoning('');
         setStreamingTools([]);
+        setLiveResolvedModel(null);
         api.listSessions().then((list: ChatSession[]) => setSessions(list));
       }
     });
@@ -239,6 +247,7 @@ export const App: React.FC = () => {
       unsubToken();
       unsubReasoning?.();
       unsubRetry?.();
+      unsubModelResolved?.();
       unsubTool();
       unsubCompleted();
       unsubTitle?.();
@@ -671,6 +680,7 @@ export const App: React.FC = () => {
                 retryStatus={retryStatus}
                 mode={activeSession?.mode || settings.mode}
                 selectedModel={settings.selectedModel}
+                liveResolvedModel={liveResolvedModel}
               />
               <ChatInput
                 onSendMessage={handleSendMessage}
