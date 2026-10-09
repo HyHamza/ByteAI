@@ -39,6 +39,11 @@ export class DutyManager {
     }, 30000);
   }
 
+  private lastTaskDispatchedAt: number = 0;
+
+  // Rate limit watchdog alert to once every 2 minutes (120s) of confirmed inactivity
+  private static readonly WATCHDOG_GRACE_PERIOD_MS = 120_000;
+
   private async checkActiveShifts() {
     const store = DataStore.getInstance();
     const active = store.getActiveDutyShift();
@@ -56,6 +61,21 @@ export class DutyManager {
 
     if (active.status !== 'active') return;
 
+    const now = Date.now();
+
+    // ── Grace Period Check ────────────────────────────────────────────────
+    // When a task is first created or queued in Google Cloud, it takes 1-2 minutes to provision.
+    // Never trigger the watchdog during the initial setup / queue grace period!
+    if (now - active.startedAt < DutyManager.WATCHDOG_GRACE_PERIOD_MS) {
+      return;
+    }
+    if (now - this.lastTaskDispatchedAt < DutyManager.WATCHDOG_GRACE_PERIOD_MS) {
+      return;
+    }
+    if (now - this.lastWatchdogNudgeAt < DutyManager.WATCHDOG_GRACE_PERIOD_MS) {
+      return;
+    }
+
     // ── Continuous Duty Watchdog ──────────────────────────────────────────
     // Detects when BOTH Byte and Jules are sitting idle on an active duty shift!
     const orchestrator = AgentOrchestrator.getInstance();
@@ -71,48 +91,77 @@ export class DutyManager {
           : undefined);
 
       let isJulesRunning = false;
+      let isSessionCompleted = false;
+
       if (julesId) {
         try {
           const client = JulesClient.getInstance();
           const session = await client.getSession(julesId);
-          const runningStates = ['IN_PROGRESS', 'PLANNING', 'CODING', 'INITIALIZING'];
+          // Active states including cloud provisioning / queued states
+          const runningStates = [
+            'IN_PROGRESS',
+            'PLANNING',
+            'CODING',
+            'INITIALIZING',
+            'QUEUED',
+            'PENDING',
+            'AWAITING_USER_FEEDBACK',
+            'AWAITING_USER_INPUT',
+          ];
           if (runningStates.includes(session?.state)) {
             isJulesRunning = true;
+          } else if (session?.state === 'COMPLETED') {
+            isSessionCompleted = true;
           }
         } catch (_) {}
       }
 
       // If neither Byte nor Jules is running, both are sitting idle on duty!
       if (!isJulesRunning) {
-        const now = Date.now();
-        // Rate limit watchdog alert to once every 75 seconds
-        if (now - this.lastWatchdogNudgeAt > 75000) {
-          this.lastWatchdogNudgeAt = now;
-          const remainingDisplay = formatRemaining(active.targetEndAt - now);
-          console.warn(`[DutyManager] WATCHDOG: Jules (${julesId || 'none'}) and Byte are both idle on active duty shift ${active.id}! Waking Byte up immediately...`);
+        this.lastWatchdogNudgeAt = now;
+        const remainingDisplay = formatRemaining(active.targetEndAt - now);
+        console.warn(`[DutyManager] WATCHDOG: Jules (${julesId || 'none'}) and Byte are both idle on active duty shift ${active.id} (idle > 2m). Waking Byte up...`);
 
-          const phasesSummary = active.phasesCompleted.length > 0
-            ? active.phasesCompleted.map((p, idx) => `${idx + 1}. **${p.title}**`).join('\n')
-            : '(No phases recorded yet)';
+        const phasesSummary = active.phasesCompleted.length > 0
+          ? active.phasesCompleted.map((p, idx) => `${idx + 1}. **${p.title}**`).join('\n')
+          : '(No phases recorded yet)';
 
-          const watchdogPrompt = `[DUTY SHIFT WATCHDOG ALERT: BOTH JULES AND BYTE ARE SITTING IDLE ON DUTY]
+        const nextPhaseNumber = active.phasesCompleted.length + 1;
+        const nextActionDirective = isSessionCompleted
+          ? `The previous Jules session (${julesId}) has finished. Completed sessions cannot accept messages in Google Cloud. You MUST call 'jules_create_task' to start Phase ${nextPhaseNumber} for your mission, or call 'jules_finalize_and_merge' to merge changes.`
+          : julesId
+          ? `Call 'jules_continue_session' with the next technical instructions (or 'jules_create_task' if starting Phase ${nextPhaseNumber}).`
+          : `Call 'jules_create_task' to start Phase 1.`;
+
+        const watchdogPrompt = `[DUTY SHIFT WATCHDOG ALERT: INACTIVITY DETECTED (> 2 MINUTES)]
 Duty Shift: ${remainingDisplay} remaining of ${active.totalHours}h shift
 Mission: "${active.missionPrompt}"
-Alert: The system watchdog detected that Jules is not actively coding and Byte is idle. No work is currently occurring!
+Alert: The system watchdog detected that Jules and Byte have both been idle for over 2 minutes without active tasks.
 
 Phases Completed So Far:
 ${phasesSummary}
 
 MANDATORY DIRECTIVE FOR BYTE:
-You are on an active engineering duty shift. Sitting idle is strictly prohibited!
-You MUST IMMEDIATELY formulate the NEXT substantive work phase and dispatch it:
-${julesId ? `1. Continue in the same Jules session (${julesId}) using 'jules_continue_session' with the next phase instructions.` : `1. Start the first phase using 'jules_create_task'.`}
-2. CRITICAL: YOU MUST CALL THE TOOL ('jules_continue_session' or 'jules_create_task')! DO NOT return conversational text without calling a tool!
+You are on an active engineering duty shift. Sitting idle is prohibited.
+You MUST continue working on the overarching mission: "${active.missionPrompt}".
+1. ${nextActionDirective}
+2. CRITICAL: YOU MUST CALL THE TOOL! DO NOT return conversational text without calling a tool!
 Invoke the tool NOW to continue duty!`;
 
-          orchestrator.runAutonomousTurn(active.sessionId, watchdogPrompt).catch(console.error);
-        }
+        orchestrator.runAutonomousTurn(active.sessionId, watchdogPrompt).catch(console.error);
       }
+    }
+  }
+
+  public recordTaskDispatched(sessionId: string, julesSessionId: string) {
+    this.lastTaskDispatchedAt = Date.now();
+    this.lastWatchdogNudgeAt = Date.now();
+    const store = DataStore.getInstance();
+    const active = store.getActiveDutyShift(sessionId) || store.getActiveDutyShift();
+    if (active) {
+      active.currentJulesSessionId = julesSessionId;
+      store.saveDutyShift(active);
+      this.broadcastShift(active);
     }
   }
 
@@ -241,9 +290,8 @@ ${phasesLog}
 AUTONOMOUS LEAD DIRECTIVE FOR BYTE:
 Your duty hours are NOT completed (${remainingDisplay} remaining).
 Do NOT stop! You are on active duty.
-90% OF THE TIME: CONTINUE IN THE SAME JULES SESSION (${julesSessionId}) using 'jules_continue_session'!
-Preserve the existing container and branch. All accumulated commits will be merged when the shift concludes or when leaving the session.
-Formulate the NEXT substantive phase specification and call 'jules_continue_session' NOW!`;
+Previous phase (${title || julesSessionId.slice(0, 8)}) was successfully completed and merged into the repository!
+Formulate Phase ${active.phasesCompleted.length + 1} specification to continue the overarching mission ("${active.missionPrompt}") and call 'jules_create_task' NOW!`;
 
       // Trigger next autonomous turn on the chat session
       AgentOrchestrator.getInstance().runAutonomousTurn(active.sessionId, nextPrompt).catch((err) => {

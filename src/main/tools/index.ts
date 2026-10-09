@@ -610,12 +610,64 @@ export async function executeToolCall(
           return `Error: No active or prior Jules session found to continue. 90% of the time you should continue in an existing session, but since none exists yet, please use 'jules_create_task' to start the initial session.`;
         }
 
-        await client.sendFollowup(targetJulesId, args.prompt);
+        // Check if session is already completed or closed in Google Cloud
+        let sessionData: any = null;
+        try {
+          sessionData = await client.getSession(targetJulesId);
+        } catch (_) {}
+
+        if (sessionData && (sessionData.state === 'COMPLETED' || sessionData.state === 'CANCELLED' || sessionData.state === 'FAILED')) {
+          // Jules session is already completed and cannot accept messages.
+          // Seamlessly start the next phase via createSession on the same repo and branch!
+          const branch = sessionData.sourceContext?.githubRepoContext?.startingBranch || 'main';
+          const repo = sessionData.sourceContext?.source;
+          const res = await client.createSession({
+            prompt: args.prompt,
+            title: `Phase in ${targetJulesId.slice(0, 8)}: ${args.prompt.slice(0, 40)}`,
+            repo,
+            branch,
+          });
+          targetJulesId = res.sessionId;
+          if (sessionId) {
+            try {
+              store.updateSession(sessionId, { julesSessionId: targetJulesId });
+              DutyManager.getInstance().recordTaskDispatched(sessionId, targetJulesId);
+            } catch (_) {}
+          }
+          JulesPoller.getInstance().trackSession(targetJulesId);
+          return `Previous Jules session was completed in Google Cloud. Automatically created next phase task ${targetJulesId} on ${repo || 'repo'} (${branch}). Jules is executing. Conclude turn immediately.`;
+        }
+
+        try {
+          await client.sendFollowup(targetJulesId, args.prompt);
+        } catch (err: any) {
+          // If 404 or entity not found, Google Cloud session is closed or expired. Auto-create next phase!
+          if (err.message && (err.message.includes('404') || err.message.includes('NOT_FOUND') || err.message.includes('not found'))) {
+            const gitInfo = detectGitRepo(workspaceDir);
+            const res = await client.createSession({
+              prompt: args.prompt,
+              title: `Follow-up: ${args.prompt.slice(0, 40)}`,
+              repo: gitInfo.repo,
+              branch: gitInfo.branch,
+            });
+            targetJulesId = res.sessionId;
+            if (sessionId) {
+              try {
+                store.updateSession(sessionId, { julesSessionId: targetJulesId });
+                DutyManager.getInstance().recordTaskDispatched(sessionId, targetJulesId);
+              } catch (_) {}
+            }
+            JulesPoller.getInstance().trackSession(targetJulesId);
+            return `Previous Jules session could not accept follow-up messages (${err.message}). Automatically started new phase task ${targetJulesId}. Jules is executing. Conclude turn immediately.`;
+          }
+          throw err;
+        }
 
         // Ensure this chat session references this target Jules session
         if (sessionId) {
           try {
             store.updateSession(sessionId, { julesSessionId: targetJulesId });
+            DutyManager.getInstance().recordTaskDispatched(sessionId, targetJulesId);
           } catch (_) {}
         }
 
@@ -660,6 +712,7 @@ export async function executeToolCall(
         if (sessionId) {
           try {
             store.updateSession(sessionId, { julesSessionId: res.sessionId });
+            DutyManager.getInstance().recordTaskDispatched(sessionId, res.sessionId);
           } catch (_) {}
         }
 

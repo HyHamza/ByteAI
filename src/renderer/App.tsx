@@ -381,22 +381,30 @@ export const App: React.FC = () => {
     } catch (_) {}
   };
 
+  const isGenericTitle = (t?: string) => {
+    if (!t) return true;
+    const clean = t.trim().toLowerCase();
+    return clean === 'new task' || clean === 'new conversation' || clean === 'initial task' || clean === 'untitled';
+  };
+
   const activeMatchedJules = activeSession ? (
-    julesSessions.find((js) => {
-      if (activeSession.julesSessionId && activeSession.julesSessionId === js.id) return true;
-      if (activeSession.title && js.title && activeSession.title.trim().toLowerCase() === js.title.trim().toLowerCase()) return true;
-      if (activeSession.title && js.title && (activeSession.title.includes(js.title.slice(0, 20)) || js.title.includes(activeSession.title.slice(0, 20)))) return true;
-      return activeSession.messages?.some((m) => {
-        if (m.content && m.content.includes(js.id)) return true;
-        if (m.toolCalls?.some((tc) => JSON.stringify(tc).includes(js.id))) return true;
-        return false;
-      });
-    }) || julesSessions.find((js) =>
-      js.state === 'IN_PROGRESS' ||
-      js.state === 'PLANNING' ||
-      js.state === 'CODING' ||
-      js.state === 'INITIALIZING'
-    )
+    // 1. Explicit link on session
+    (activeSession.julesSessionId ? julesSessions.find((js) => js.id === activeSession.julesSessionId) : undefined) ||
+    // 2. Referenced in messages or matched by specific non-generic title (only if session has substantive history)
+    (activeSession.messages && activeSession.messages.length > 0
+      ? julesSessions.find((js) => {
+          if (activeSession.messages.some((m) => {
+            if (m.content && m.content.includes(js.id)) return true;
+            if (m.toolCalls?.some((tc) => JSON.stringify(tc).includes(js.id))) return true;
+            return false;
+          })) return true;
+          if (activeSession.title && js.title && !isGenericTitle(activeSession.title) && !isGenericTitle(js.title)) {
+            if (activeSession.title.trim().toLowerCase() === js.title.trim().toLowerCase()) return true;
+            if (activeSession.title.includes(js.title.slice(0, 20)) || js.title.includes(activeSession.title.slice(0, 20))) return true;
+          }
+          return false;
+        })
+      : undefined)
   ) : undefined;
 
   const isCurrentWaitingJules = !!activeMatchedJules && (

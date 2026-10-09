@@ -69,11 +69,15 @@ export class DataStore {
   private stmtGetDutyShiftById: any;
   private stmtUpsertDutyShift: any;
 
+  // In-Memory Fast Cache for Instant Zero-Lag UI Access
+  private sessionsCache: Map<string, ChatSession> = new Map();
+
   private constructor() {
     this.ensureDir();
     this.initDatabase();
     this.migrateFromLegacyJsonIfNeeded();
     this.syncJulesKeyFromSkill();
+    this.loadAllIntoCache();
   }
 
   public static getInstance(): DataStore {
@@ -449,18 +453,27 @@ export class DataStore {
     return { success: true, deletedSessionsCount: deletedCount };
   }
 
-  public getSessions(workspacePath?: string): ChatSession[] {
-    const rows = workspacePath
-      ? this.stmtGetSessionsByWorkspace.all(workspacePath)
-      : this.stmtGetSessions.all();
+  private loadAllIntoCache() {
+    this.sessionsCache.clear();
+    const rows = this.stmtGetSessions.all();
+    for (const r of rows) {
+      const sess = this.mapSessionRow(r);
+      this.sessionsCache.set(sess.id, sess);
+    }
+  }
 
-    return rows.map((r: any) => this.mapSessionRow(r));
+  public getSessions(workspacePath?: string): ChatSession[] {
+    const all = Array.from(this.sessionsCache.values()).sort(
+      (a, b) => (b.updatedAt || b.createdAt) - (a.updatedAt || a.createdAt)
+    );
+    if (workspacePath) {
+      return all.filter((s) => s.workspacePath === workspacePath);
+    }
+    return all;
   }
 
   public getSession(id: string): ChatSession | undefined {
-    const row = this.stmtGetSessionById.get(id);
-    if (!row) return undefined;
-    return this.mapSessionRow(row);
+    return this.sessionsCache.get(id);
   }
 
   private mapSessionRow(r: any): ChatSession {
@@ -489,6 +502,10 @@ export class DataStore {
   }
 
   public saveSession(session: ChatSession): ChatSession {
+    // 1. Immediately update in-memory cache for 0ms UI reactivity
+    this.sessionsCache.set(session.id, session);
+
+    // 2. Persist to SQLite WAL
     this.db.exec('BEGIN TRANSACTION');
     try {
       this.stmtUpsertSession.run(
@@ -525,7 +542,7 @@ export class DataStore {
   }
 
   public updateSession(id: string, updates: Partial<ChatSession>): ChatSession | null {
-    const existing = this.getSession(id);
+    const existing = this.sessionsCache.get(id);
     if (!existing) return null;
 
     const merged = { ...existing, ...updates, updatedAt: Date.now() };
@@ -533,11 +550,26 @@ export class DataStore {
   }
 
   public deleteSession(id: string): boolean {
+    this.sessionsCache.delete(id);
     const res = this.stmtDeleteSession.run(id);
     return res.changes > 0;
   }
 
   public addMessage(sessionId: string, message: ChatMessage): void {
+    // 1. Immediately update in-memory cache for instant UI rendering
+    const existing = this.sessionsCache.get(sessionId);
+    if (existing) {
+      if (!existing.messages) existing.messages = [];
+      const idx = existing.messages.findIndex((m) => m.id === message.id);
+      if (idx !== -1) {
+        existing.messages[idx] = message;
+      } else {
+        existing.messages.push(message);
+      }
+      existing.updatedAt = Date.now();
+    }
+
+    // 2. Persist message to SQLite
     this.db.exec('BEGIN TRANSACTION');
     try {
       this.stmtInsertMessage.run(

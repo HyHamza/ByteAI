@@ -100,7 +100,7 @@ export class JulesPoller {
       const sessions = await client.listSessions();
       if (!sessions || sessions.length === 0) return;
 
-      // Broadcast full sessions list to UI windows
+      // Broadcast full sessions list once to UI windows
       const windows = BrowserWindow.getAllWindows();
       for (const win of windows) {
         if (!win.isDestroyed()) {
@@ -108,23 +108,24 @@ export class JulesPoller {
         }
       }
 
-      // Auto-link existing chat sessions with matching Jules session IDs
+      // Auto-link existing chat sessions with matching Jules session IDs (ignore generic titles)
       const chatSessions = store.getSessions();
       let sessionsUpdated = false;
-      for (const s of sessions) {
-        for (const win of windows) {
-          if (!win.isDestroyed()) {
-            win.webContents.send('jules:update', s);
-          }
-        }
 
+      const isGeneric = (t?: string) => {
+        if (!t) return true;
+        const clean = t.trim().toLowerCase();
+        return clean === 'new task' || clean === 'new conversation' || clean === 'initial task' || clean === 'untitled';
+      };
+
+      for (const s of sessions) {
         const matching = chatSessions.find(
           (cs) => !cs.julesSessionId && (
-            (cs.title && s.title && (
+            (!isGeneric(cs.title) && !isGeneric(s.title) && (
               cs.title.toLowerCase().includes(s.title.slice(0, 25).toLowerCase()) ||
               s.title.toLowerCase().includes(cs.title.slice(0, 25).toLowerCase())
             )) ||
-            cs.messages.some((m) => m.content && m.content.includes(s.id))
+            (cs.messages && cs.messages.some((m) => m.content && m.content.includes(s.id)))
           )
         );
         if (matching) {
