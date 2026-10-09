@@ -52,6 +52,41 @@ CORE DIRECTIVES:
    - When a Jules task completes, our background system automatically pulls and merges the PR/changes into the local repository and pushes to the remote origin branch, keeping local and remote in sync.
    - If you ever need to manually pull and merge a completed Jules task, call 'jules_sync_and_merge' with the session_id.`;
 
+/**
+ * Prune and compress conversation history to prevent TPM/context length exhaustion
+ */
+function pruneContextWindow(messages: LLMMessage[]): LLMMessage[] {
+  if (messages.length <= 3) return messages;
+
+  const systemMsg = messages[0];
+  const historyMsgs = messages.slice(1);
+
+  // If over 18,000 characters (~4,500 tokens), compress older tool outputs
+  let totalLength = historyMsgs.reduce((acc, m) => acc + (typeof m.content === 'string' ? m.content.length : 0), 0);
+  if (totalLength > 18000) {
+    for (let i = 0; i < historyMsgs.length - 4; i++) {
+      const m = historyMsgs[i];
+      if (m.role === 'tool' && typeof m.content === 'string' && m.content.length > 600) {
+        m.content = m.content.slice(0, 300) + '\n... [truncated for context limit] ...\n' + m.content.slice(-200);
+      }
+    }
+  }
+
+  // If still over 22,000 characters, keep system prompt + summary notice + last 8 messages
+  totalLength = historyMsgs.reduce((acc, m) => acc + (typeof m.content === 'string' ? m.content.length : 0), 0);
+  if (totalLength > 22000 && historyMsgs.length > 8) {
+    const keepCount = 8;
+    const kept = historyMsgs.slice(-keepCount);
+    return [
+      systemMsg,
+      { role: 'system', content: '[Notice: Older turns pruned to respect model token limits.]' },
+      ...kept,
+    ];
+  }
+
+  return [systemMsg, ...historyMsgs];
+}
+
 export class AgentOrchestrator {
   private static instance: AgentOrchestrator;
   private activeCancellations: Set<string> = new Set();
@@ -230,11 +265,11 @@ Git Repository: ${activeRepo} (${activeBranch})`;
       const assistantMsgId = `msg_${Date.now()}_assistant_${turnCount}`;
       let streamedContent = '';
 
-      // Stream assistant response
+      // Stream assistant response with pruned context to avoid token quota exhaustion
       let result: { content: string; toolCalls: any[] };
       try {
         result = await llmClient.chatStream(
-          llmMessages,
+          pruneContextWindow(llmMessages),
           currentToolDefs,
           {
             onToken: (token) => {
@@ -348,8 +383,8 @@ Git Repository: ${activeRepo} (${activeBranch})`;
 
       if (hasDispatchedJules) {
         // Jules runs asynchronously in the cloud.
-        // Disable tools for next LLM turn so Byte cleanly yields after reporting to user without manual polling!
-        currentToolDefs = [];
+        // Yield turn cleanly: background JulesPoller supervises execution and will notify/wake upon completion!
+        break;
       }
     }
     } finally {

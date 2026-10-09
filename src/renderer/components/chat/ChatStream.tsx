@@ -15,7 +15,8 @@ import {
   ThumbsDown,
   Clock,
   Image as ImageIcon,
-  FileText
+  FileText,
+  AlertTriangle
 } from 'lucide-react';
 import type { ChatMessage, ToolExecutionRecord, AppMode, AttachmentFile } from '@/shared/types';
 import { ToolCard } from './ToolCard';
@@ -474,23 +475,46 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
                         {responseText}
                       </ReactMarkdown>
                     </div>
-                  ) : isLiveInThisTurn && (!allToolCalls || allToolCalls.length === 0) ? (
-                    retryStatus ? (
-                      <div className="flex items-center space-x-2 text-amber-400 bg-amber-500/10 border border-amber-500/20 px-3 py-2 rounded-xl text-xs w-fit">
-                        <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400 shrink-0" />
-                        <div>
-                          <div className="font-medium text-amber-300">
-                            Upstream provider unavailable, retrying attempt {retryStatus.attempt} of {retryStatus.maxRetries}...
-                          </div>
-                          <div className="text-[11px] text-amber-400/80 mt-0.5">
-                            {retryStatus.reason} • Next attempt in {Math.round(retryStatus.delayMs / 1000)}s
-                          </div>
+                  ) : null}
+
+                  {/* Render prominent error notification card if turn failed */}
+                  {responseText && responseText.includes('LLM Error:') && (
+                    <div className="p-3.5 rounded-xl bg-red-950/25 border border-red-500/30 text-xs text-red-200 space-y-2 mt-2 shadow-sm animate-in fade-in duration-200">
+                      <div className="flex items-center space-x-2 text-red-400 font-semibold text-[13px]">
+                        <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+                        <span>Upstream Provider / LLM Error</span>
+                      </div>
+                      <div className="text-red-300/90 whitespace-pre-wrap font-mono text-[11.5px] bg-[#111215]/80 p-2.5 rounded-lg border border-red-500/20 leading-relaxed overflow-x-auto">
+                        {responseText.replace(/^⚠️ LLM Error:\s*/, '')}
+                      </div>
+                      <p className="text-[11px] text-red-400/80">
+                        Check your API Base URL, API Key, or select "Auto Model" / a supported model in Settings.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Always visible retry banner in active turn */}
+                  {isLiveInThisTurn && retryStatus && (
+                    <div className="flex items-center space-x-3 text-amber-300 bg-amber-950/40 border border-amber-500/30 px-3.5 py-2.5 rounded-xl text-xs w-fit my-2 shadow-sm animate-in fade-in duration-150">
+                      <Loader2 className="w-4 h-4 animate-spin text-amber-400 shrink-0" />
+                      <div>
+                        <div className="font-semibold text-amber-200 flex items-center space-x-2">
+                          <span>Upstream provider busy / retrying</span>
+                          <span className="text-[10px] font-mono px-1.5 py-0.2 bg-amber-500/20 text-amber-300 rounded border border-amber-500/30">
+                            Attempt {retryStatus.attempt} of {retryStatus.maxRetries}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-amber-300/80 mt-0.5">
+                          {retryStatus.reason} • Next attempt in {Math.round(retryStatus.delayMs / 1000)}s
                         </div>
                       </div>
-                    ) : (
-                      <div className="text-[#6c707a] italic text-xs pl-1">Thinking and analyzing...</div>
-                    )
-                  ) : null}
+                    </div>
+                  )}
+
+                  {/* Thinking indicator when streaming with no output yet */}
+                  {isLiveInThisTurn && !responseText && !retryStatus && (!allToolCalls || allToolCalls.length === 0) && (
+                    <div className="text-[#6c707a] italic text-xs pl-1">Thinking and analyzing...</div>
+                  )}
 
                   {/* Single Unified Turn Footer: Timestamp + Actions */}
                   {!isLiveInThisTurn && responseText && (

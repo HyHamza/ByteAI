@@ -146,10 +146,6 @@ export const STANDARD_TOOL_DEFS: LLMToolDefinition[] = [
       },
     },
   },
-];
-
-// ─── Jules Supervisor Tool Definitions (Senior Lead Mode) ──────────────────────
-export const JULES_TOOL_DEFS: LLMToolDefinition[] = [
   {
     type: 'function',
     function: {
@@ -164,19 +160,6 @@ export const JULES_TOOL_DEFS: LLMToolDefinition[] = [
           branch: { type: 'string', description: 'Starting branch (default: main)' },
         },
         required: ['prompt'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'jules_get_status',
-      description: 'Check the current progress, state, branch, and recent activities of an active or completed Jules AI task.',
-      parameters: {
-        type: 'object',
-        properties: {
-          session_id: { type: 'string', description: 'Optional Jules session ID. If not specified, checks the active task for the current session.' },
-        },
       },
     },
   },
@@ -209,112 +192,10 @@ export const JULES_TOOL_DEFS: LLMToolDefinition[] = [
       },
     },
   },
-  {
-    type: 'function',
-    function: {
-      name: 'jules_sync_and_merge',
-      description: 'Pull and merge code changes from a completed Jules AI task/PR into the local git repository and push to remote origin so both are synchronized.',
-      parameters: {
-        type: 'object',
-        properties: {
-          session_id: { type: 'string', description: 'The Jules session ID to sync and merge' },
-        },
-        required: ['session_id'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'read_file',
-      description: 'Read the contents of a local file at the given relative or absolute path.',
-      parameters: {
-        type: 'object',
-        properties: {
-          path: { type: 'string', description: 'Path to the file to read' },
-          start_line: { type: 'number', description: 'Optional 1-indexed start line' },
-          end_line: { type: 'number', description: 'Optional 1-indexed end line' },
-        },
-        required: ['path'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'list_directory',
-      description: 'List files and directories in the given local workspace path.',
-      parameters: {
-        type: 'object',
-        properties: {
-          path: { type: 'string', description: 'Path to list (defaults to workspace root)' },
-        },
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'run_verification_test',
-      description: 'Run project tests locally (e.g. npm test, flutter analyze) to verify changes.',
-      parameters: {
-        type: 'object',
-        properties: {
-          command: { type: 'string', description: 'Verification test command to run' },
-        },
-        required: ['command'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'replace_file_content',
-      description: 'Replace content in a local file. You can either specify target_content to match and replace, or specify start_line and end_line with replacement_content to replace specific lines.',
-      parameters: {
-        type: 'object',
-        properties: {
-          path: { type: 'string', description: 'Target file path' },
-          target_content: { type: 'string', description: 'Exact text segment to find and replace' },
-          replacement_content: { type: 'string', description: 'The replacement text' },
-          start_line: { type: 'number', description: 'Optional 1-indexed start line to replace' },
-          end_line: { type: 'number', description: 'Optional 1-indexed end line to replace' },
-        },
-        required: ['path', 'replacement_content'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'search_codebase',
-      description: 'Search for a string or regex pattern across all files in the local codebase, returning matching file paths, line numbers, and contents.',
-      parameters: {
-        type: 'object',
-        properties: {
-          query: { type: 'string', description: 'The text snippet or pattern to search for' },
-          file_pattern: { type: 'string', description: 'Optional filename filter (e.g. *.ts or src/)' },
-          max_results: { type: 'number', description: 'Maximum number of results to return (default: 30)' },
-        },
-        required: ['query'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'run_terminal_command',
-      description: 'Execute a shell command in the current workspace directory.',
-      parameters: {
-        type: 'object',
-        properties: {
-          command: { type: 'string', description: 'The terminal command line string to execute' },
-        },
-        required: ['command'],
-      },
-    },
-  },
 ];
+
+// In SeniorEngineer, both modes have access to all engineering tools so Byte never lacks capabilities
+export const JULES_TOOL_DEFS: LLMToolDefinition[] = STANDARD_TOOL_DEFS;
 
 function searchCodebase(
   workspaceDir: string,

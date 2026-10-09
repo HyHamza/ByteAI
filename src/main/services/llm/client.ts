@@ -46,13 +46,9 @@ export class LLMClient {
       apiKey = 'f' + apiKey;
     }
 
-    let modelToUse = settings.selectedModel;
+    let modelToUse = settings.selectedModel || 'auto';
     if (settings.isAutoModel) {
-      if (baseUrl.includes('31415') || baseUrl.includes('freellm')) {
-        modelToUse = 'auto';
-      } else {
-        modelToUse = 'gpt-4o';
-      }
+      modelToUse = 'auto';
     }
 
     return { baseUrl, apiKey, modelToUse, isAutoModel: settings.isAutoModel };
@@ -88,7 +84,14 @@ export class LLMClient {
   /**
    * Determine whether an error is retriable (up to 9 times, Antigravity style)
    */
-  private isRetriableError(error: any): { isRetriable: boolean; reason: string; suggestedWaitSec?: number; shouldSwitchModel?: boolean } {
+  private isRetriableError(error: any): { 
+    isRetriable: boolean; 
+    reason: string; 
+    suggestedWaitSec?: number; 
+    shouldSwitchModel?: boolean;
+    mustUseAuto?: boolean;
+    isContextOverflow?: boolean;
+  } {
     const msg = String(error?.message || error || '').toLowerCase();
     
     // Check if error suggests a specific cooldown or reset countdown (e.g. "Soonest reset ~79s")
@@ -98,8 +101,25 @@ export class LLMClient {
       suggestedWaitSec = parseInt(resetMatch[1], 10);
     }
 
+    // Provider explicitly asks to use 'auto' or says model is not in catalog
+    const mustUseAuto = 
+      msg.includes('not in the catalog') ||
+      msg.includes("use 'auto'") ||
+      msg.includes("omit the 'model'") ||
+      msg.includes('catalog entry looks stale') ||
+      (msg.includes('model_not_found') && (msg.includes('catalog') || msg.includes('route')));
+
+    // Context length or token limit exceeded
+    const isContextOverflow =
+      msg.includes('prompt too large') ||
+      msg.includes('context_length_exceeded') ||
+      msg.includes('maximum context length') ||
+      msg.includes('token quota') ||
+      msg.includes('too many tokens');
+
     // Model exhausted / stale catalog / route failure suggests we should attempt model fallback
     const shouldSwitchModel = 
+      mustUseAuto ||
       msg.includes('all models exhausted') ||
       msg.includes('routing_exhausted') ||
       msg.includes('model_not_found') ||
@@ -110,7 +130,7 @@ export class LLMClient {
     // HTTP Status codes that are retriable:
     // 502 (Bad Gateway / upstream error), 503 (Service Unavailable), 504 (Gateway Timeout),
     // 500 (Internal Server Error), 429 (Rate Limit / Quota), 408 (Request Timeout),
-    // 404 (When upstream model routing is temporarily updating or stale catalog entry)
+    // 404 (When upstream model routing is temporarily updating, stale catalog, or invalid model name)
     if (
       msg.includes('status 502') || 
       msg.includes('status 503') || 
@@ -118,16 +138,23 @@ export class LLMClient {
       msg.includes('status 500') ||
       msg.includes('status 429') ||
       msg.includes('status 408') ||
-      (msg.includes('status 404') && (msg.includes('routing') || msg.includes('model') || msg.includes('unavailable') || msg.includes('provider')))
+      msg.includes('status 404')
     ) {
-      const reason = shouldSwitchModel 
-        ? 'Upstream model routes exhausted / updating'
-        : 'Server or upstream gateway temporarily busy';
-      return { isRetriable: true, reason, suggestedWaitSec, shouldSwitchModel };
+      let reason = 'Server or upstream gateway temporarily busy';
+      if (mustUseAuto) {
+        reason = "Model not in catalog — auto-healing with 'auto'";
+      } else if (shouldSwitchModel) {
+        reason = 'Upstream routes exhausted / updating';
+      } else if (isContextOverflow) {
+        reason = 'Context length exceeded — trimming prompt';
+      }
+      return { isRetriable: true, reason, suggestedWaitSec, shouldSwitchModel, mustUseAuto, isContextOverflow };
     }
 
     // Common upstream provider error strings
     if (
+      mustUseAuto ||
+      isContextOverflow ||
       msg.includes('temporarily unavailable') ||
       msg.includes('update its routing') ||
       msg.includes('upstream_failed') ||
@@ -142,9 +169,13 @@ export class LLMClient {
     ) {
       return { 
         isRetriable: true, 
-        reason: 'Provider capacity or routing update in progress', 
+        reason: mustUseAuto 
+          ? "Model not in catalog — auto-healing with 'auto'" 
+          : (isContextOverflow ? 'Trimming context window' : 'Provider capacity or routing update in progress'), 
         suggestedWaitSec,
-        shouldSwitchModel 
+        shouldSwitchModel,
+        mustUseAuto,
+        isContextOverflow
       };
     }
 
@@ -167,7 +198,7 @@ export class LLMClient {
 
   /**
    * Streams chat completion with Antigravity-style 9-attempt retry mechanism,
-   * adaptive cooldown parsing, and automatic model fallback when routes are exhausted.
+   * adaptive cooldown parsing, automatic model fallback, and context pruning.
    */
   public async chatStream(
     messages: LLMMessage[],
@@ -178,43 +209,86 @@ export class LLMClient {
     const MAX_RETRIES = options?.maxRetries !== undefined ? options.maxRetries : 9;
     let attempt = 0;
 
-    // Resilient fallback candidate ladder for auto-recovery
-    const fallbackCandidates = ['auto', 'gpt-4o-mini', 'claude-3-5-sonnet', 'gemini-2.5-flash', 'gpt-4o'];
-    let fallbackIndex = 0;
+    let workingMessages = [...messages];
+    const { modelToUse } = this.getNormalizedConfig();
     let activeOverrideModel: string | undefined = undefined;
+
+    // Resilient fallback candidate ladder for auto-recovery
+    const staticCandidates = ['auto', 'gpt-4o-mini', 'claude-3-5-sonnet', 'gemini-2.5-flash'];
+    let fallbackIndex = 0;
+    let dynamicCatalog: string[] | null = null;
 
     while (attempt <= MAX_RETRIES) {
       try {
-        return await this.chatStreamOnce(messages, tools, callbacks, activeOverrideModel);
+        return await this.chatStreamOnce(workingMessages, tools, callbacks, activeOverrideModel);
       } catch (err: any) {
         attempt++;
-        const { isRetriable, reason, suggestedWaitSec, shouldSwitchModel } = this.isRetriableError(err);
+        const { isRetriable, reason, suggestedWaitSec, shouldSwitchModel, mustUseAuto, isContextOverflow } = this.isRetriableError(err);
 
         if (attempt > MAX_RETRIES || !isRetriable) {
           console.error(`[LLMClient] Request failed permanently after ${attempt - 1} retries. Error:`, err?.message);
           throw err;
         }
 
-        // Automatic Model Fallback:
-        // If the upstream provider says "All models exhausted" or "Every routed provider reports the model as not found",
-        // automatically cycle through fallback models so the user isn't stuck waiting indefinitely!
-        if (shouldSwitchModel || attempt >= 3) {
-          if (fallbackIndex < fallbackCandidates.length) {
-            const nextCandidate = fallbackCandidates[fallbackIndex++];
-            activeOverrideModel = nextCandidate;
-            console.log(`[LLMClient] Upstream routing failure detected. Automatically falling back to candidate: ${nextCandidate}`);
+        // Automatic Catalog Auto-Heal:
+        // When provider says "Model 'X' is not in the catalog. Use 'auto'", immediately switch to 'auto'
+        // and update DataStore so all subsequent turns remember the working configuration!
+        if (mustUseAuto) {
+          if (activeOverrideModel !== 'auto' && modelToUse !== 'auto') {
+            console.log("[LLMClient] Auto-healing catalog error: setting model to 'auto'");
+            activeOverrideModel = 'auto';
+            DataStore.getInstance().saveSettings({ selectedModel: 'auto', isAutoModel: true });
+          } else {
+            // 'auto' itself also failed or provider needs explicit models from its catalog
+            if (!dynamicCatalog) {
+              try {
+                const fetched = await this.fetchAvailableModels();
+                dynamicCatalog = fetched.filter(m => m !== 'auto' && m !== 'gpt-4o');
+              } catch (_) {
+                dynamicCatalog = [];
+              }
+            }
+            if (dynamicCatalog && dynamicCatalog.length > 0) {
+              const picked = dynamicCatalog[fallbackIndex % dynamicCatalog.length];
+              fallbackIndex++;
+              activeOverrideModel = picked;
+              console.log(`[LLMClient] Auto-healing from live provider catalog: trying ${picked}`);
+            }
+          }
+        } else if (shouldSwitchModel || attempt >= 3) {
+          // Cycle fallback candidates
+          if (fallbackIndex < staticCandidates.length) {
+            activeOverrideModel = staticCandidates[fallbackIndex++];
+            console.log(`[LLMClient] Upstream routing failure detected. Automatically falling back to candidate: ${activeOverrideModel}`);
           }
         }
 
-        // Delay Calculation:
-        // Use exponential backoff with jitter, but if the upstream explicitly returned a soonest reset under 30s,
-        // respect it up to a reasonable cap (e.g., min(suggestedWait, 15s)).
-        let baseDelay = Math.min(15000, Math.floor(1500 * Math.pow(1.5, attempt - 1)));
-        if (suggestedWaitSec && suggestedWaitSec > 0 && suggestedWaitSec <= 15) {
-          baseDelay = Math.max(baseDelay, (suggestedWaitSec + 1) * 1000);
+        // Handle context length overflow:
+        // Prune older tool outputs and keep only essential recent messages
+        if (isContextOverflow && workingMessages.length > 2) {
+          console.warn('[LLMClient] Context length exceeded upstream limit. Pruning history...');
+          const systemMsg = workingMessages[0];
+          const recentMsgs = workingMessages.slice(-4).map(m => {
+            if (m.role === 'tool' && typeof m.content === 'string' && m.content.length > 500) {
+              return { ...m, content: m.content.slice(0, 300) + '\n... [truncated] ...\n' + m.content.slice(-200) };
+            }
+            return m;
+          });
+          workingMessages = [systemMsg, ...recentMsgs];
         }
 
-        const jitter = Math.floor(Math.random() * 600);
+        // Delay Calculation:
+        // Adaptive cooldown wait that doesn't exhaust all 9 attempts during a known reset window
+        let baseDelay = Math.min(20000, Math.floor(1500 * Math.pow(1.4, attempt - 1)));
+        if (suggestedWaitSec && suggestedWaitSec > 0) {
+          if (suggestedWaitSec <= 35) {
+            baseDelay = (suggestedWaitSec + 1) * 1000;
+          } else {
+            baseDelay = Math.min(20000, Math.max(baseDelay, Math.floor(suggestedWaitSec / 3) * 1000));
+          }
+        }
+
+        const jitter = Math.floor(Math.random() * 500);
         const delayMs = baseDelay + jitter;
 
         const effectiveReason = activeOverrideModel 

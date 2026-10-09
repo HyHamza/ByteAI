@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { AlertTriangle, Loader2 } from 'lucide-react';
 import { Header } from './components/layout/Header';
 import { Sidebar } from './components/layout/Sidebar';
 import { JulesPanel } from './components/layout/JulesPanel';
@@ -424,28 +425,60 @@ export const App: React.FC = () => {
 
         {/* Center Main Canvas */}
         <main className="flex-1 flex flex-col bg-[#131314] overflow-hidden relative">
-          {/* Antigravity Loading & Activity Banner for Agent Running */}
+          {/* Antigravity Loading & Activity Banner for Agent Running / Retrying */}
           {isCurrentAgentRunning && (
             <div className="shrink-0 z-10">
-              <div className="w-full h-[2.5px] bg-[#121c27] overflow-hidden">
-                <div className="h-full w-full bg-gradient-to-r from-transparent via-cyan-400 to-blue-500 animate-shimmer-fast" />
-              </div>
-              <div className="px-5 py-2 bg-[#101924] border-b border-[#1c2c40] flex items-center justify-between text-xs text-[#a0c2e6]">
-                <div className="flex items-center space-x-2.5">
-                  <div className="relative flex items-center justify-center">
-                    <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping absolute" />
-                    <span className="w-2 h-2 rounded-full bg-cyan-400" />
+              {retryStatus ? (
+                <>
+                  <div className="w-full h-[2.5px] bg-[#2a1b0c] overflow-hidden">
+                    <div className="h-full w-full bg-gradient-to-r from-transparent via-amber-400 to-orange-500 animate-shimmer-fast" />
                   </div>
-                  <span className="font-semibold text-white">Byte is running</span>
-                  <span className="text-[#6d8aab] text-[11px]">• Thinking & executing autonomous tools</span>
-                </div>
-                <button
-                  onClick={handleCancelExecution}
-                  className="px-2.5 py-0.5 bg-[#1e2a3b] hover:bg-[#2b3a4f] text-red-400 hover:text-red-300 text-[11px] rounded border border-[#2f425c] transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-              </div>
+                  <div className="px-5 py-2.5 bg-[#1c140a] border-b border-[#3b2713] flex items-center justify-between text-xs text-[#f5d0a6]">
+                    <div className="flex items-center space-x-2.5 min-w-0">
+                      <div className="relative flex items-center justify-center shrink-0">
+                        <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping absolute" />
+                        <span className="w-2 h-2 rounded-full bg-amber-400" />
+                      </div>
+                      <div className="flex items-center space-x-2 truncate">
+                        <span className="font-semibold text-amber-300">
+                          Retrying Upstream Provider (Attempt {retryStatus.attempt} of {retryStatus.maxRetries})
+                        </span>
+                        <span className="text-amber-400/80 text-[11px] font-normal truncate">
+                          • {retryStatus.reason} (Next attempt in {Math.round(retryStatus.delayMs / 1000)}s)
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleCancelExecution}
+                      className="shrink-0 px-2.5 py-0.5 bg-[#2c1d10] hover:bg-[#3d2917] text-amber-300 hover:text-white text-[11px] rounded border border-[#4d331c] transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="w-full h-[2.5px] bg-[#121c27] overflow-hidden">
+                    <div className="h-full w-full bg-gradient-to-r from-transparent via-cyan-400 to-blue-500 animate-shimmer-fast" />
+                  </div>
+                  <div className="px-5 py-2 bg-[#101924] border-b border-[#1c2c40] flex items-center justify-between text-xs text-[#a0c2e6]">
+                    <div className="flex items-center space-x-2.5">
+                      <div className="relative flex items-center justify-center">
+                        <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping absolute" />
+                        <span className="w-2 h-2 rounded-full bg-cyan-400" />
+                      </div>
+                      <span className="font-semibold text-white">Byte is running</span>
+                      <span className="text-[#6d8aab] text-[11px]">• Thinking & executing autonomous tools</span>
+                    </div>
+                    <button
+                      onClick={handleCancelExecution}
+                      className="px-2.5 py-0.5 bg-[#1e2a3b] hover:bg-[#2b3a4f] text-red-400 hover:text-red-300 text-[11px] rounded border border-[#2f425c] transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           )}
 
