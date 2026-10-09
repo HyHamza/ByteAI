@@ -72,8 +72,10 @@ export class LLMClient {
       });
 
       if (resp && Array.isArray(resp.data)) {
-        const models = resp.data.map((m: any) => m.id || m.name);
-        return Array.from(new Set(['auto', ...models]));
+        const availableOnly = resp.data
+          .filter((m: any) => m.available !== false && m.available !== 0 && m.execution_status !== 'needsKey')
+          .map((m: any) => m.id || m.name);
+        return Array.from(new Set(['auto', ...(availableOnly.length > 0 ? availableOnly : resp.data.map((m: any) => m.id || m.name))]));
       }
       return defaults;
     } catch (err) {
@@ -245,44 +247,35 @@ export class LLMClient {
           throw err;
         }
 
-        // Automatic Catalog Auto-Heal:
-        // When provider says "Model 'X' is not in the catalog. Use 'auto'", immediately switch to 'auto'
-        // and update DataStore so all subsequent turns remember the working configuration!
-        if (mustUseAuto) {
-          if (activeOverrideModel !== 'auto' && modelToUse !== 'auto') {
-            console.log("[LLMClient] Auto-healing catalog error: setting model to 'auto'");
-            activeOverrideModel = 'auto';
-            DataStore.getInstance().saveSettings({ selectedModel: 'auto', isAutoModel: true });
-          } else {
-            // 'auto' itself also failed or provider needs explicit models from its catalog
-            if (!dynamicCatalog) {
-              try {
-                const fetched = await this.fetchAvailableModels();
-                const HIGH_PRIORITY = ['gpt-4', 'claude-3', 'gemini-2', 'deepseek', 'qwen'];
-                const filtered = fetched.filter(
-                  (m) => m !== 'auto' && m !== 'fusion' && !m.includes('minimax-m3')
-                );
-                dynamicCatalog = filtered.sort((a, b) => {
-                  const aScore = HIGH_PRIORITY.some((p) => a.toLowerCase().includes(p)) ? 1 : 0;
-                  const bScore = HIGH_PRIORITY.some((p) => b.toLowerCase().includes(p)) ? 1 : 0;
-                  return bScore - aScore;
-                });
-              } catch (_) {
-                dynamicCatalog = [];
-              }
-            }
-            if (dynamicCatalog && dynamicCatalog.length > 0) {
-              const picked = dynamicCatalog[fallbackIndex % dynamicCatalog.length];
-              fallbackIndex++;
-              activeOverrideModel = picked;
-              console.log(`[LLMClient] Auto-healing from live provider catalog: trying ${picked}`);
+        // Automatic Model Fallback:
+        // ONLY switch models if the selected model is truly invalid (404 / not in catalog) OR if isAutoModel is true!
+        // Never override the user's manual selection on simple rate-limits, busy gateways, or timeouts.
+        const modelActuallyNotFound = mustUseAuto || String(err?.message || '').toLowerCase().includes('model_not_found');
+        if (modelActuallyNotFound || (shouldSwitchModel && isAutoModel)) {
+          if (!dynamicCatalog) {
+            try {
+              const fetched = await this.fetchAvailableModels();
+              const HIGH_PRIORITY = ['gpt-oss-120b', 'claude-sonnet-4-5', 'qwen3.8', 'codestral', 'gpt-4o', 'claude-3', 'gemini-2'];
+              const filtered = fetched.filter(
+                (m) => m !== 'auto' && m !== 'fusion' && !m.includes('minimax-m3') && m !== modelToUse
+              );
+              dynamicCatalog = filtered.sort((a, b) => {
+                const aScore = HIGH_PRIORITY.some((p) => a.toLowerCase().includes(p)) ? 1 : 0;
+                const bScore = HIGH_PRIORITY.some((p) => b.toLowerCase().includes(p)) ? 1 : 0;
+                return bScore - aScore;
+              });
+            } catch (_) {
+              dynamicCatalog = [];
             }
           }
-        } else if (shouldSwitchModel || attempt >= 2) {
-          // Cycle fallback candidates
-          if (fallbackIndex < staticCandidates.length) {
+          if (dynamicCatalog && dynamicCatalog.length > 0) {
+            const picked = dynamicCatalog[fallbackIndex % dynamicCatalog.length];
+            fallbackIndex++;
+            activeOverrideModel = picked;
+            console.log(`[LLMClient] Auto-healing: selecting verified available model: ${picked}`);
+          } else if (fallbackIndex < staticCandidates.length) {
             activeOverrideModel = staticCandidates[fallbackIndex++];
-            console.log(`[LLMClient] Upstream routing failure detected. Automatically falling back to candidate: ${activeOverrideModel}`);
+            console.log(`[LLMClient] Auto-healing from static candidates: ${activeOverrideModel}`);
           }
         }
 
@@ -406,6 +399,9 @@ export class LLMClient {
                 if (delta.content) {
                   completeContent += delta.content;
                   callbacks.onToken(delta.content);
+                } else if ((delta.reasoning || delta.thought || delta.reasoning_content) && !delta.tool_calls) {
+                  const reasoningChunk = delta.reasoning || delta.thought || delta.reasoning_content;
+                  callbacks.onToken(reasoningChunk);
                 }
 
                 // Handle tool calls streaming
