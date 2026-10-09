@@ -5,6 +5,7 @@ import { STANDARD_TOOL_DEFS, JULES_TOOL_DEFS, executeToolCall } from '../tools';
 import { DataStore, isSubstantiveMessage } from '../services/db/store';
 import { detectGitRepo } from '../services/git/detector';
 import { TaskManager, type BackgroundTask } from '../services/task/manager';
+import { DutyManager } from '../services/duty/manager';
 
 const STANDARD_SYSTEM_PROMPT = `You are Byte, a powerful autonomous software engineering AI assistant.
 You operate on goals and objectives.
@@ -60,11 +61,13 @@ CORE DIRECTIVES:
 
 3. AUTONOMOUS DUTY SHIFTS & OVERNIGHT MISSIONS ('jules_start_duty_shift'):
    - When the user specifies a long-running task, duty, or duration (e.g. "work all night", "for 8 hours", "for 5 hours", "overnight duty", "keep finding and fixing until morning"):
-   - YOU MUST ACTIVATE A DUTY SHIFT using 'jules_start_duty_shift' with the requested hours (default 8) and mission prompt!
+   - YOU MUST IMMEDIATELY ACTIVATE A DUTY SHIFT using 'jules_start_duty_shift' with the requested hours (default 8) and mission prompt!
    - Once the shift is active, formulate Phase 1 and immediately call 'jules_create_task'.
-   - When woken up by [DUTY SHIFT IN PROGRESS — Xh Ym REMAINING OF Zh SHIFT]:
+   - When woken up by [DUTY SHIFT IN PROGRESS...] or [DUTY SHIFT WATCHDOG ALERT...]:
      DO NOT STOP! Your duty hours are active.
-     Empirically review what was just merged, formulate the NEXT concrete phase to advance the user's mission without mock data, and call 'jules_create_task'!
+     CRITICAL PROHIBITION: NEVER write conversational text claiming "I have dispatched Phase 1" or "I am standing by" without calling a tool!
+     You MUST IMMEDIATELY call 'jules_continue_session' (or 'jules_create_task') in that very turn with the concrete phase specification!
+     All commits will be accumulated and merged when leaving the session or when the shift concludes.
    - Repeat autonomously until the duty shift completes, then generate a comprehensive Shift Handover Report!
 
 4. CHRONOLOGICAL PROGRESSION (ANTIGRAVITY STYLE):
@@ -403,8 +406,26 @@ Git Repository: ${activeRepo} (${activeBranch})`;
         tool_calls: result.toolCalls && result.toolCalls.length > 0 ? result.toolCalls : undefined,
       });
 
-      // If no tool calls were requested, this is the concluding response!
+      // If no tool calls were requested, check if a mandatory tool invocation was required!
       if (!result.toolCalls || result.toolCalls.length === 0) {
+        const isDutyActive = !!DutyManager.getInstance().getActiveShift(sessionId);
+        const claimsDispatch = /(dispatched|delegated|assigned).*(jules|worker|task|phase)/i.test(result.content || '');
+        const userAskedDuty = /(work all night|work for \d+\s*hours|overnight|\b\d+\s*hours duty\b)/i.test(userText);
+        const hasMandatoryDirective = userText.includes('[DUTY SHIFT') || userText.includes('[AUTONOMOUS DUTY WATCHDOG');
+
+        if ((isDutyActive || claimsDispatch || userAskedDuty || hasMandatoryDirective) && turnCount < 4) {
+          console.warn(`[orchestrator] Enforcement error: model returned text without calling Jules tool during active duty context. Forcing tool invocation...`);
+          llmMessages.push({
+            role: 'user',
+            content: `[CRITICAL ARCHITECTURAL ENFORCEMENT ERROR]:
+You generated assistant chat text, but YOU DID NOT CALL ANY TOOL (0 tool calls were returned)!
+Remember: Jules runs remotely in Google Cloud and cannot read local chat text. Because you didn't invoke a tool, Jules received NOTHING and is sitting idle.
+You are on active engineering duty. You MUST call 'jules_continue_session' (or 'jules_create_task' / 'jules_start_duty_shift') RIGHT NOW to dispatch the work!
+DO NOT reply with chat text. CALL THE TOOL NOW!`,
+          });
+          continue;
+        }
+
         const finalMsg: ChatMessage = {
           id: assistantMsgId,
           sessionId,

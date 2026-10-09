@@ -2,6 +2,7 @@ import { BrowserWindow, Notification } from 'electron';
 import type { DutyShift, DutyShiftPhase } from '../../../shared/types';
 import { DataStore } from '../db/store';
 import { AgentOrchestrator } from '../../agent/orchestrator';
+import { JulesClient } from '../jules/client';
 
 function formatRemaining(ms: number): string {
   if (ms <= 0) return '0m';
@@ -17,6 +18,7 @@ function formatRemaining(ms: number): string {
 export class DutyManager {
   private static instance: DutyManager;
   private heartbeatInterval: NodeJS.Timeout | null = null;
+  private lastWatchdogNudgeAt: number = 0;
 
   private constructor() {
     this.startHeartbeat();
@@ -31,13 +33,13 @@ export class DutyManager {
 
   private startHeartbeat() {
     if (this.heartbeatInterval) clearInterval(this.heartbeatInterval);
-    // Periodically broadcast remaining time and check shift status every 60s
+    // Periodically broadcast remaining time and run watchdog every 30s
     this.heartbeatInterval = setInterval(() => {
-      this.checkActiveShifts();
-    }, 60000);
+      this.checkActiveShifts().catch(console.error);
+    }, 30000);
   }
 
-  private checkActiveShifts() {
+  private async checkActiveShifts() {
     const store = DataStore.getInstance();
     const active = store.getActiveDutyShift();
     if (!active) return;
@@ -48,7 +50,69 @@ export class DutyManager {
 
     // If past end time and no task running, mark completed
     if (Date.now() >= active.targetEndAt && active.status === 'active') {
-      this.completeShift(active.id);
+      await this.completeShift(active.id);
+      return;
+    }
+
+    if (active.status !== 'active') return;
+
+    // ── Continuous Duty Watchdog ──────────────────────────────────────────
+    // Detects when BOTH Byte and Jules are sitting idle on an active duty shift!
+    const orchestrator = AgentOrchestrator.getInstance();
+    const isByteRunning = orchestrator.getRunningSessions().includes(active.sessionId);
+
+    if (!isByteRunning) {
+      const chatSession = store.getSession(active.sessionId);
+      const julesId =
+        active.currentJulesSessionId ||
+        chatSession?.julesSessionId ||
+        (active.phasesCompleted.length > 0
+          ? active.phasesCompleted[active.phasesCompleted.length - 1].sessionId
+          : undefined);
+
+      let isJulesRunning = false;
+      if (julesId) {
+        try {
+          const client = JulesClient.getInstance();
+          const session = await client.getSession(julesId);
+          const runningStates = ['IN_PROGRESS', 'PLANNING', 'CODING', 'INITIALIZING'];
+          if (runningStates.includes(session?.state)) {
+            isJulesRunning = true;
+          }
+        } catch (_) {}
+      }
+
+      // If neither Byte nor Jules is running, both are sitting idle on duty!
+      if (!isJulesRunning) {
+        const now = Date.now();
+        // Rate limit watchdog alert to once every 75 seconds
+        if (now - this.lastWatchdogNudgeAt > 75000) {
+          this.lastWatchdogNudgeAt = now;
+          const remainingDisplay = formatRemaining(active.targetEndAt - now);
+          console.warn(`[DutyManager] WATCHDOG: Jules (${julesId || 'none'}) and Byte are both idle on active duty shift ${active.id}! Waking Byte up immediately...`);
+
+          const phasesSummary = active.phasesCompleted.length > 0
+            ? active.phasesCompleted.map((p, idx) => `${idx + 1}. **${p.title}**`).join('\n')
+            : '(No phases recorded yet)';
+
+          const watchdogPrompt = `[DUTY SHIFT WATCHDOG ALERT: BOTH JULES AND BYTE ARE SITTING IDLE ON DUTY]
+Duty Shift: ${remainingDisplay} remaining of ${active.totalHours}h shift
+Mission: "${active.missionPrompt}"
+Alert: The system watchdog detected that Jules is not actively coding and Byte is idle. No work is currently occurring!
+
+Phases Completed So Far:
+${phasesSummary}
+
+MANDATORY DIRECTIVE FOR BYTE:
+You are on an active engineering duty shift. Sitting idle is strictly prohibited!
+You MUST IMMEDIATELY formulate the NEXT substantive work phase and dispatch it:
+${julesId ? `1. Continue in the same Jules session (${julesId}) using 'jules_continue_session' with the next phase instructions.` : `1. Start the first phase using 'jules_create_task'.`}
+2. CRITICAL: YOU MUST CALL THE TOOL ('jules_continue_session' or 'jules_create_task')! DO NOT return conversational text without calling a tool!
+Invoke the tool NOW to continue duty!`;
+
+          orchestrator.runAutonomousTurn(active.sessionId, watchdogPrompt).catch(console.error);
+        }
+      }
     }
   }
 
