@@ -133,6 +133,24 @@ export async function syncAndMergeJulesSession(
       }
     }
 
+    // Helper to clean up any leftover .rej or .orig files
+    const cleanRejFiles = () => {
+      try {
+        const scanAndClean = (currentDir: string) => {
+          const entries = fs.readdirSync(currentDir, { withFileTypes: true });
+          for (const entry of entries) {
+            const fullPath = path.join(currentDir, entry.name);
+            if (entry.isDirectory() && entry.name !== '.git' && entry.name !== 'node_modules') {
+              scanAndClean(fullPath);
+            } else if (entry.isFile() && (entry.name.endsWith('.rej') || entry.name.endsWith('.orig'))) {
+              try { fs.unlinkSync(fullPath); } catch (_) {}
+            }
+          }
+        };
+        scanAndClean(dir);
+      } catch (_) {}
+    };
+
     // ── PATHWAY A: Direct Git Patch (unidiffPatch) ──────────────────────────
     if (gitPatch && gitPatch.unidiffPatch) {
       console.log(`[merger] Applying Jules git patch (${gitPatch.unidiffPatch.length} bytes) to ${dir}...`);
@@ -141,32 +159,105 @@ export async function syncAndMergeJulesSession(
       fs.writeFileSync(patchFilePath, gitPatch.unidiffPatch, 'utf-8');
 
       let applied = false;
+      let alreadyIntegrated = false;
       let applyError = '';
 
-      const applyCandidates = [
-        `git apply --3way "${patchFileName}"`,
-        `git apply --whitespace=fix "${patchFileName}"`,
-        `git apply --ignore-whitespace "${patchFileName}"`,
-        `git apply -C1 "${patchFileName}"`,
-        `git apply --reject "${patchFileName}"`,
-      ];
+      // 1. Check if patch is already integrated into the working tree/HEAD
+      try {
+        runGit(`git apply --reverse --check --ignore-whitespace "${patchFileName}"`);
+        alreadyIntegrated = true;
+        applied = true;
+      } catch (_) {}
 
-      for (const cmd of applyCandidates) {
-        try {
-          runGit(cmd);
-          applied = true;
-          break;
-        } catch (err: any) {
-          applyError = err.message || String(err);
+      // 2. If not already integrated, attempt progressive patch application flags
+      if (!alreadyIntegrated) {
+        const applyCandidates = [
+          `git apply --ignore-whitespace --whitespace=nowarn "${patchFileName}"`,
+          `git apply --3way --ignore-whitespace --whitespace=nowarn "${patchFileName}"`,
+          `git apply --whitespace=fix "${patchFileName}"`,
+          `git apply -C1 --ignore-whitespace --whitespace=nowarn "${patchFileName}"`,
+          `git apply -C0 --ignore-whitespace --whitespace=nowarn "${patchFileName}"`,
+        ];
+
+        for (const cmd of applyCandidates) {
+          try {
+            runGit(cmd);
+            applied = true;
+            break;
+          } catch (err: any) {
+            applyError = err.message || String(err);
+          }
         }
       }
 
-      // Cleanup temporary patch file
+      // Cleanup temporary patch file and any reject files
       try {
         if (fs.existsSync(patchFilePath)) fs.unlinkSync(patchFilePath);
       } catch (_) {}
+      cleanRejFiles();
 
-      if (!applied) {
+      if (alreadyIntegrated) {
+        if (stashed) {
+          try { runGit('git stash pop'); } catch (_) {}
+        }
+        let latestCommit = '';
+        try {
+          latestCommit = runGit('git rev-parse --short HEAD');
+        } catch (_) {}
+        return {
+          success: true,
+          message: `The changes for "${session.title || sessionId}" are already fully integrated in the local repository (HEAD: ${latestCommit}). Working tree and GitHub are in sync.`,
+          branch: currentBranch,
+          commitHash: latestCommit,
+        };
+      }
+
+      if (applied) {
+        // Stage all modified and untracked files from patch
+        runGit('git add -A');
+
+        // Commit changes
+        const commitMsg = gitPatch.suggestedCommitMessage || `feat: Apply Jules changes for ${session.title || sessionId}`;
+        const msgFileName = `.jules_commit_msg_${sessionId.slice(0, 10)}.txt`;
+        const msgFilePath = path.join(dir, msgFileName);
+        try {
+          fs.writeFileSync(msgFilePath, commitMsg, 'utf-8');
+          runGit(`git commit -F "${msgFileName}"`);
+        } finally {
+          try {
+            if (fs.existsSync(msgFilePath)) fs.unlinkSync(msgFilePath);
+          } catch (_) {}
+        }
+
+        // Push to remote origin
+        let pushMessage = '';
+        try {
+          runGit(`git push origin ${currentBranch}`);
+          pushMessage = `and pushed to remote 'origin/${currentBranch}'`;
+        } catch (pushErr: any) {
+          pushMessage = `(Note: Local commit succeeded, but push to remote origin failed: ${pushErr.message})`;
+        }
+
+        // Restore stash if any
+        if (stashed) {
+          try { runGit('git stash pop'); } catch (_) {}
+        }
+
+        let latestCommit = '';
+        try {
+          latestCommit = runGit('git rev-parse --short HEAD');
+        } catch (_) {}
+
+        return {
+          success: true,
+          message: `Successfully applied Jules patch for "${session.title || sessionId}", committed locally as ${latestCommit}, ${pushMessage}! Both local workspace and GitHub are fully synchronized.`,
+          branch: currentBranch,
+          commitHash: latestCommit,
+        };
+      }
+
+      // If patch application failed and NO PR/branch is available, return failure
+      if (!prNumber && !headBranch) {
         if (stashed) {
           try { runGit('git stash pop'); } catch (_) {}
         }
@@ -175,48 +266,7 @@ export async function syncAndMergeJulesSession(
           message: `Failed to apply Jules git patch cleanly to local repository: ${applyError}`,
         };
       }
-
-      // Stage all modified and untracked files from patch
-      runGit('git add -A');
-
-      // Commit changes
-      const commitMsg = gitPatch.suggestedCommitMessage || `feat: Apply Jules changes for ${session.title || sessionId}`;
-      const msgFileName = `.jules_commit_msg_${sessionId.slice(0, 10)}.txt`;
-      const msgFilePath = path.join(dir, msgFileName);
-      try {
-        fs.writeFileSync(msgFilePath, commitMsg, 'utf-8');
-        runGit(`git commit -F "${msgFileName}"`);
-      } finally {
-        try {
-          if (fs.existsSync(msgFilePath)) fs.unlinkSync(msgFilePath);
-        } catch (_) {}
-      }
-
-      // Push to remote origin
-      let pushMessage = '';
-      try {
-        runGit(`git push origin ${currentBranch}`);
-        pushMessage = `and pushed to remote 'origin/${currentBranch}'`;
-      } catch (pushErr: any) {
-        pushMessage = `(Note: Local commit succeeded, but push to remote origin failed: ${pushErr.message})`;
-      }
-
-      // Restore stash if any
-      if (stashed) {
-        try { runGit('git stash pop'); } catch (_) {}
-      }
-
-      let latestCommit = '';
-      try {
-        latestCommit = runGit('git rev-parse --short HEAD');
-      } catch (_) {}
-
-      return {
-        success: true,
-        message: `Successfully applied Jules patch for "${session.title || sessionId}", committed locally as ${latestCommit}, ${pushMessage}! Both local workspace and GitHub are fully synchronized.`,
-        branch: currentBranch,
-        commitHash: latestCommit,
-      };
+      console.warn(`Patch application did not succeed (${applyError}), falling back to remote PR/branch merge...`);
     }
 
     // ── PATHWAY B: GitHub Pull Request / Remote Branch ──────────────────────

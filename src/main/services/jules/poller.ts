@@ -155,6 +155,7 @@ export class JulesPoller {
   }
 
   private async handleAwaitingFeedback(s: JulesSessionSummary) {
+    if (s.state === 'COMPLETED' || s.state === 'CANCELLED' || s.state === 'FAILED') return;
     if (this.isProcessingTurn) return; // Wait for current turn to complete
 
     const client = JulesClient.getInstance();
@@ -383,15 +384,23 @@ SUPERVISOR DIRECTIVES FOR BYTE:
 
       const syncDirectives = mergeSucceeded
         ? `DIRECTIVES FOR BYTE:
-1. Jules changes have been pulled/merged into local workspace and pushed to remote origin.
-2. Confirm the merge status honestly with the user and offer to run verification or tests.`
+1. Jules changes have been pulled/merged into the local workspace and pushed to remote origin.
+2. CRITICAL: THIS SESSION IS COMPLETED! DO NOT call 'jules_reply_question' (the remote session is closed and cannot receive question replies).
+3. MULTI-PHASE CONTINUATION:
+   If the user's objective requires multiple phases (e.g. "do this in phases", "add white theme to all components", or ongoing feature work) and subsequent phases remain:
+   DO NOT STOP! Empirically verify what was just merged, formulate the NEXT PHASE specification, and IMMEDIATELY call 'jules_create_task'!
+4. If this was the final phase or a standalone task, present the full completion report to the user.`
         : `DIRECTIVES FOR BYTE:
 1. Jules has completed the task in cloud, but local repository sync reported: ${mergeReport}
-2. You can inspect the full patch/diff with 'jules_inspect_diff'.
-3. Attempt to run 'jules_sync_and_merge' with session_id: "${s.id}" to apply the changes.
-4. DO NOT hallucinate or falsely claim code changes are present locally until you empirically verify them!`;
+2. CRITICAL: THIS SESSION IS COMPLETED! DO NOT call 'jules_reply_question'.
+3. Check the local files or run 'jules_sync_and_merge' with session_id: "${s.id}".
+4. MULTI-PHASE CONTINUATION:
+   If the user's goal was multi-phase execution (e.g. White Theme phases) and the changes are integrated:
+   Formulate the NEXT PHASE specification and call 'jules_create_task' to keep engineering momentum!
+5. DO NOT hallucinate or falsely claim code changes are present locally until you empirically verify them!`;
 
       const summaryMsg = `${syncHeader}
+Session ID: ${s.id}
 Task: ${s.title || s.id}
 Status: COMPLETED
 ${s.prUrl ? `Pull Request: ${s.prUrl}` : 'The remote worker has finished the task.'}${mergeReport}
