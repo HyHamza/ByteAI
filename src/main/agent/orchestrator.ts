@@ -441,16 +441,16 @@ Git Repository: ${activeRepo} (${activeBranch})`;
         const claimsDispatch = /(dispatched|delegated|assigned).*(jules|worker|task|phase)/i.test(result.content || '');
         const userAskedDuty = /(work all night|work for \d+\s*hours|overnight|\b\d+\s*hours duty\b)/i.test(userText);
         const hasMandatoryDirective = userText.includes('[DUTY SHIFT') || userText.includes('[AUTONOMOUS DUTY WATCHDOG');
+        const hasPriorReconTools = llmMessages.some((m) => m.role === 'tool');
 
-        if ((isDutyActive || claimsDispatch || userAskedDuty || hasMandatoryDirective) && turnCount < 4) {
-          console.warn(`[orchestrator] Enforcement error: model returned text without calling Jules tool during active duty context. Forcing tool invocation...`);
+        if ((isDutyActive || claimsDispatch || userAskedDuty || hasMandatoryDirective || (mode === 'jules' && hasPriorReconTools)) && turnCount < 6) {
+          console.warn(`[orchestrator] Enforcement notice: model returned without Jules dispatch on turn ${turnCount}. Directing Jules tool invocation...`);
           llmMessages.push({
             role: 'user',
-            content: `[CRITICAL ARCHITECTURAL ENFORCEMENT ERROR]:
-You generated assistant chat text, but YOU DID NOT CALL ANY TOOL (0 tool calls were returned)!
-Remember: Jules runs remotely in Google Cloud and cannot read local chat text. Because you didn't invoke a tool, Jules received NOTHING and is sitting idle.
-You are on active engineering duty. You MUST call 'jules_continue_session' (or 'jules_create_task' / 'jules_start_duty_shift') RIGHT NOW to dispatch the work!
-DO NOT reply with chat text. CALL THE TOOL NOW!`,
+            content: `[MANDATORY DELEGATION DIRECTIVE]:
+You completed local workspace reconnaissance and file inspection. Now you MUST dispatch the actual task to Jules in Google Cloud!
+Call 'jules_create_task' (or 'jules_continue_session' if an active session exists) with the concrete files and improvements needed.
+DO NOT return conversational text or empty output without calling a tool. Invoke the Jules tool NOW!`,
           });
           continue;
         }

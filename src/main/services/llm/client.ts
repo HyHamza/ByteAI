@@ -117,15 +117,30 @@ export class LLMClient {
       msg.includes('token quota') ||
       msg.includes('too many tokens');
 
+    // Empty completion from upstream provider
+    const isEmptyCompletion =
+      msg.includes('empty completion') ||
+      msg.includes('0 tokens') ||
+      msg.includes('no response text');
+
     // Model exhausted / stale catalog / route failure suggests we should attempt model fallback
     const shouldSwitchModel = 
       mustUseAuto ||
+      isEmptyCompletion ||
       msg.includes('all models exhausted') ||
       msg.includes('routing_exhausted') ||
       msg.includes('model_not_found') ||
       msg.includes('catalog entry looks stale') ||
       msg.includes('pick another model') ||
       msg.includes('every routed provider reports the model as not found');
+
+    if (isEmptyCompletion) {
+      return {
+        isRetriable: true,
+        reason: 'Upstream returned empty response — switching candidate model',
+        shouldSwitchModel: true,
+      };
+    }
 
     // HTTP Status codes that are retriable:
     // 502 (Bad Gateway / upstream error), 503 (Service Unavailable), 504 (Gateway Timeout),
@@ -214,7 +229,7 @@ export class LLMClient {
     let activeOverrideModel: string | undefined = undefined;
 
     // Resilient fallback candidate ladder for auto-recovery
-    const staticCandidates = ['auto', 'gpt-4o-mini', 'claude-3-5-sonnet', 'gemini-2.5-flash'];
+    const staticCandidates = ['auto', 'gpt-4o', 'gpt-4o-mini', 'claude-3-5-sonnet', 'gemini-2.5-flash'];
     let fallbackIndex = 0;
     let dynamicCatalog: string[] | null = null;
 
@@ -243,7 +258,15 @@ export class LLMClient {
             if (!dynamicCatalog) {
               try {
                 const fetched = await this.fetchAvailableModels();
-                dynamicCatalog = fetched.filter(m => m !== 'auto' && m !== 'gpt-4o');
+                const HIGH_PRIORITY = ['gpt-4', 'claude-3', 'gemini-2', 'deepseek', 'qwen'];
+                const filtered = fetched.filter(
+                  (m) => m !== 'auto' && m !== 'fusion' && !m.includes('minimax-m3')
+                );
+                dynamicCatalog = filtered.sort((a, b) => {
+                  const aScore = HIGH_PRIORITY.some((p) => a.toLowerCase().includes(p)) ? 1 : 0;
+                  const bScore = HIGH_PRIORITY.some((p) => b.toLowerCase().includes(p)) ? 1 : 0;
+                  return bScore - aScore;
+                });
               } catch (_) {
                 dynamicCatalog = [];
               }
@@ -255,7 +278,7 @@ export class LLMClient {
               console.log(`[LLMClient] Auto-healing from live provider catalog: trying ${picked}`);
             }
           }
-        } else if (shouldSwitchModel || attempt >= 3) {
+        } else if (shouldSwitchModel || attempt >= 2) {
           // Cycle fallback candidates
           if (fallbackIndex < staticCandidates.length) {
             activeOverrideModel = staticCandidates[fallbackIndex++];
@@ -417,6 +440,10 @@ export class LLMClient {
 
         res.on('end', () => {
           const finalToolCalls = Object.values(accumulatedToolCalls);
+          if (!completeContent.trim() && finalToolCalls.length === 0) {
+            reject(new Error('Upstream model returned empty completion (0 tokens and 0 tool calls)'));
+            return;
+          }
           resolve({
             content: completeContent,
             toolCalls: finalToolCalls,
