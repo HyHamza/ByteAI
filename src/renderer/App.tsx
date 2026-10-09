@@ -239,11 +239,38 @@ export const App: React.FC = () => {
 
   const activeSession = sessions.find((s) => s.id === activeSessionId);
 
+  // Automatically synchronize workspace name, git repo, and branch whenever the active session changes
+  useEffect(() => {
+    if (!activeSession) return;
+    const wsPath = activeSession.workspacePath;
+    if (!wsPath) return;
+
+    // Fast synchronous lookup from known projects
+    const proj = projects.find((p) => p.path === wsPath);
+    if (proj) {
+      setWorkspaceName(proj.name);
+      setGitRepo(proj.gitRepo || null);
+      setGitBranch(proj.gitBranch || null);
+    } else {
+      const folderName = wsPath.replace(/\\/g, '/').split('/').filter(Boolean).pop() || 'Workspace';
+      setWorkspaceName(folderName);
+    }
+
+    // Refresh live git metadata for this workspace folder
+    api.getWorkspaceInfo(wsPath).then((ws) => {
+      if (ws) {
+        setWorkspaceName(ws.name);
+        setGitRepo(ws.gitRepo || null);
+        setGitBranch(ws.gitBranch || null);
+      }
+    }).catch(() => {});
+  }, [activeSession?.id, activeSession?.workspacePath, projects]);
+
   const handleSelectWorkspace = async () => {
     const selected = await api.selectDirectory();
     if (selected) {
       setSettings((prev) => ({ ...prev, activeWorkspacePath: selected }));
-      const ws = await api.getWorkspaceInfo();
+      const ws = await api.getWorkspaceInfo(selected);
       if (ws) {
         setWorkspaceName(ws.name);
         setGitRepo(ws.gitRepo || null);
@@ -272,7 +299,8 @@ export const App: React.FC = () => {
   };
 
   const handleCreateSession = async (workspacePath?: string) => {
-    const newSession = await api.createSession('New Task', settings.mode, workspacePath);
+    const targetPath = workspacePath || activeSession?.workspacePath || settings.activeWorkspacePath || undefined;
+    const newSession = await api.createSession('New Task', settings.mode, targetPath);
     setSessions((prev) => [newSession, ...prev]);
     setActiveSessionId(newSession.id);
   };
@@ -282,6 +310,12 @@ export const App: React.FC = () => {
     setSessions((prev) => [newSession, ...prev]);
     setActiveSessionId(newSession.id);
     setWorkspaceName(projectName);
+    api.getWorkspaceInfo(folderPath).then((ws) => {
+      if (ws) {
+        setGitRepo(ws.gitRepo || null);
+        setGitBranch(ws.gitBranch || null);
+      }
+    }).catch(() => {});
   };
 
   const handleAddProject = async (folderPath?: string) => {

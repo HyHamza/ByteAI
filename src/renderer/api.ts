@@ -106,9 +106,9 @@ const mockAPI: ElectronAPI = {
   },
 
   selectDirectory: async () => 'E:\\CODE\\SeniorEngineer',
-  getWorkspaceInfo: async () => ({
-    path: mockSettings.activeWorkspacePath || 'E:\\CODE\\SeniorEngineer',
-    name: 'SeniorEngineer',
+  getWorkspaceInfo: async (folderPath?: string) => ({
+    path: folderPath || mockSettings.activeWorkspacePath || 'E:\\CODE\\SeniorEngineer',
+    name: folderPath ? folderPath.split('\\').pop() || 'SeniorEngineer' : 'SeniorEngineer',
     gitRepo: 'sources/github/HyHamza/SeniorEngineer',
     gitBranch: 'main',
   }),

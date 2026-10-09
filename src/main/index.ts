@@ -133,9 +133,9 @@ function setupIpcHandlers() {
     return selected;
   });
 
-  ipcMain.handle('workspace:get-info', async () => {
+  ipcMain.handle('workspace:get-info', async (_, args?: { folderPath?: string }) => {
     const settings = store.getSettings();
-    const wsPath = settings.activeWorkspacePath || process.cwd();
+    const wsPath = args?.folderPath || settings.activeWorkspacePath || process.cwd();
     const gitInfo = detectGitRepo(wsPath);
     return {
       path: wsPath,

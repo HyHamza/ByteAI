@@ -157,7 +157,7 @@ export interface ElectronAPI {
 
   // Workspace & Projects
   selectDirectory: () => Promise<string | null>;
-  getWorkspaceInfo: () => Promise<WorkspaceFolderInfo | null>;
+  getWorkspaceInfo: (folderPath?: string) => Promise<WorkspaceFolderInfo | null>;
   showInExplorer: (folderPath: string) => Promise<boolean>;
   getProjects: () => Promise<ProjectInfo[]>;
   addProject: (folderPath?: string) => Promise<ProjectInfo | null>;

@@ -64,7 +64,7 @@ const api: ElectronAPI = {
 
   // Workspace & Projects
   selectDirectory: () => ipcRenderer.invoke('workspace:select-dir'),
-  getWorkspaceInfo: () => ipcRenderer.invoke('workspace:get-info'),
+  getWorkspaceInfo: (folderPath?: string) => ipcRenderer.invoke('workspace:get-info', { folderPath }),
   showInExplorer: (folderPath) => ipcRenderer.invoke('workspace:show-in-explorer', { folderPath }),
   getProjects: () => ipcRenderer.invoke('projects:get'),
   addProject: (folderPath) => ipcRenderer.invoke('projects:add', { folderPath }),
