@@ -171,13 +171,15 @@ export class DutyManager {
       const nextPrompt = `[DUTY SHIFT IN PROGRESS — ${remainingDisplay} REMAINING OF ${active.totalHours}H SHIFT]
 Original Duty Mission: "${active.missionPrompt}"
 
-Phases Successfully Merged So Far:
+Phases Completed So Far in Cloud:
 ${phasesLog}
 
 AUTONOMOUS LEAD DIRECTIVE FOR BYTE:
 Your duty hours are NOT completed (${remainingDisplay} remaining).
 Do NOT stop! You are on active duty.
-Review the codebase changes merged above, identify the NEXT substantive phase to further advance the mission ("${active.missionPrompt}"), formulate a clear technical specification, and call 'jules_create_task' NOW!`;
+90% OF THE TIME: CONTINUE IN THE SAME JULES SESSION (${julesSessionId}) using 'jules_continue_session'!
+Preserve the existing container and branch. All accumulated commits will be merged when the shift concludes or when leaving the session.
+Formulate the NEXT substantive phase specification and call 'jules_continue_session' NOW!`;
 
       // Trigger next autonomous turn on the chat session
       AgentOrchestrator.getInstance().runAutonomousTurn(active.sessionId, nextPrompt).catch((err) => {
@@ -198,21 +200,34 @@ Review the codebase changes merged above, identify the NEXT substantive phase to
     store.saveDutyShift(shift);
     this.broadcastShift(shift);
 
+    // Auto-finalize and merge all accumulated commits when leaving the shift!
+    const lastPhase = shift.phasesCompleted[shift.phasesCompleted.length - 1];
+    const julesId = shift.currentJulesSessionId || lastPhase?.sessionId;
+    if (julesId) {
+      try {
+        const { syncAndMergeJulesSession } = await import('../git/merger');
+        const chat = store.getSession(shift.sessionId);
+        await syncAndMergeJulesSession(julesId, chat?.workspacePath || undefined);
+      } catch (err: any) {
+        console.warn(`[DutyManager] Final shift merge error:`, err?.message || err);
+      }
+    }
+
     const phasesLog = shift.phasesCompleted
       .map((p, idx) => `${idx + 1}. **${p.title}**${p.prUrl ? ` ([PR](${p.prUrl}))` : ''}`)
       .join('\n');
 
-    const handoverPrompt = `[DUTY SHIFT COMPLETED — ${shift.totalHours} HOURS COMPLETED]
+    const handoverPrompt = `[DUTY SHIFT COMPLETED — ${shift.totalHours} HOURS COMPLETED & ALL COMMITS MERGED]
 Original Duty Mission: "${shift.missionPrompt}"
 
 All Completed Phases in This Shift:
 ${phasesLog || '(No completed PRs recorded)'}
 
 AUTONOMOUS LEAD DIRECTIVE FOR BYTE:
-Your scheduled duty hours have concluded!
+Your scheduled duty hours have concluded and all commits have been merged into the local workspace and remote repository!
 Generate a comprehensive, beautifully structured **Senior Engineer Shift Handover Report** for the user summarizing:
 1. Executive Summary of work accomplished across the entire duty shift.
-2. All pull requests merged and features/bug fixes deployed.
+2. All commits and features/bug fixes deployed.
 3. Key architectural decisions and enhancements.
 4. Next recommended steps for the user.`;
 

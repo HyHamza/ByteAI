@@ -62,6 +62,8 @@ export class JulesPoller {
   }
 
   public trackSession(sessionId: string) {
+    this.handledCompletions.delete(sessionId);
+    this.saveState();
     if (!this.intervalId) {
       this.startPolling();
     }
@@ -357,19 +359,6 @@ SUPERVISOR DIRECTIVES FOR BYTE:
         (cs.title && cs.title.toLowerCase().includes((s.title || '').toLowerCase()))
     );
 
-    const targetDir = chatSession?.workspacePath || store.getSettings().activeWorkspacePath || undefined;
-
-    // Automatically pull and merge changes to local workspace and remote origin!
-    let mergeReport = '';
-    let mergeSucceeded = false;
-    try {
-      const mergeRes = await syncAndMergeJulesSession(s.id, targetDir);
-      mergeReport = `\n\n${mergeRes.message}`;
-      mergeSucceeded = mergeRes.success;
-    } catch (err: any) {
-      mergeReport = `\n\n(Auto-sync attempt encountered: ${err.message || String(err)})`;
-    }
-
     if (chatSession) {
       // Check if an autonomous Duty Shift is currently active!
       const activeShift = DutyManager.getInstance().getActiveShift(chatSession.id);
@@ -378,34 +367,23 @@ SUPERVISOR DIRECTIVES FOR BYTE:
         return;
       }
 
-      const syncHeader = mergeSucceeded 
-        ? '[JULES TASK COMPLETED & FULLY SYNCHRONIZED]' 
-        : '[JULES TASK COMPLETED - LOCAL MERGE REQUIRED]';
-
-      const syncDirectives = mergeSucceeded
-        ? `DIRECTIVES FOR BYTE:
-1. Jules changes have been pulled/merged into the local workspace and pushed to remote origin.
-2. CRITICAL: THIS SESSION IS COMPLETED! DO NOT call 'jules_reply_question' (the remote session is closed and cannot receive question replies).
-3. MULTI-PHASE CONTINUATION:
-   If the user's objective requires multiple phases (e.g. "do this in phases", "add white theme to all components", or ongoing feature work) and subsequent phases remain:
-   DO NOT STOP! Empirically verify what was just merged, formulate the NEXT PHASE specification, and IMMEDIATELY call 'jules_create_task'!
-4. If this was the final phase or a standalone task, present the full completion report to the user.`
-        : `DIRECTIVES FOR BYTE:
-1. Jules has completed the task in cloud, but local repository sync reported: ${mergeReport}
-2. CRITICAL: THIS SESSION IS COMPLETED! DO NOT call 'jules_reply_question'.
-3. Check the local files or run 'jules_sync_and_merge' with session_id: "${s.id}".
-4. MULTI-PHASE CONTINUATION:
-   If the user's goal was multi-phase execution (e.g. White Theme phases) and the changes are integrated:
-   Formulate the NEXT PHASE specification and call 'jules_create_task' to keep engineering momentum!
-5. DO NOT hallucinate or falsely claim code changes are present locally until you empirically verify them!`;
-
-      const summaryMsg = `${syncHeader}
+      const summaryMsg = `[JULES SESSION TURN COMPLETED]
 Session ID: ${s.id}
 Task: ${s.title || s.id}
-Status: COMPLETED
-${s.prUrl ? `Pull Request: ${s.prUrl}` : 'The remote worker has finished the task.'}${mergeReport}
+Status: COMPLETED (Turn finished in Google Cloud)
+${s.prUrl ? `Pull Request / Remote Branch: ${s.prUrl}` : 'Jules has finished work on this prompt.'}
 
-${syncDirectives}`;
+CRITICAL DIRECTIVES FOR BYTE:
+1. THIS PHASE/TURN IS COMPLETED. DO NOT call 'jules_reply_question' (this prompt turn is closed).
+2. 90% SESSION REUSE RULE:
+   Whenever working on subsequent phases, refinements, bug fixes, or further requests for this task:
+   YOU MUST CONTINUE IN THIS SAME JULES SESSION (${s.id}) USING 'jules_continue_session'!
+   Do NOT call 'jules_create_task' to start a new session (90% of the time you must reuse this session).
+3. DEFERRED MERGING (MERGE WHEN LEAVING SESSION):
+   Do not perform intermediate merges while work is actively continuing in this session.
+   All accumulated commits from this session will be merged when you are LEAVING this session:
+   - If more phases/work remain: formulate the next specification and call 'jules_continue_session' NOW.
+   - If ALL work on this task is completely finished, or if you are leaving this session: call 'jules_finalize_and_merge' with session_id: "${s.id}" to merge all commits into the local workspace and remote origin, then present your final summary to the user.`;
 
       AgentOrchestrator.getInstance().runAutonomousTurn(chatSession.id, summaryMsg).catch(console.error);
     }

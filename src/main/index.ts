@@ -314,12 +314,34 @@ function setupIpcHandlers() {
     return julesClient.createSession({ prompt, title, repo, branch });
   });
 
+  ipcMain.handle('jules:continue-session', async (_, { prompt, sessionId }: { prompt: string; sessionId?: string }) => {
+    let targetId = sessionId;
+    if (!targetId) {
+      const active = store.getSessions().find((s) => !!s.julesSessionId);
+      targetId = active?.julesSessionId;
+    }
+    if (!targetId) throw new Error('No active Jules session found to continue');
+    await julesClient.sendFollowup(targetId, prompt);
+    JulesPoller.getInstance().trackSession(targetId);
+    return true;
+  });
+
   ipcMain.handle('jules:followup', async (_, { sessionId, prompt }) => {
     return julesClient.sendFollowup(sessionId, prompt);
   });
 
   ipcMain.handle('jules:merge', async (_, { sessionId }: { sessionId: string }) => {
     return syncAndMergeJulesSession(sessionId);
+  });
+
+  ipcMain.handle('jules:finalize-and-merge', async (_, { sessionId }: { sessionId?: string }) => {
+    let targetId = sessionId;
+    if (!targetId) {
+      const active = store.getSessions().find((s) => !!s.julesSessionId);
+      targetId = active?.julesSessionId;
+    }
+    if (!targetId) throw new Error('No active Jules session found to finalize and merge');
+    return syncAndMergeJulesSession(targetId);
   });
 
   // ── Background Tasks IPC

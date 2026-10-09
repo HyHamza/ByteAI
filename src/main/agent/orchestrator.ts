@@ -95,15 +95,20 @@ CORE DIRECTIVES:
    - Inspect the conflicted file with 'read_file' or 'resolve_merge_conflict'.
    - Resolve the conflict markers or choose the proper strategy ('ours', 'theirs', or 'custom_content'), stage the file, and complete the merge commit and push!
 
-10. COMPLETED TASKS & MULTI-PHASE CONTINUATION:
-    - When a Jules task completes (status COMPLETED, or received [JULES TASK COMPLETED...]):
-      a) NEVER call 'jules_reply_question'! A completed task cannot accept question replies.
-      b) MULTI-PHASE CONTINUATION: If the user requested multi-phase execution (e.g., "do this in phases", "add white theme to all parts", "first complete one phase then next"):
-         DO NOT STOP! Once a phase completes, formulate the NEXT PHASE specification and IMMEDIATELY call 'jules_create_task'!
-         Continue this chain phase-by-phase until the entire user objective is completed.
-      c) Only when all phases of the overall feature are complete should you present the final completion report to the user.
+10. SESSION REUSE VS NEW SESSION (THE 90% RULE):
+    - 90% OF THE TIME, whenever continuing work on a task, subsequent phases, refinements, bug fixes, or edge-case handling:
+      YOU MUST CONTINUE IN THE SAME JULES SESSION using 'jules_continue_session'!
+    - Reusing the session preserves the remote VM container, git branch, and previous commits, preventing fragmented PRs and lost context.
+    - DO NOT call 'jules_create_task' for follow-up work or multi-phase tasks when an existing session is available.
+    - ONLY call 'jules_create_task' when starting a completely new project or when the user explicitly requests starting a brand new session.
 
-11. LONG-RUNNING COMMANDS & REACTIVE WAKEUP (ANTIGRAVITY STYLE):
+11. DEFERRED MERGING (MERGE ALL COMMITS WHEN LEAVING SESSION):
+    - Do NOT perform intermediate git merges into the local repository while work is actively continuing within the same Jules session.
+    - Merge ALL commits accumulated across the session LATER when you are LEAVING that session (i.e. when all work on this task is finished, or before switching to a new session).
+    - When all work for this task is done, call 'jules_finalize_and_merge' with the session_id to merge all commits into the local workspace and remote origin.
+    - If you start a new session ('jules_create_task'), our system automatically finalizes and merges all commits from the previous session before creating the new session.
+
+12. LONG-RUNNING COMMANDS & REACTIVE WAKEUP (ANTIGRAVITY STYLE):
     - For long-running commands (e.g., dev servers, builds, test suites, long package installs), run them via 'run_terminal_command'.
     - When a command is sent to the background as a task (with a task ID), DO NOT POLL OR LOOP! Conclude your turn with a brief 1-line update confirming the command was launched.
     - The system will AUTOMATICALLY WAKE YOU UP with a <SYSTEM_MESSAGE> containing the exit code and output the moment the task finishes!
@@ -419,7 +424,11 @@ Git Repository: ${activeRepo} (${activeBranch})`;
 
       for (const tc of result.toolCalls) {
         const toolName = tc.function?.name;
-        if (toolName === 'jules_create_task' || toolName === 'jules_reply_question') {
+        if (
+          toolName === 'jules_create_task' ||
+          toolName === 'jules_reply_question' ||
+          toolName === 'jules_continue_session'
+        ) {
           hasDispatchedJules = true;
         }
 

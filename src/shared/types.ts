@@ -172,8 +172,10 @@ export interface ElectronAPI {
   getJulesSessions: () => Promise<JulesSessionSummary[]>;
   getJulesActivities: (sessionId: string) => Promise<JulesActivity[]>;
   julesCreateTask: (prompt: string, title?: string, repo?: string, branch?: string) => Promise<{ sessionId: string }>;
+  julesContinueSession: (prompt: string, sessionId?: string) => Promise<boolean>;
   julesSendFollowup: (sessionId: string, prompt: string) => Promise<boolean>;
   julesMergeSession: (sessionId: string) => Promise<{ success: boolean; message: string }>;
+  julesFinalizeAndMerge: (sessionId?: string) => Promise<{ success: boolean; message: string }>;
   onJulesUpdate: (callback: (update: JulesSessionSummary) => void) => () => void;
 
   // Background Tasks API
@@ -203,6 +205,7 @@ export interface DutyShiftPhase {
 export interface DutyShift {
   id: string;
   sessionId: string;
+  currentJulesSessionId?: string;
   missionPrompt: string;
   totalHours: number;
   durationMs: number;

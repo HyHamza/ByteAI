@@ -79,8 +79,10 @@ const api: ElectronAPI = {
   getJulesSessions: () => ipcRenderer.invoke('jules:list-sessions'),
   getJulesActivities: (sessionId) => ipcRenderer.invoke('jules:list-activities', { sessionId }),
   julesCreateTask: (prompt, title, repo, branch) => ipcRenderer.invoke('jules:create-task', { prompt, title, repo, branch }),
+  julesContinueSession: (prompt, sessionId) => ipcRenderer.invoke('jules:continue-session', { prompt, sessionId }),
   julesSendFollowup: (sessionId, prompt) => ipcRenderer.invoke('jules:followup', { sessionId, prompt }),
   julesMergeSession: (sessionId) => ipcRenderer.invoke('jules:merge', { sessionId }),
+  julesFinalizeAndMerge: (sessionId) => ipcRenderer.invoke('jules:finalize-and-merge', { sessionId }),
   
   onJulesUpdate: (callback) => {
     const handler = (_: any, update: JulesSessionSummary) => callback(update);

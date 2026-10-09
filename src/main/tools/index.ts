@@ -216,8 +216,36 @@ export const STANDARD_TOOL_DEFS: LLMToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'jules_continue_session',
+      description: 'Continue working in the SAME existing Jules session (STRONGLY RECOMMENDED 90% OF THE TIME). Dispatches subsequent phases, follow-up instructions, edge-case fixes, or testing into the existing Jules session without creating a new session. Preserves the cloud container environment, git branch, and all previously committed changes. Merge all commits together later when leaving this session.',
+      parameters: {
+        type: 'object',
+        properties: {
+          prompt: { type: 'string', description: 'Next phase instructions, follow-up technical specification, or revisions for Jules' },
+          session_id: { type: 'string', description: 'Optional Jules session ID. If omitted, automatically continues in the active Jules session for this chat.' },
+        },
+        required: ['prompt'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'jules_finalize_and_merge',
+      description: 'Finalize work from a Jules session and pull/merge ALL commits and patches accumulated across its phases into the local workspace and push to remote origin. Use this tool when you are leaving a Jules session (e.g. all work from that session is complete, or before switching to a new session).',
+      parameters: {
+        type: 'object',
+        properties: {
+          session_id: { type: 'string', description: 'Optional Jules session ID to finalize and merge. Defaults to current active session.' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'jules_create_task',
-      description: 'Formulate an architectural and technical specification and dispatch it to Jules AI.',
+      description: 'Create a BRAND NEW Jules AI cloud session. IMPORTANT: 90% of the time, you MUST use "jules_continue_session" to continue in the existing Jules session instead of creating a new one! Only use "jules_create_task" when starting a completely new project, when no prior session exists, or when the user explicitly requests a fresh session. Note: If an existing session is present, all commits from that previous session are automatically finalized and merged before the new session is created.',
       parameters: {
         type: 'object',
         properties: {
@@ -562,11 +590,64 @@ export async function executeToolCall(
       }
 
       // ── Jules Supervisor Tools
+      case 'jules_continue_session': {
+        const client = JulesClient.getInstance();
+        const store = DataStore.getInstance();
+        let targetJulesId = args.session_id;
+
+        if (!targetJulesId && sessionId) {
+          const chatSession = store.getSession(sessionId);
+          targetJulesId = chatSession?.julesSessionId;
+        }
+
+        if (!targetJulesId) {
+          const allSessions = store.getSessions();
+          const recent = allSessions.find((s) => !!s.julesSessionId);
+          targetJulesId = recent?.julesSessionId;
+        }
+
+        if (!targetJulesId) {
+          return `Error: No active or prior Jules session found to continue. 90% of the time you should continue in an existing session, but since none exists yet, please use 'jules_create_task' to start the initial session.`;
+        }
+
+        await client.sendFollowup(targetJulesId, args.prompt);
+
+        // Ensure this chat session references this target Jules session
+        if (sessionId) {
+          try {
+            store.updateSession(sessionId, { julesSessionId: targetJulesId });
+          } catch (_) {}
+        }
+
+        // Track in background poller (clears handledCompletions so the new turn will be supervised)
+        JulesPoller.getInstance().trackSession(targetJulesId);
+
+        return `Instruction sent to continue in Jules session ${targetJulesId}. Jules is executing the work within the same cloud VM and branch. All commits will accumulate in this session and will be merged together when leaving it. Conclude your turn immediately.`;
+      }
+
       case 'jules_create_task': {
         const client = JulesClient.getInstance();
+        const store = DataStore.getInstance();
         const gitInfo = detectGitRepo(workspaceDir);
         const repo = args.repo || gitInfo.repo;
         const branch = args.branch || gitInfo.branch || 'main';
+
+        // Auto-finalize and merge all commits from previous session before leaving it!
+        let prevMergeNote = '';
+        if (sessionId) {
+          const currentChat = store.getSession(sessionId);
+          if (currentChat?.julesSessionId) {
+            console.log(`[merger] Leaving previous Jules session ${currentChat.julesSessionId}. Merging all commits before starting new session...`);
+            try {
+              const mergeRes = await syncAndMergeJulesSession(currentChat.julesSessionId, workspaceDir);
+              if (mergeRes.success) {
+                prevMergeNote = ` (Auto-merged all commits from previous session ${currentChat.julesSessionId})`;
+              }
+            } catch (err: any) {
+              console.warn(`[merger] Auto-merge on session exit:`, err.message || err);
+            }
+          }
+        }
 
         const res = await client.createSession({
           prompt: args.prompt,
@@ -578,14 +659,14 @@ export async function executeToolCall(
         // Automatically associate Jules Session ID with this Chat Session
         if (sessionId) {
           try {
-            DataStore.getInstance().updateSession(sessionId, { julesSessionId: res.sessionId });
+            store.updateSession(sessionId, { julesSessionId: res.sessionId });
           } catch (_) {}
         }
 
         // Automatically track session in native background poller!
         JulesPoller.getInstance().trackSession(res.sessionId);
 
-        return `Jules task created successfully with Session ID: ${res.sessionId} on ${repo || 'default repository'} (${branch}). The autonomous background supervisor daemon is now tracking execution in the background and will wake you up automatically when Jules reports back. Conclude your turn immediately and do not call any more tools.`;
+        return `Jules task created successfully with Session ID: ${res.sessionId} on ${repo || 'default repository'} (${branch})${prevMergeNote}. The autonomous background supervisor daemon is tracking execution in the background and will wake you up automatically when Jules reports back. Conclude your turn immediately.`;
       }
 
       case 'jules_reply_question': {
@@ -608,8 +689,23 @@ export async function executeToolCall(
         return JSON.stringify(session, null, 2);
       }
 
+      case 'jules_finalize_and_merge':
       case 'jules_sync_and_merge': {
-        const result = await syncAndMergeJulesSession(args.session_id, workspaceDir);
+        const store = DataStore.getInstance();
+        let targetId = args.session_id;
+        if (!targetId && sessionId) {
+          const currentChat = store.getSession(sessionId);
+          targetId = currentChat?.julesSessionId;
+        }
+        if (!targetId) {
+          const allSessions = store.getSessions();
+          const recent = allSessions.find((s) => !!s.julesSessionId);
+          targetId = recent?.julesSessionId;
+        }
+        if (!targetId) {
+          return `Error: No Jules session specified or found in active chat to finalize and merge.`;
+        }
+        const result = await syncAndMergeJulesSession(targetId, workspaceDir);
         return result.message;
       }
 
