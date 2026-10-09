@@ -49,6 +49,21 @@ function formatDuration(seconds: number): string {
   return `${mins}m ${rem}s`;
 }
 
+function isSystemNotificationMessage(m: ChatMessage): boolean {
+  if (m.role === 'system' || m.isSystemNotification) return true;
+  const content = m.content || '';
+  return (
+    content.startsWith('<SYSTEM_MESSAGE>') ||
+    content.startsWith('[DUTY SHIFT') ||
+    content.startsWith('[SYSTEM ALERT') ||
+    content.startsWith('[TASK NOTIFICATION') ||
+    content.startsWith('[JULES') ||
+    content.startsWith('[Jules') ||
+    content.startsWith('[AUTONOMOUS SUPERVISOR') ||
+    content.startsWith('[AUTONOMOUS DUTY')
+  );
+}
+
 const SystemEventCard: React.FC<{ message: ChatMessage }> = ({ message }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const text = message.content || '';
@@ -163,9 +178,16 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
     let activeTurn: ConversationTurn | null = null;
 
     for (const m of messages) {
-      const isSystem = m.role === 'system' || m.isSystemNotification;
+      const isSystem = isSystemNotificationMessage(m);
 
       if (isSystem) {
+        // If there's already an active turn with user messages or assistant activity,
+        // finalize that turn so its response and tools are never swallowed or merged!
+        if (activeTurn && (activeTurn.userMessage || activeTurn.assistantMessages.length > 0)) {
+          list.push(activeTurn);
+          activeTurn = null;
+        }
+
         if (!activeTurn) {
           activeTurn = {
             id: m.id,
@@ -345,11 +367,43 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
           const isLatestTurn = turnIdx === turns.length - 1;
           const isLiveInThisTurn = isLatestTurn && isStreaming;
 
-          // Construct Antigravity chronological trajectory items (thoughts and tools)
+          // 1. Identify which assistant message provides the concluding responseText
+          let responseText = '';
+          let finalResponseMsgId: string | null = null;
+
+          if (isLiveInThisTurn) {
+            responseText = currentStreamContent;
+          } else {
+            const standaloneTextMsgs = turn.assistantMessages.filter(
+              (am) => (!am.toolCalls || am.toolCalls.length === 0) && am.content && am.content.trim()
+            );
+            if (standaloneTextMsgs.length > 1) {
+              responseText = standaloneTextMsgs.map((m) => m.content.trim()).join('\n\n---\n\n');
+              finalResponseMsgId = standaloneTextMsgs[standaloneTextMsgs.length - 1].id;
+            } else if (standaloneTextMsgs.length === 1) {
+              responseText = standaloneTextMsgs[0].content.trim();
+              finalResponseMsgId = standaloneTextMsgs[0].id;
+            } else {
+              // Fallback to last message with content (e.g. Jules dispatch or background task with toolCalls)
+              for (let i = turn.assistantMessages.length - 1; i >= 0; i--) {
+                const am = turn.assistantMessages[i];
+                if (am.content && am.content.trim()) {
+                  responseText = am.content.trim();
+                  finalResponseMsgId = am.id;
+                  break;
+                }
+              }
+            }
+          }
+
+          // 2. Construct Antigravity chronological trajectory items (thoughts and tools)
           const trajectoryItems: TrajectoryItem[] = [];
 
-          for (const am of turn.assistantMessages) {
-            // 1. If this step produced thinking/reasoning:
+          for (let amIdx = 0; amIdx < turn.assistantMessages.length; amIdx++) {
+            const am = turn.assistantMessages[amIdx];
+            const isLastMsg = amIdx === turn.assistantMessages.length - 1;
+
+            // Step thinking/reasoning:
             if (am.thinking && am.thinking.trim()) {
               trajectoryItems.push({
                 type: 'thought',
@@ -357,7 +411,14 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
                 content: am.thinking.trim(),
                 durationSec: Math.max(1, Math.round(am.thinking.trim().length / 60)),
               });
-            } else if (am.content && am.toolCalls && am.toolCalls.length > 0 && am.content.trim()) {
+            } else if (
+              am.id !== finalResponseMsgId &&
+              !isLastMsg &&
+              am.content &&
+              am.toolCalls &&
+              am.toolCalls.length > 0 &&
+              am.content.trim()
+            ) {
               // Intermediate step note/recon text directly before tool execution
               trajectoryItems.push({
                 type: 'thought',
@@ -367,7 +428,7 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
               });
             }
 
-            // 2. Tools executed in this step:
+            // Tools executed in this step:
             if (am.toolCalls && am.toolCalls.length > 0) {
               for (const tc of am.toolCalls) {
                 trajectoryItems.push({
@@ -398,20 +459,6 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
                     tool: tc,
                   });
                 }
-              }
-            }
-          }
-
-          // Final response text
-          let responseText = '';
-          if (isLiveInThisTurn) {
-            responseText = currentStreamContent;
-          } else {
-            for (let i = turn.assistantMessages.length - 1; i >= 0; i--) {
-              const am = turn.assistantMessages[i];
-              if (am.content && am.content.trim()) {
-                responseText = am.content.trim();
-                break;
               }
             }
           }
