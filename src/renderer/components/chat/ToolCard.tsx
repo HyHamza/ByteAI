@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Terminal, 
   FileText, 
@@ -14,12 +14,34 @@ import {
   Search,
   GitPullRequest,
   MessageSquare,
-  Activity
+  Activity,
+  Atom,
+  Brain,
+  FileCode
 } from 'lucide-react';
 import type { ToolExecutionRecord } from '@/shared/types';
 
 export interface ToolCardProps {
   tool: ToolExecutionRecord;
+}
+
+// ── File Type Icon Helper (Antigravity Style Atom / Code Icons) ─────────────
+export function getFileIcon(filePath: string) {
+  if (!filePath) return <FileText className="w-3.5 h-3.5 text-blue-400 shrink-0" />;
+  const ext = filePath.split('.').pop()?.toLowerCase() || '';
+  if (['tsx', 'jsx', 'ts', 'js', 'mjs', 'cjs'].includes(ext)) {
+    return <Atom className="w-3.5 h-3.5 text-sky-400 shrink-0" />;
+  }
+  if (['css', 'scss', 'sass', 'less'].includes(ext)) {
+    return <FileCode className="w-3.5 h-3.5 text-pink-400 shrink-0" />;
+  }
+  if (['json', 'md', 'markdown', 'txt', 'yml', 'yaml'].includes(ext)) {
+    return <FileText className="w-3.5 h-3.5 text-amber-400 shrink-0" />;
+  }
+  if (['py', 'rb', 'go', 'rs', 'java', 'c', 'cpp', 'cs'].includes(ext)) {
+    return <FileCode className="w-3.5 h-3.5 text-emerald-400 shrink-0" />;
+  }
+  return <FileCode className="w-3.5 h-3.5 text-blue-400 shrink-0" />;
 }
 
 // ── File Language Badge Helper ──────────────────────────────────────────────
@@ -111,28 +133,26 @@ export const AntigravityEditItem: React.FC<{ tool: ToolExecutionRecord }> = ({ t
   const { args = {}, status } = tool;
   const filePath = args.path || 'file';
   const filename = getBasename(filePath);
-  const badge = getFileBadge(filePath);
+  const fileIcon = getFileIcon(filePath);
   const { added, removed, isCreate } = getEditDiffStats(tool);
 
   return (
     <div className="font-sans text-[13px] leading-relaxed select-none group/edit">
       <div 
         onClick={() => setIsExpanded(!isExpanded)}
-        className="flex items-center space-x-2 py-0.5 cursor-pointer hover:opacity-90 transition-opacity"
+        className="flex items-center space-x-1.5 py-0.5 cursor-pointer text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors w-fit"
       >
-        <span className="text-[var(--text-secondary)] font-normal">
+        <span className="font-normal">
           {isCreate ? 'Created' : 'Edited'}
         </span>
-        <span className={`${badge.colorClass} font-semibold text-[11px] tracking-wide`}>
-          {badge.label}
-        </span>
+        {fileIcon}
         <span className="font-medium text-[var(--text-primary)] hover:underline">
           {filename}
         </span>
-        <span className="text-[#22c55e] font-mono text-[11.5px] font-medium">
+        <span className="text-[#22c55e] font-mono text-[11.5px] font-medium ml-1">
           +{added}
         </span>
-        <span className="text-[#ef4444] font-mono text-[11.5px] font-medium">
+        <span className="text-[#ef4444] font-mono text-[11.5px] font-medium ml-0.5">
           -{removed}
         </span>
 
@@ -141,6 +161,11 @@ export const AntigravityEditItem: React.FC<{ tool: ToolExecutionRecord }> = ({ t
         )}
         {status === 'error' && (
           <AlertCircle className="w-3.5 h-3.5 text-rose-400 ml-1" />
+        )}
+        {isExpanded ? (
+          <ChevronDown className="w-3.5 h-3.5 text-[var(--text-muted)] ml-0.5" />
+        ) : (
+          <ChevronRight className="w-3.5 h-3.5 text-[var(--text-muted)] ml-0.5" />
         )}
       </div>
 
@@ -184,10 +209,117 @@ export const AntigravityEditItem: React.FC<{ tool: ToolExecutionRecord }> = ({ t
   );
 };
 
-// ── Antigravity Style Explored Group (Collapsed by Default) ─────────────────
-export const AntigravityExploredGroup: React.FC<{ tools: ToolExecutionRecord[] }> = ({ tools }) => {
+// ── Antigravity Style Thought Item ──────────────────────────────────────────
+export const AntigravityThoughtItem: React.FC<{
+  content: string;
+  durationSec: number;
+  isIndented?: boolean;
+}> = ({ content, durationSec, isIndented = false }) => {
   const [isExpanded, setIsExpanded] = useState(false);
-  const count = tools.length;
+
+  return (
+    <div className={`font-sans text-[13px] leading-relaxed select-none ${isIndented ? 'pl-4' : ''}`}>
+      <div
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="flex items-center space-x-1 py-0.5 cursor-pointer text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors group/th w-fit"
+      >
+        <span>Thought for {durationSec}s</span>
+        {isExpanded ? (
+          <ChevronDown className="w-3.5 h-3.5 text-[var(--text-muted)] group-hover/th:text-[var(--text-primary)]" />
+        ) : (
+          <ChevronRight className="w-3.5 h-3.5 text-[var(--text-muted)] group-hover/th:text-[var(--text-primary)]" />
+        )}
+      </div>
+
+      {isExpanded && (
+        <div className="mt-1 mb-2 pl-3 border-l-2 border-purple-500/40 ml-1.5 font-mono text-[11px] text-[var(--text-secondary)] bg-[var(--bg-sidebar)]/80 p-2.5 rounded-r-lg max-h-72 overflow-y-auto whitespace-pre-wrap leading-relaxed select-text animate-in fade-in duration-150">
+          {content}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ── Antigravity Style Analyzed File Sub-Item ────────────────────────────────
+export const AntigravityAnalyzedItem: React.FC<{ tool: ToolExecutionRecord }> = ({ tool }) => {
+  const [showDetail, setShowDetail] = useState(false);
+  const { copiedType, copy } = useCopy();
+  const { toolName, args = {} } = tool;
+
+  const filePath = args.path || args.file_path || 'file';
+  const filename = getBasename(filePath);
+  const fileIcon = getFileIcon(filePath);
+
+  let verb = 'Analyzed';
+  let detailRange = '';
+
+  if (toolName === 'read_file') {
+    verb = 'Analyzed';
+    if (args.start_line && args.end_line) {
+      detailRange = `#L${args.start_line}-${args.end_line}`;
+    } else if (args.start_line) {
+      detailRange = `#L${args.start_line}`;
+    }
+  } else if (toolName === 'search_codebase') {
+    verb = 'Searched';
+    detailRange = args.query ? `for "${args.query}"` : '';
+  } else if (toolName === 'list_directory') {
+    verb = 'Explored';
+    detailRange = args.path || '.';
+  }
+
+  return (
+    <div className="font-sans text-[13px] leading-relaxed select-none pl-4">
+      <div
+        onClick={() => setShowDetail(!showDetail)}
+        className="flex items-center space-x-1.5 py-0.5 cursor-pointer text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors group/item w-fit"
+      >
+        <span className="font-normal">{verb}</span>
+        {fileIcon}
+        <span className="font-medium text-[var(--text-primary)] group-hover/item:underline">{filename}</span>
+        {detailRange && (
+          <span className="text-[var(--text-muted)] font-mono text-[11.5px] ml-0.5">{detailRange}</span>
+        )}
+        {tool.status === 'running' && (
+          <Loader2 className="w-3 h-3 text-cyan-400 animate-spin ml-1" />
+        )}
+        {showDetail ? (
+          <ChevronDown className="w-3 h-3 text-[var(--text-muted)] ml-0.5 opacity-0 group-hover/item:opacity-100" />
+        ) : (
+          <ChevronRight className="w-3 h-3 text-[var(--text-muted)] ml-0.5 opacity-0 group-hover/item:opacity-100" />
+        )}
+      </div>
+
+      {showDetail && (
+        <div className="bg-[var(--bg-sidebar)] border border-[var(--border-subtle)] rounded p-2 my-1 text-[11px] font-mono space-y-1.5 ml-2 animate-in fade-in duration-150">
+          <div className="flex items-center justify-between text-[var(--text-muted)] text-[10px]">
+            <span>{filePath}</span>
+            {tool.output && (
+              <button
+                type="button"
+                onClick={(e) => copy(e, tool.output!, 'out')}
+                className="hover:text-[var(--text-primary)] px-1 py-0.5 rounded hover:bg-[var(--bg-surface-hover)] transition-colors"
+              >
+                {copiedType === 'out' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+              </button>
+            )}
+          </div>
+          <pre className="text-[var(--text-primary)] whitespace-pre-wrap max-h-[220px] overflow-y-auto select-text leading-relaxed">
+            {tool.output || '(No output)'}
+          </pre>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ── Antigravity Style Explored Group (Collapsed by Default) ─────────────────
+export const AntigravityExploredGroup: React.FC<{
+  items: (TrajectoryTool | TrajectoryThought)[];
+  fileCount: number;
+}> = ({ items, fileCount }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const count = fileCount || 1;
   const label = `Explored ${count} ${count === 1 ? 'file' : 'files'}`;
 
   return (
@@ -202,79 +334,26 @@ export const AntigravityExploredGroup: React.FC<{ tools: ToolExecutionRecord[] }
         ) : (
           <ChevronRight className="w-3.5 h-3.5 text-[var(--text-muted)] group-hover/explore:text-[var(--text-primary)] transition-transform" />
         )}
-        {tools.some(t => t.status === 'running') && (
+        {items.some((it) => it.type === 'tool' && it.tool.status === 'running') && (
           <Loader2 className="w-3 h-3 text-cyan-400 animate-spin ml-1" />
         )}
       </div>
 
       {isExpanded && (
-        <div className="mt-1 mb-2 pl-3 border-l border-[var(--border-subtle)] ml-1.5 space-y-1 animate-in fade-in duration-150">
-          {tools.map((t) => (
-            <ExploredSubItem key={t.id} tool={t} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
-
-const ExploredSubItem: React.FC<{ tool: ToolExecutionRecord }> = ({ tool }) => {
-  const [showDetail, setShowDetail] = useState(false);
-  const { copiedType, copy } = useCopy();
-  const { toolName, args = {} } = tool;
-
-  let title = '';
-  let subdetail = '';
-  let icon = <FileText className="w-3 h-3 text-blue-400 shrink-0" />;
-
-  if (toolName === 'read_file') {
-    title = args.path ? getBasename(args.path) : 'Read file';
-    const range = args.start_line ? ` (L${args.start_line}${args.end_line ? `–L${args.end_line}` : ''})` : '';
-    subdetail = (args.path ? `${args.path}${range}` : '');
-    icon = <FileText className="w-3 h-3 text-blue-400 shrink-0" />;
-  } else if (toolName === 'search_codebase') {
-    title = args.query ? `Search "${args.query}"` : 'Search codebase';
-    subdetail = args.file_pattern ? `Filter: ${args.file_pattern}` : '';
-    icon = <Search className="w-3 h-3 text-purple-400 shrink-0" />;
-  } else if (toolName === 'list_directory') {
-    title = `List ${args.path || '.'}`;
-    subdetail = args.path || '.';
-    icon = <Folder className="w-3 h-3 text-amber-400 shrink-0" />;
-  } else {
-    title = toolName.replace(/_/g, ' ');
-    subdetail = JSON.stringify(args);
-  }
-
-  return (
-    <div className="text-xs">
-      <div 
-        onClick={() => setShowDetail(!showDetail)}
-        className="flex items-center space-x-1.5 py-0.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer transition-colors"
-      >
-        {icon}
-        <span className="font-medium text-[var(--text-primary)]">{title}</span>
-        {subdetail && title !== subdetail && (
-          <span className="text-[var(--text-muted)] text-[11px] font-mono truncate max-w-[340px]">{subdetail}</span>
-        )}
-      </div>
-
-      {showDetail && (
-        <div className="bg-[var(--bg-sidebar)] border border-[var(--border-subtle)] rounded p-2 my-1 text-[11px] font-mono space-y-1.5">
-          <div className="flex items-center justify-between text-[#787c88]">
-            <span>Output:</span>
-            {tool.output && (
-              <button
-                type="button"
-                onClick={(e) => copy(e, tool.output!, 'out')}
-                className="hover:text-[var(--text-primary)] px-1 py-0.5 rounded hover:bg-[var(--bg-surface-hover)] transition-colors"
-              >
-                {copiedType === 'out' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-              </button>
-            )}
-          </div>
-          <pre className="text-[#93c5fd] whitespace-pre-wrap max-h-[220px] overflow-y-auto select-text">
-            {tool.output || '(No output)'}
-          </pre>
+        <div className="space-y-0.5 animate-in fade-in duration-150">
+          {items.map((it) => {
+            if (it.type === 'thought') {
+              return (
+                <AntigravityThoughtItem
+                  key={it.id}
+                  content={it.content}
+                  durationSec={it.durationSec}
+                  isIndented={true}
+                />
+              );
+            }
+            return <AntigravityAnalyzedItem key={it.id} tool={it.tool} />;
+          })}
         </div>
       )}
     </div>
@@ -505,25 +584,66 @@ export const AntigravityGenericItem: React.FC<{ tool: ToolExecutionRecord }> = (
   );
 };
 
-// ── Antigravity Unified Tool Stream ─────────────────────────────────────────
-// Groups consecutive exploration tools (read_file, search_codebase, list_directory) into "Explored N files >"
-// and renders edits as "Edited TS <filename> +<added> -<removed>"
-export const AntigravityToolStream: React.FC<{ tools: ToolExecutionRecord[] }> = ({ tools }) => {
-  if (!tools || tools.length === 0) return null;
+// ── Antigravity Unified Trajectory Flow ─────────────────────────────────────
+export interface TrajectoryThought {
+  type: 'thought';
+  id: string;
+  content: string;
+  durationSec: number;
+}
 
-  type StreamGroup = 
-    | { type: 'explore'; tools: ToolExecutionRecord[] }
-    | { type: 'edit'; tool: ToolExecutionRecord }
-    | { type: 'command'; tool: ToolExecutionRecord }
-    | { type: 'other'; tool: ToolExecutionRecord };
+export interface TrajectoryTool {
+  type: 'tool';
+  id: string;
+  tool: ToolExecutionRecord;
+}
 
-  const groups: StreamGroup[] = [];
-  let currentExploreGroup: ToolExecutionRecord[] = [];
+export type TrajectoryItem = TrajectoryThought | TrajectoryTool;
+
+export type TrajectoryGroup =
+  | {
+      type: 'explored_group';
+      id: string;
+      fileCount: number;
+      items: (TrajectoryTool | TrajectoryThought)[];
+    }
+  | {
+      type: 'edit';
+      id: string;
+      tool: ToolExecutionRecord;
+    }
+  | {
+      type: 'command';
+      id: string;
+      tool: ToolExecutionRecord;
+    }
+  | {
+      type: 'thought';
+      id: string;
+      thought: TrajectoryThought;
+    }
+  | {
+      type: 'other';
+      id: string;
+      tool: ToolExecutionRecord;
+    };
+
+export function groupTrajectoryItems(items: TrajectoryItem[]): TrajectoryGroup[] {
+  const groups: TrajectoryGroup[] = [];
+  let currentExploreItems: (TrajectoryTool | TrajectoryThought)[] = [];
+  let currentExploreFiles = 0;
 
   const flushExplore = () => {
-    if (currentExploreGroup.length > 0) {
-      groups.push({ type: 'explore', tools: [...currentExploreGroup] });
-      currentExploreGroup = [];
+    if (currentExploreItems.length > 0) {
+      const firstId = currentExploreItems[0].id;
+      groups.push({
+        type: 'explored_group',
+        id: `exp_grp_${firstId}`,
+        fileCount: currentExploreFiles,
+        items: [...currentExploreItems],
+      });
+      currentExploreItems = [];
+      currentExploreFiles = 0;
     }
   };
 
@@ -539,38 +659,89 @@ export const AntigravityToolStream: React.FC<{ tools: ToolExecutionRecord[] }> =
     return name === 'run_terminal_command' || name === 'run_verification_test';
   };
 
-  for (const t of tools) {
-    if (isExploreTool(t.toolName)) {
-      currentExploreGroup.push(t);
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+
+    if (item.type === 'tool' && isExploreTool(item.tool.toolName)) {
+      currentExploreItems.push(item);
+      currentExploreFiles++;
+    } else if (item.type === 'thought') {
+      const nextItem = items[i + 1];
+      const nextIsExplore = nextItem && nextItem.type === 'tool' && isExploreTool(nextItem.tool.toolName);
+
+      if (currentExploreItems.length > 0 && nextIsExplore) {
+        currentExploreItems.push(item);
+      } else {
+        flushExplore();
+        groups.push({
+          type: 'thought',
+          id: item.id,
+          thought: item,
+        });
+      }
     } else {
       flushExplore();
-      if (isEditTool(t.toolName)) {
-        groups.push({ type: 'edit', tool: t });
-      } else if (isCommandTool(t.toolName)) {
-        groups.push({ type: 'command', tool: t });
-      } else {
-        groups.push({ type: 'other', tool: t });
+      if (item.type === 'tool') {
+        if (isEditTool(item.tool.toolName)) {
+          groups.push({ type: 'edit', id: item.id, tool: item.tool });
+        } else if (isCommandTool(item.tool.toolName)) {
+          groups.push({ type: 'command', id: item.id, tool: item.tool });
+        } else {
+          groups.push({ type: 'other', id: item.id, tool: item.tool });
+        }
       }
     }
   }
+
   flushExplore();
+  return groups;
+}
+
+export const AntigravityTrajectoryFlow: React.FC<{ items: TrajectoryItem[] }> = ({ items }) => {
+  if (!items || items.length === 0) return null;
+
+  const groups = useMemo(() => groupTrajectoryItems(items), [items]);
 
   return (
-    <div className="py-1 space-y-0.5 animate-in fade-in duration-100">
-      {groups.map((g, idx) => {
-        if (g.type === 'explore') {
-          return <AntigravityExploredGroup key={`exp_${idx}_${g.tools[0].id}`} tools={g.tools} />;
+    <div className="py-1 space-y-0.5 animate-in fade-in duration-100 font-sans">
+      {groups.map((g) => {
+        if (g.type === 'explored_group') {
+          return (
+            <AntigravityExploredGroup
+              key={g.id}
+              items={g.items}
+              fileCount={g.fileCount}
+            />
+          );
         }
         if (g.type === 'edit') {
-          return <AntigravityEditItem key={g.tool.id} tool={g.tool} />;
+          return <AntigravityEditItem key={g.id} tool={g.tool} />;
         }
         if (g.type === 'command') {
-          return <AntigravityCommandItem key={g.tool.id} tool={g.tool} />;
+          return <AntigravityCommandItem key={g.id} tool={g.tool} />;
         }
-        return <AntigravityGenericItem key={g.tool.id} tool={g.tool} />;
+        if (g.type === 'thought') {
+          return (
+            <AntigravityThoughtItem
+              key={g.id}
+              content={g.thought.content}
+              durationSec={g.thought.durationSec}
+            />
+          );
+        }
+        return <AntigravityGenericItem key={g.id} tool={g.tool} />;
       })}
     </div>
   );
+};
+
+// Backwards compatibility wrapper for tools-only stream
+export const AntigravityToolStream: React.FC<{ tools: ToolExecutionRecord[] }> = ({ tools }) => {
+  const items: TrajectoryItem[] = useMemo(() => {
+    return (tools || []).map((t) => ({ type: 'tool', id: t.id, tool: t }));
+  }, [tools]);
+
+  return <AntigravityTrajectoryFlow items={items} />;
 };
 
 // Default export / fallback for single ToolCard compatibility

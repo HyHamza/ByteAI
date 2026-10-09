@@ -21,7 +21,7 @@ import {
   ShieldAlert
 } from 'lucide-react';
 import type { ChatMessage, ToolExecutionRecord, AppMode, AttachmentFile } from '@/shared/types';
-import { ToolCard, AntigravityToolStream } from './ToolCard';
+import { ToolCard, AntigravityToolStream, AntigravityTrajectoryFlow, TrajectoryItem } from './ToolCard';
 
 interface ChatStreamProps {
   messages: ChatMessage[];
@@ -345,52 +345,76 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
           const isLatestTurn = turnIdx === turns.length - 1;
           const isLiveInThisTurn = isLatestTurn && isStreaming;
 
-          // Gather all tool calls from all assistant steps in this turn
-          const allToolCalls: ToolExecutionRecord[] = [];
+          // Construct Antigravity chronological trajectory items (thoughts and tools)
+          const trajectoryItems: TrajectoryItem[] = [];
+
           for (const am of turn.assistantMessages) {
+            // 1. If this step produced thinking/reasoning:
+            if (am.thinking && am.thinking.trim()) {
+              trajectoryItems.push({
+                type: 'thought',
+                id: `th_${am.id}`,
+                content: am.thinking.trim(),
+                durationSec: Math.max(1, Math.round(am.thinking.trim().length / 60)),
+              });
+            } else if (am.content && am.toolCalls && am.toolCalls.length > 0 && am.content.trim()) {
+              // Intermediate step note/recon text directly before tool execution
+              trajectoryItems.push({
+                type: 'thought',
+                id: `th_cnt_${am.id}`,
+                content: am.content.trim(),
+                durationSec: Math.max(1, Math.round(am.content.trim().length / 60)),
+              });
+            }
+
+            // 2. Tools executed in this step:
             if (am.toolCalls && am.toolCalls.length > 0) {
-              allToolCalls.push(...am.toolCalls);
-            }
-          }
-          if (isLiveInThisTurn && streamingTools && streamingTools.length > 0) {
-            allToolCalls.push(...streamingTools);
-          }
-
-          // Gather assistant content
-          const messagesWithContent = turn.assistantMessages.filter((am) => am.content && am.content.trim());
-          let responseText = '';
-          const intermediateThoughts: string[] = [];
-
-          if (isLiveInThisTurn) {
-            // During live stream
-            responseText = currentStreamContent;
-            // Any prior messages with content in this turn are intermediate thoughts
-            for (const am of messagesWithContent) {
-              intermediateThoughts.push(am.content);
-            }
-          } else {
-            // Completed turn
-            if (messagesWithContent.length > 0) {
-              // The final message content is the response
-              responseText = messagesWithContent[messagesWithContent.length - 1].content;
-              // Earlier messages with content are intermediate thoughts
-              for (let i = 0; i < messagesWithContent.length - 1; i++) {
-                intermediateThoughts.push(messagesWithContent[i].content);
+              for (const tc of am.toolCalls) {
+                trajectoryItems.push({
+                  type: 'tool',
+                  id: tc.id,
+                  tool: tc,
+                });
               }
             }
           }
 
-          // Gather thinking content
-          const thinkingParts: string[] = [];
-          for (const am of turn.assistantMessages) {
-            if (am.thinking && am.thinking.trim()) {
-              thinkingParts.push(am.thinking.trim());
+          // 3. If currently live streaming in this turn:
+          if (isLiveInThisTurn) {
+            if (streamingReasoning && streamingReasoning.trim()) {
+              trajectoryItems.push({
+                type: 'thought',
+                id: 'live_reasoning',
+                content: streamingReasoning.trim(),
+                durationSec: streamingSeconds || 1,
+              });
+            }
+            if (streamingTools && streamingTools.length > 0) {
+              for (const tc of streamingTools) {
+                if (!trajectoryItems.some((it) => it.type === 'tool' && it.tool.id === tc.id)) {
+                  trajectoryItems.push({
+                    type: 'tool',
+                    id: tc.id,
+                    tool: tc,
+                  });
+                }
+              }
             }
           }
-          if (isLiveInThisTurn && streamingReasoning && streamingReasoning.trim()) {
-            thinkingParts.push(streamingReasoning.trim());
+
+          // Final response text
+          let responseText = '';
+          if (isLiveInThisTurn) {
+            responseText = currentStreamContent;
+          } else {
+            for (let i = turn.assistantMessages.length - 1; i >= 0; i--) {
+              const am = turn.assistantMessages[i];
+              if (am.content && am.content.trim()) {
+                responseText = am.content.trim();
+                break;
+              }
+            }
           }
-          const thinkingText = thinkingParts.join('\n\n---\n\n');
 
           // Calculate turn duration
           const lastAsst = turn.assistantMessages[turn.assistantMessages.length - 1];
@@ -409,7 +433,7 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
             turn.assistantMessages.length > 0 ||
             (turn.systemMessages && turn.systemMessages.length > 0) ||
             isLiveInThisTurn;
-          const hasTrajectoryContent = allToolCalls.length > 0 || duration > 0 || Boolean(thinkingText) || isLiveInThisTurn;
+          const hasTrajectoryContent = trajectoryItems.length > 0 || duration > 0 || isLiveInThisTurn;
           const defaultExpanded = isLiveInThisTurn;
           const isExpanded = expandedTrajectories[turn.id] !== undefined ? expandedTrajectories[turn.id] : defaultExpanded;
           const turnTimestamp = lastAsst?.timestamp || turn.userMessage?.timestamp || Date.now();
@@ -537,48 +561,10 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
                     </div>
                   )}
 
-                  {/* Collapsible Tool Execution Records, Intermediate Steps, and Model Thought Process */}
-                  {isExpanded && (allToolCalls.length > 0 || intermediateThoughts.length > 0 || thinkingText) && (
-                    <div className="py-1 ml-0.5 animate-in fade-in duration-100 space-y-2">
-                      {thinkingText && (
-                        <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)]/40 overflow-hidden text-xs">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setExpandedThinking((prev) => ({
-                                ...prev,
-                                [turn.id]: prev[turn.id] !== undefined ? !prev[turn.id] : true,
-                              }));
-                            }}
-                            className="w-full flex items-center justify-between px-3.5 py-2 text-[11.5px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)] transition-colors select-none cursor-pointer"
-                          >
-                            <div className="flex items-center space-x-2">
-                              <Brain className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                              <span className="font-medium text-[var(--text-secondary)]">Thought Process</span>
-                              <span className="text-[10px] text-[var(--text-muted)] font-mono">
-                                ({Math.max(1, Math.round(thinkingText.length / 4))} tokens)
-                              </span>
-                            </div>
-                            {expandedThinking[turn.id] ? (
-                              <ChevronDown className="w-3.5 h-3.5 text-[var(--text-muted)]" />
-                            ) : (
-                              <ChevronRight className="w-3.5 h-3.5 text-[var(--text-muted)]" />
-                            )}
-                          </button>
-                          {expandedThinking[turn.id] && (
-                            <div className="p-3 bg-[var(--bg-sidebar)]/80 text-[11.5px] font-mono text-[var(--text-secondary)] whitespace-pre-wrap border-t border-[var(--border-subtle)] leading-relaxed max-h-72 overflow-y-auto select-text">
-                              {thinkingText}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      {intermediateThoughts.map((thought, idx) => (
-                        <div key={idx} className="text-[var(--text-muted)] italic text-xs py-0.5">
-                          {thought}
-                        </div>
-                      ))}
-                      <AntigravityToolStream tools={allToolCalls} />
+                  {/* Collapsible Antigravity Trajectory Flow (Chronological Timeline) */}
+                  {isExpanded && trajectoryItems.length > 0 && (
+                    <div className="py-1 ml-0.5 animate-in fade-in duration-100">
+                      <AntigravityTrajectoryFlow items={trajectoryItems} />
                     </div>
                   )}
 
@@ -673,7 +659,7 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
                   )}
 
                   {/* Thinking indicator when streaming with no output yet */}
-                  {isLiveInThisTurn && !responseText && !retryStatus && (!allToolCalls || allToolCalls.length === 0) && (
+                  {isLiveInThisTurn && !responseText && !retryStatus && trajectoryItems.length === 0 && (
                     <div className="flex items-center space-x-2 text-[var(--text-muted)] italic text-xs pl-1 animate-pulse">
                       <Brain className="w-3.5 h-3.5 text-purple-400 shrink-0 animate-spin" />
                       <span>{streamingReasoning ? 'Reasoning and analyzing...' : 'Thinking and planning...'}</span>
@@ -754,9 +740,16 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
                 <span>Working for {formatDuration(streamingSeconds)}...</span>
               </div>
             )}
-            {streamingTools && streamingTools.length > 0 && (
+            {((streamingTools && streamingTools.length > 0) || (streamingReasoning && streamingReasoning.trim())) && (
               <div className="py-1 ml-0.5">
-                <AntigravityToolStream tools={streamingTools} />
+                <AntigravityTrajectoryFlow
+                  items={[
+                    ...(streamingReasoning && streamingReasoning.trim()
+                      ? [{ type: 'thought' as const, id: 'live_th', content: streamingReasoning.trim(), durationSec: streamingSeconds || 1 }]
+                      : []),
+                    ...(streamingTools || []).map((t) => ({ type: 'tool' as const, id: t.id, tool: t })),
+                  ]}
+                />
               </div>
             )}
             {currentStreamContent && (
