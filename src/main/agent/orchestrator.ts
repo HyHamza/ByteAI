@@ -1,4 +1,6 @@
 import { BrowserWindow } from 'electron';
+import * as fs from 'fs';
+import * as path from 'path';
 import type { AppMode, ChatMessage, ToolExecutionRecord, AttachmentFile } from '../../shared/types';
 import { LLMClient, type LLMMessage } from '../services/llm/client';
 import { STANDARD_TOOL_DEFS, JULES_TOOL_DEFS, executeToolCall } from '../tools';
@@ -46,9 +48,19 @@ You are the Lead Senior Staff Software Engineer and Orchestrator.
 Your PRIMARY responsibility in this mode is orchestrating Google Labs Jules AI workers and ensuring seamless integration with the local project.
 
 CORE DIRECTIVES:
+0. MANDATORY PRE-DELEGATION WORKSPACE RECONNAISSANCE:
+   - When the user asks to work on, improve, audit, or fix a specific folder (e.g. '/app', 'src/', 'components/'), a feature, or a specific part of the codebase:
+   - NEVER DISPATCH BLINDLY TO JULES WITHOUT CHECKING FIRST!
+   - Jules workers in Google Cloud work vastly better and avoid hallucinations when provided with exact file paths, real directory layout, and framework context.
+   - Therefore, BEFORE calling 'jules_create_task' or 'jules_continue_session':
+     a) FIRST call 'list_directory' on the target folder (e.g. path: "app", path: "src/app", or path: ".") to uncover the real folder structure, subdirectories, and files!
+     b) Call 'read_file' on key entry points or representative components (e.g. 'package.json', layout file, or main page component) to identify the tech stack, styling framework, and conventions.
+     c) IN THE SUBSEQUENT STEP, use this empirical ground truth to formulate a precise, highly informed engineering specification for Jules that cites the EXACT paths, component names, and technologies!
+   - Only skip this local inspection if you have already inspected the relevant files in the current conversation or if the task is completely independent of local files.
+
 1. DELEGATING FEATURE WORK VS LOCAL ACTIONS:
    - For ANY major coding, feature request, bug fix, code audit, or analysis task (e.g. "Implement feature X", "Audit Y", "Fix bug Z"):
-     YOU MUST CALL 'jules_create_task' to delegate the objective to Jules AI! Formulate a clear, comprehensive technical specification and call 'jules_create_task'.
+     After inspecting local files (as required above), YOU MUST CALL 'jules_continue_session' (90% of the time) or 'jules_create_task' to delegate the objective to Jules AI! Formulate a clear, comprehensive technical specification citing the verified local paths and structure.
    - DIRECT USER DIRECTIVES & LOCAL ACTIONS: If the user explicitly asks YOU to do something directly in the repository (e.g. "u resolve that", "push the changes", "resolve conflict", "git status", "run this command"):
      NEVER REFUSE! NEVER claim you lack tools or cannot work directly! You have full tools ('resolve_merge_conflict', 'read_file', 'replace_file_content', 'run_terminal_command', 'manage_task', 'write_file', 'list_directory') and are expected to fulfill the user's direct local command immediately.
 
@@ -262,6 +274,17 @@ export class AgentOrchestrator {
     const activeRepo = gitInfo.repo || settings.julesDefaultRepo || 'sources/github/HyHamza/SeniorEngineer';
     const activeBranch = gitInfo.branch || settings.julesDefaultBranch || 'main';
 
+    let topLevelListing = '';
+    try {
+      if (fs.existsSync(workspaceDir)) {
+        const items = fs.readdirSync(workspaceDir, { withFileTypes: true });
+        topLevelListing = items
+          .filter((i) => !i.name.startsWith('.') && i.name !== 'node_modules' && i.name !== 'dist' && i.name !== 'out')
+          .map((i) => (i.isDirectory() ? `${i.name}/` : i.name))
+          .join(', ');
+      }
+    } catch (_) {}
+
     let systemPrompt = '';
     if (mode === 'jules') {
       systemPrompt = `${JULES_SYSTEM_PROMPT}
@@ -270,16 +293,17 @@ CURRENT WORKSPACE & REPOSITORY (AUTO-DETECTED):
 - GitHub Repository: ${activeRepo}
 - Active Branch: ${activeBranch}
 - Local Workspace: ${workspaceDir}
+- Top-Level Files & Folders: ${topLevelListing || '(empty)'}
 
 CRITICAL RULES FOR JULES LEAD MODE:
-1. You are operating in JULES LEAD MODE.
-2. For ANY coding, feature, bug fix, code audit, or implementation task from the user, YOU MUST DELEGATE IT TO JULES via 'jules_create_task'!
-3. When a Jules worker asks a question, presents an approach/plan, or is AWAITING_USER_FEEDBACK:
+1. You are operating in JULES LEAD MODE as the Senior Lead Software Architect.
+2. PRE-DELEGATION WORKSPACE RECONNAISSANCE: If the task targets a specific folder (e.g. "/app"), component, or feature, ALWAYS inspect the local files first using 'list_directory' and 'read_file' before formulating your prompt to Jules. Pass concrete paths, component names, and real context to Jules so it does not guess.
+3. 90% RULE: Whenever continuing work on a project or task, use 'jules_continue_session' to continue in the existing Jules session instead of creating a new one!
+4. For ANY coding, feature, bug fix, code audit, or implementation task from the user, YOU MUST DELEGATE IT TO JULES via 'jules_continue_session' or 'jules_create_task'!
+5. When a Jules worker asks a question, presents an approach/plan, or is AWAITING_USER_FEEDBACK:
    YOU MUST CALL 'jules_reply_question' with the session_id and your clear engineering decision! Jules is isolated in cloud VMs and cannot see chat messages unless you call 'jules_reply_question'.
-4. When asked what Jules is doing, its progress, or current status, ALWAYS call 'jules_get_status' to fetch the real-time activity stream and report back!
-5. You have tools to inspect local workspace files ('read_file', 'search_codebase', 'list_directory') when the user asks questions about existing code or local context.
-6. When calling 'jules_create_task', automatically use repo: "${activeRepo}" and branch: "${activeBranch}".
-7. Once 'jules_create_task' or 'jules_reply_question' is called, STOP and let Jules work in the cloud.`;
+6. When asked what Jules is doing, its progress, or current status, ALWAYS call 'jules_get_status' to fetch the real-time activity stream and report back!
+7. Once 'jules_create_task', 'jules_continue_session', or 'jules_reply_question' is called, STOP and let Jules work in the cloud.`;
     } else {
       systemPrompt = `${STANDARD_SYSTEM_PROMPT}
 

@@ -75,16 +75,16 @@ function getSessionTaskState(
   state: TaskState;
   julesSession?: JulesSessionSummary;
 } {
-  if (runningAgentSessionIds.has(s.id)) {
-    return { state: 'running_agent' };
-  }
-
   // Find matching Jules session
   const matched = julesSessions.find((js) => {
     if (s.julesSessionId && s.julesSessionId === js.id) return true;
     if (s.title && js.title && s.title.trim().toLowerCase() === js.title.trim().toLowerCase()) return true;
     if (s.title && js.title && (s.title.includes(js.title.slice(0, 20)) || js.title.includes(s.title.slice(0, 20)))) return true;
-    return s.messages?.some((m) => m.content && m.content.includes(js.id));
+    return s.messages?.some((m) => {
+      if (m.content && m.content.includes(js.id)) return true;
+      if (m.toolCalls?.some((tc) => JSON.stringify(tc).includes(js.id))) return true;
+      return false;
+    });
   });
 
   if (matched) {
@@ -103,9 +103,13 @@ function getSessionTaskState(
     ) {
       return { state: 'waiting_jules', julesSession: matched };
     }
-    if (matched.state === 'COMPLETED') {
+    if (matched.state === 'COMPLETED' && !runningAgentSessionIds.has(s.id)) {
       return { state: 'completed', julesSession: matched };
     }
+  }
+
+  if (runningAgentSessionIds.has(s.id)) {
+    return { state: 'running_agent' };
   }
 
   return { state: 'idle' };

@@ -149,6 +149,13 @@ export const App: React.FC = () => {
     const unsubTool = api.onToolCallUpdate((payload: ToolCallPayload) => {
       if (payload.sessionId === activeSessionId) {
         setRetryStatus(null);
+        if (
+          payload.toolCall.toolName === 'jules_continue_session' ||
+          payload.toolCall.toolName === 'jules_create_task' ||
+          payload.toolCall.toolName === 'jules_reply_question'
+        ) {
+          setIsStreaming(false);
+        }
         setStreamingTools((prev) => {
           const idx = prev.findIndex((t) => t.id === payload.toolCall.id);
           if (idx !== -1) {
@@ -190,6 +197,9 @@ export const App: React.FC = () => {
         else next.delete(sessionId);
         return next;
       });
+      if (sessionId === activeSessionId && status !== 'running') {
+        setIsStreaming(false);
+      }
     });
 
     const unsubJulesAll = api.onJulesAllSessions?.((list) => {
@@ -371,26 +381,39 @@ export const App: React.FC = () => {
     } catch (_) {}
   };
 
-  const isCurrentAgentRunning = activeSessionId ? runningAgentSessionIds.has(activeSessionId) || isStreaming : false;
+  const activeMatchedJules = activeSession ? (
+    julesSessions.find((js) => {
+      if (activeSession.julesSessionId && activeSession.julesSessionId === js.id) return true;
+      if (activeSession.title && js.title && activeSession.title.trim().toLowerCase() === js.title.trim().toLowerCase()) return true;
+      if (activeSession.title && js.title && (activeSession.title.includes(js.title.slice(0, 20)) || js.title.includes(activeSession.title.slice(0, 20)))) return true;
+      return activeSession.messages?.some((m) => {
+        if (m.content && m.content.includes(js.id)) return true;
+        if (m.toolCalls?.some((tc) => JSON.stringify(tc).includes(js.id))) return true;
+        return false;
+      });
+    }) || julesSessions.find((js) =>
+      js.state === 'IN_PROGRESS' ||
+      js.state === 'PLANNING' ||
+      js.state === 'CODING' ||
+      js.state === 'INITIALIZING'
+    )
+  ) : undefined;
 
-  const activeMatchedJules = activeSession ? julesSessions.find((js) => {
-    if (activeSession.julesSessionId && activeSession.julesSessionId === js.id) return true;
-    if (activeSession.title && js.title && activeSession.title.trim().toLowerCase() === js.title.trim().toLowerCase()) return true;
-    if (activeSession.title && js.title && (activeSession.title.includes(js.title.slice(0, 20)) || js.title.includes(activeSession.title.slice(0, 20)))) return true;
-    return activeSession.messages?.some((m) => m.content && m.content.includes(js.id));
-  }) : undefined;
-
-  const isCurrentWaitingJules = !isCurrentAgentRunning && !!activeMatchedJules && (
+  const isCurrentWaitingJules = !!activeMatchedJules && (
     activeMatchedJules.state === 'IN_PROGRESS' ||
     activeMatchedJules.state === 'PLANNING' ||
     activeMatchedJules.state === 'CODING' ||
     activeMatchedJules.state === 'INITIALIZING'
   );
 
-  const isCurrentAwaitingFeedback = !isCurrentAgentRunning && !!activeMatchedJules && (
+  const isCurrentAwaitingFeedback = !isCurrentWaitingJules && !!activeMatchedJules && (
     activeMatchedJules.state === 'AWAITING_USER_FEEDBACK' ||
     activeMatchedJules.state === 'AWAITING_USER_INPUT' ||
     activeMatchedJules.state === 'PAUSED'
+  );
+
+  const isCurrentAgentRunning = !isCurrentWaitingJules && (
+    activeSessionId ? (runningAgentSessionIds.has(activeSessionId) || isStreaming) : false
   );
 
   return (
@@ -505,16 +528,29 @@ export const App: React.FC = () => {
               <div className="px-5 py-2 bg-[var(--bg-highlight-purple)] border-b border-[var(--border-highlight-purple)] flex items-center justify-between text-xs text-[var(--text-secondary)]">
                 <div className="flex items-center space-x-2.5">
                   <div className="relative flex items-center justify-center">
-                    <span className="w-2 h-2 rounded-full bg-purple-400 animate-pulse absolute" />
+                    <span className="w-2 h-2 rounded-full bg-purple-400 animate-ping absolute" />
                     <span className="w-2 h-2 rounded-full bg-purple-400" />
                   </div>
-                  <span className="font-semibold text-[var(--text-primary)]">Waiting for Jules Worker</span>
-                  <span className="text-[var(--text-secondary)] text-[11px]">• Task running remotely in Google Cloud (Byte supervising)</span>
+                  <span className="font-semibold text-purple-200">Jules is running in Google Cloud</span>
+                  <span className="text-[var(--text-secondary)] text-[11px]">
+                    • {activeMatchedJules?.state === 'PLANNING'
+                        ? 'Formulating implementation plan'
+                        : activeMatchedJules?.state === 'CODING'
+                        ? 'Writing code & committing changes'
+                        : activeMatchedJules?.state === 'INITIALIZING'
+                        ? 'Initializing cloud VM & workspace'
+                        : 'Working autonomously in cloud VM'} (Byte supervising)
+                  </span>
                 </div>
                 {activeMatchedJules && (
-                  <span className="text-[10px] font-mono text-[var(--text-secondary)] bg-[var(--bg-surface)] px-2 py-0.5 rounded border border-[var(--border-card)]">
-                    Session: {activeMatchedJules.id.slice(0, 10)}...
-                  </span>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-[10px] font-semibold text-purple-300 bg-purple-950/60 px-2 py-0.5 rounded border border-purple-800/50">
+                      {activeMatchedJules.state}
+                    </span>
+                    <span className="text-[10px] font-mono text-[var(--text-secondary)] bg-[var(--bg-surface)] px-2 py-0.5 rounded border border-[var(--border-card)]">
+                      Session: {activeMatchedJules.id.slice(0, 10)}...
+                    </span>
+                  </div>
                 )}
               </div>
             </div>
