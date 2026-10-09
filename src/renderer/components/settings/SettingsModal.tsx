@@ -357,7 +357,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 {savedSuccess && (
                   <div className="flex items-center space-x-2 text-xs text-emerald-400 bg-emerald-950/40 border border-emerald-800/40 px-3.5 py-2.5 rounded-xl animate-in fade-in duration-150">
                     <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span>All settings and keys successfully saved to local database (~/.seniorengineer/store.json)!</span>
+                    <span>All settings and keys successfully saved to local SQLite database (~/.seniorengineer/seniorengineer.db)!</span>
                   </div>
                 )}
 
@@ -825,7 +825,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               {/* Bottom Footer Actions */}
               <div className="px-6 py-3 border-t border-[#22242a] bg-[#111215] flex items-center justify-between shrink-0">
                 <div className="text-[11px] text-[#6d717b]">
-                  Database: <code className="font-mono text-[#8e9196]">~/.seniorengineer/store.json</code>
+                  Database: <span className="text-sky-400 font-medium">SQLite</span> (<code className="font-mono text-[#8e9196]">~/.seniorengineer/seniorengineer.db</code>)
                 </div>
 
                 <div className="flex items-center space-x-2">
