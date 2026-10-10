@@ -37,6 +37,7 @@ export function detectGitRepo(dir: string): GitRepoInfo {
         cwd: dir,
         encoding: 'utf-8',
         stdio: ['pipe', 'pipe', 'ignore'],
+        timeout: 2000,
       }).trim();
     } catch (_) {}
 
@@ -47,6 +48,7 @@ export function detectGitRepo(dir: string): GitRepoInfo {
         cwd: dir,
         encoding: 'utf-8',
         stdio: ['pipe', 'pipe', 'ignore'],
+        timeout: 2000,
       }).trim() || 'main';
     } catch (_) {
       try {
@@ -54,6 +56,7 @@ export function detectGitRepo(dir: string): GitRepoInfo {
           cwd: dir,
           encoding: 'utf-8',
           stdio: ['pipe', 'pipe', 'ignore'],
+          timeout: 2000,
         }).trim() || 'main';
       } catch (_) {}
     }

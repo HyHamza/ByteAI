@@ -471,14 +471,29 @@ export class DataStore {
     }
   }
 
-  public getSessions(workspacePath?: string): ChatSession[] {
+  public getSessions(workspacePath?: string, activeSessionId?: string): ChatSession[] {
     const all = Array.from(this.sessionsCache.values()).sort(
       (a, b) => (b.updatedAt || b.createdAt) - (a.updatedAt || a.createdAt)
     );
-    if (workspacePath) {
-      return all.filter((s) => s.workspacePath === workspacePath);
+    const filtered = workspacePath ? all.filter((s) => s.workspacePath === workspacePath) : all;
+    if (activeSessionId) {
+      return filtered.map((s) => {
+        if (s.id === activeSessionId) return s;
+        return { ...s, messages: [] };
+      });
     }
-    return all;
+    return filtered;
+  }
+
+  public getSessionSummaries(workspacePath?: string): ChatSession[] {
+    const all = Array.from(this.sessionsCache.values()).sort(
+      (a, b) => (b.updatedAt || b.createdAt) - (a.updatedAt || a.createdAt)
+    );
+    const filtered = workspacePath ? all.filter((s) => s.workspacePath === workspacePath) : all;
+    return filtered.map((s) => ({
+      ...s,
+      messages: [],
+    }));
   }
 
   public getSession(id: string): ChatSession | undefined {

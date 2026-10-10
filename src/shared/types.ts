@@ -167,7 +167,8 @@ export interface ElectronAPI {
   onJulesAllSessions?: (callback: (sessions: JulesSessionSummary[]) => void) => () => void;
 
   // Sessions
-  listSessions: (workspacePath?: string) => Promise<ChatSession[]>;
+  listSessions: (workspacePath?: string, activeSessionId?: string) => Promise<ChatSession[]>;
+  getSession?: (sessionId: string) => Promise<ChatSession | null>;
   createSession: (title: string, mode?: AppMode, workspacePath?: string) => Promise<ChatSession>;
   updateSession: (sessionId: string, updates: Partial<ChatSession>) => Promise<ChatSession | null>;
   deleteSession: (sessionId: string) => Promise<boolean>;

@@ -216,8 +216,12 @@ function setupIpcHandlers() {
   });
 
   // ── Sessions IPC
-  ipcMain.handle('sessions:list', async (_, { workspacePath }) => {
-    return store.getSessions(workspacePath);
+  ipcMain.handle('sessions:list', async (_, args?: { workspacePath?: string; activeSessionId?: string }) => {
+    return store.getSessions(args?.workspacePath, args?.activeSessionId);
+  });
+
+  ipcMain.handle('sessions:get', async (_, { sessionId }: { sessionId: string }) => {
+    return store.getSession(sessionId) || null;
   });
 
   ipcMain.handle('sessions:create', async (_, { title, mode, workspacePath }: { title: string; mode?: AppMode; workspacePath?: string }) => {

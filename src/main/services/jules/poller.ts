@@ -149,7 +149,7 @@ export class JulesPoller {
       if (sessionsUpdated) {
         for (const win of windows) {
           if (!win.isDestroyed()) {
-            win.webContents.send('sessions:updated', store.getSessions());
+            win.webContents.send('sessions:updated', store.getSessionSummaries());
           }
         }
       }
@@ -281,7 +281,7 @@ export class JulesPoller {
     const windows = BrowserWindow.getAllWindows();
     for (const win of windows) {
       if (!win.isDestroyed()) {
-        win.webContents.send('sessions:updated', store.getSessions());
+        win.webContents.send('sessions:updated', store.getSessionSummaries());
       }
     }
 

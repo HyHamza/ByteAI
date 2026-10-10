@@ -82,6 +82,7 @@ const mockAPI: ElectronAPI = {
   onExecutionCompleted: () => () => {},
 
   listSessions: async () => [...mockSessions],
+  getSession: async (sessionId: string) => mockSessions.find((s) => s.id === sessionId) || null,
   createSession: async (title: string, mode?: any) => {
     const s: ChatSession = {
       id: `ses_${Date.now()}`,

@@ -86,8 +86,12 @@ export const App: React.FC = () => {
         }
 
         if (sessList && sessList.length > 0) {
-          setSessions(sessList);
-          setActiveSessionId(sessList[0].id);
+          const firstId = sessList[0].id;
+          setActiveSessionId(firstId);
+          const fullFirst = await api.getSession?.(firstId).catch(() => null);
+          if (isMounted) {
+            setSessions(fullFirst ? sessList.map((x) => x.id === firstId ? fullFirst : x) : sessList);
+          }
         } else {
           const newSess = await api.createSession('Initial Task', s?.mode || 'standard');
           if (isMounted) {
@@ -248,7 +252,11 @@ export const App: React.FC = () => {
         setStreamingReasoning('');
         setStreamingTools([]);
         setLiveResolvedModel(null);
-        api.listSessions().then((list: ChatSession[]) => setSessions(list));
+        api.getSession?.(sessId).then((fullSess) => {
+          if (fullSess) {
+            setSessions((prev) => prev.map((s) => (s.id === sessId ? fullSess : s)));
+          }
+        });
       }
     });
 
@@ -259,10 +267,15 @@ export const App: React.FC = () => {
     });
 
     const unsubSessions = api.onSessionsUpdated?.((newList: ChatSession[]) => {
-      setSessions(newList);
-      setStreamingContent('');
-      setStreamingReasoning('');
-      setStreamingTools([]);
+      setSessions((prev) => {
+        return newList.map((ns) => {
+          const old = prev.find((p) => p.id === ns.id);
+          if (old && old.messages && old.messages.length > 0 && (!ns.messages || ns.messages.length === 0)) {
+            return { ...ns, messages: old.messages };
+          }
+          return ns;
+        });
+      });
     });
 
     const unsubAgent = api.onAgentStatus?.(({ sessionId, status }) => {
@@ -428,6 +441,19 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleSelectSession = async (id: string) => {
+    setActiveSessionId(id);
+    const existing = sessions.find((s) => s.id === id);
+    if (!existing || !existing.messages || existing.messages.length === 0) {
+      try {
+        const full = await api.getSession?.(id);
+        if (full) {
+          setSessions((prev) => prev.map((s) => (s.id === id ? full : s)));
+        }
+      } catch (_) {}
+    }
+  };
+
   const handleSendMessage = async (text: string, attachments?: AttachmentFile[]) => {
     if (!activeSessionId) return;
 
@@ -577,7 +603,7 @@ export const App: React.FC = () => {
             julesSessions={julesSessions}
             projects={projects}
             activeWorkspacePath={settings.activeWorkspacePath}
-            onSelectSession={setActiveSessionId}
+            onSelectSession={handleSelectSession}
             onCreateSession={() => handleCreateSession()}
             onCreateSessionInProject={handleCreateSessionInProject}
             onDeleteSession={handleDeleteSession}

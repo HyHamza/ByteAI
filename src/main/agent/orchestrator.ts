@@ -603,8 +603,13 @@ DO NOT return conversational text or empty output without calling a tool. Invoke
         // Execute tool
         const output = await executeToolCall(toolName, toolArgs, workspaceDir, sessionId);
 
+        // Cap tool output stored in chat/context to prevent single tools (e.g. 2MB searches) from freezing IPC and DOM!
+        const cappedOutput = output.length > 30000
+          ? output.slice(0, 25000) + `\n... [Output truncated to 25KB (${output.length} characters total)]`
+          : output;
+
         toolRecord.status = output.startsWith('Error') ? 'error' : 'completed';
-        toolRecord.output = output;
+        toolRecord.output = cappedOutput;
         toolRecord.completedAt = Date.now();
 
         this.emitToolCall(sessionId, assistantMsgId, toolRecord);
@@ -614,7 +619,7 @@ DO NOT return conversational text or empty output without calling a tool. Invoke
         llmMessages.push({
           role: 'tool',
           tool_call_id: tc.id,
-          content: output,
+          content: cappedOutput,
         });
       }
 
@@ -631,7 +636,6 @@ DO NOT return conversational text or empty output without calling a tool. Invoke
         executionDuration: Math.max(1, Math.round((Date.now() - turnStartTime) / 1000)),
       };
       store.addMessage(sessionId, stepMsg);
-      this.emitSessionsUpdated();
 
       const hasBackgroundRunningTask = stepToolRecords.some(
         (tc) => tc.output && tc.output.includes('Tool is running as a background task with task id:')
@@ -644,8 +648,8 @@ DO NOT return conversational text or empty output without calling a tool. Invoke
         if (!stepMsg.content || !stepMsg.content.trim()) {
           stepMsg.content = this.synthesizeConclusionForAsyncDispatch(stepToolRecords);
           store.addMessage(sessionId, stepMsg);
-          this.emitSessionsUpdated();
         }
+        this.emitSessionsUpdated();
         break;
       }
     }
@@ -654,6 +658,7 @@ DO NOT return conversational text or empty output without calling a tool. Invoke
       this.runningSessions.delete(sessionId);
       this.emitAgentStatus(sessionId, 'idle');
       this.emitCompleted(sessionId);
+      this.emitSessionsUpdated();
 
       // Check if there is a pending queued notification (e.g. from a background task that just completed)
       const queue = this.pendingTurnQueues.get(sessionId);
@@ -669,15 +674,22 @@ DO NOT return conversational text or empty output without calling a tool. Invoke
     }
   }
 
-  private emitSessionsUpdated() {
-    const store = DataStore.getInstance();
-    const sessions = store.getSessions();
-    const windows = BrowserWindow.getAllWindows();
-    for (const win of windows) {
-      if (!win.isDestroyed()) {
-        win.webContents.send('sessions:updated', sessions);
+  private sessionsUpdateTimer: NodeJS.Timeout | null = null;
+
+  public emitSessionsUpdated() {
+    if (this.sessionsUpdateTimer) return;
+
+    this.sessionsUpdateTimer = setTimeout(() => {
+      this.sessionsUpdateTimer = null;
+      const store = DataStore.getInstance();
+      const sessions = store.getSessionSummaries();
+      const windows = BrowserWindow.getAllWindows();
+      for (const win of windows) {
+        if (!win.isDestroyed()) {
+          win.webContents.send('sessions:updated', sessions);
+        }
       }
-    }
+    }, 150);
   }
 
   private emitAgentStatus(sessionId: string, status: 'running' | 'idle') {

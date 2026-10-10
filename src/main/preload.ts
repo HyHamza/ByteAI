@@ -64,7 +64,8 @@ const api: ElectronAPI = {
   },
 
   // Sessions
-  listSessions: (workspacePath) => ipcRenderer.invoke('sessions:list', { workspacePath }),
+  listSessions: (workspacePath, activeSessionId) => ipcRenderer.invoke('sessions:list', { workspacePath, activeSessionId }),
+  getSession: (sessionId) => ipcRenderer.invoke('sessions:get', { sessionId }),
   createSession: (title, mode, workspacePath) => ipcRenderer.invoke('sessions:create', { title, mode, workspacePath }),
   updateSession: (sessionId, updates) => ipcRenderer.invoke('sessions:update', { sessionId, updates }),
   deleteSession: (sessionId) => ipcRenderer.invoke('sessions:delete', { sessionId }),

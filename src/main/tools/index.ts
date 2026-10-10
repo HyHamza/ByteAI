@@ -320,20 +320,54 @@ export const STANDARD_TOOL_DEFS: LLMToolDefinition[] = [
 // In SeniorEngineer, both modes have access to all engineering tools so Byte never lacks capabilities
 export const JULES_TOOL_DEFS: LLMToolDefinition[] = STANDARD_TOOL_DEFS;
 
-function searchCodebase(
+async function searchCodebase(
   workspaceDir: string,
   query: string,
   patternStr?: string,
   maxResults: number = 30
-): string {
+): Promise<string> {
   const results: Array<{ file: string; line: number; content: string }> = [];
   const fileRegex = patternStr ? new RegExp(patternStr.replace(/\*/g, '.*')) : null;
+  const lowerQ = query.toLowerCase();
 
-  function traverse(dir: string) {
+  const IGNORE_DIRS = new Set([
+    'node_modules',
+    '.git',
+    'dist',
+    'build',
+    '.seniorengineer',
+    '.next',
+    '.turbo',
+    '.dart_tool',
+    '.gradle',
+    'android',
+    'ios',
+    'pods',
+    '.idea',
+    '.vscode',
+    '.gemini',
+    'coverage',
+    'vendor',
+    '.cache',
+    'bin',
+    'obj',
+    'out',
+    '.output',
+  ]);
+
+  const BINARY_EXTS = new Set([
+    '.png', '.jpg', '.jpeg', '.gif', '.ico', '.pdf', '.zip', '.exe', '.dll',
+    '.woff', '.woff2', '.ttf', '.eot', '.mp4', '.mp3', '.tar', '.gz', '.7z',
+    '.lock', '.bin', '.so', '.dylib', '.apk', '.aab', '.ipa'
+  ]);
+
+  let filesScanned = 0;
+
+  async function traverse(dir: string): Promise<void> {
     if (results.length >= maxResults) return;
     let entries: fs.Dirent[] = [];
     try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
+      entries = await fs.promises.readdir(dir, { withFileTypes: true });
     } catch (_) {
       return;
     }
@@ -341,38 +375,42 @@ function searchCodebase(
     for (const e of entries) {
       if (results.length >= maxResults) break;
       const name = e.name;
-      if (
-        name === 'node_modules' ||
-        name === '.git' ||
-        name === 'dist' ||
-        name === 'build' ||
-        name === '.seniorengineer' ||
-        name === '.next' ||
-        name === '.turbo'
-      ) {
+      const lowerName = name.toLowerCase();
+
+      if (IGNORE_DIRS.has(lowerName) || lowerName.startsWith('.')) {
         continue;
       }
 
       const full = path.join(dir, name);
       if (e.isDirectory()) {
-        traverse(full);
+        await traverse(full);
       } else if (e.isFile()) {
         if (fileRegex && !fileRegex.test(name)) continue;
         const ext = path.extname(name).toLowerCase();
-        if (['.png', '.jpg', '.jpeg', '.gif', '.ico', '.pdf', '.zip', '.exe', '.dll', '.woff', '.woff2', '.ttf'].includes(ext)) {
-          continue;
+        if (BINARY_EXTS.has(ext)) continue;
+
+        filesScanned++;
+        // Yield to the event loop every 20 files to keep the Electron UI completely smooth
+        if (filesScanned % 20 === 0) {
+          await new Promise((r) => setImmediate(r));
         }
+
         try {
-          const content = fs.readFileSync(full, 'utf-8');
+          const stat = await fs.promises.stat(full);
+          if (stat.size > 500000) continue; // Skip files > 500KB to avoid freezing on huge bundles
+
+          const content = await fs.promises.readFile(full, 'utf-8');
           const lines = content.split('\n');
-          const lowerQ = query.toLowerCase();
+
           for (let i = 0; i < lines.length; i++) {
             if (results.length >= maxResults) break;
             if (lines[i].toLowerCase().includes(lowerQ)) {
+              const trimmedLine = lines[i].trim();
+              const cappedLine = trimmedLine.length > 250 ? trimmedLine.slice(0, 250) + '...' : trimmedLine;
               results.push({
-                file: path.relative(workspaceDir, full),
+                file: path.relative(workspaceDir, full).replace(/\\/g, '/'),
                 line: i + 1,
-                content: lines[i].trim(),
+                content: cappedLine,
               });
             }
           }
@@ -381,12 +419,14 @@ function searchCodebase(
     }
   }
 
-  traverse(workspaceDir);
+  await traverse(workspaceDir);
 
   if (results.length === 0) {
     return `No matches found for "${query}" across the codebase.`;
   }
-  return results.map((r) => `${r.file}:${r.line}: ${r.content}`).join('\n');
+
+  const output = results.map((r) => `${r.file}:${r.line}: ${r.content}`).join('\n');
+  return output.length > 25000 ? output.slice(0, 25000) + '\n... [Results truncated to 25KB for performance]' : output;
 }
 
 export async function executeToolCall(
@@ -407,18 +447,23 @@ export async function executeToolCall(
         if (!fs.existsSync(fullPath)) {
           return `Error: File not found: ${args.path}`;
         }
-        const content = fs.readFileSync(fullPath, 'utf-8');
+        const stat = await fs.promises.stat(fullPath);
+        if (stat.size > 2 * 1024 * 1024) {
+          return `Error: File ${args.path} is too large (${Math.round(stat.size / 1024)} KB). Use start_line and end_line to inspect specific ranges.`;
+        }
+        const content = await fs.promises.readFile(fullPath, 'utf-8');
         const lines = content.split('\n');
 
         const start = args.start_line ? Math.max(1, args.start_line) - 1 : 0;
         const end = args.end_line ? Math.min(lines.length, args.end_line) : lines.length;
         const sliced = lines.slice(start, end);
 
-        return sliced.map((line, idx) => `${start + idx + 1}: ${line}`).join('\n');
+        const resText = sliced.map((line, idx) => `${start + idx + 1}: ${line}`).join('\n');
+        return resText.length > 50000 ? resText.slice(0, 50000) + '\n... [Content truncated to 50KB]' : resText;
       }
 
       case 'search_codebase': {
-        return searchCodebase(workspaceDir, args.query, args.file_pattern, args.max_results || 30);
+        return await searchCodebase(workspaceDir, args.query, args.file_pattern, args.max_results || 30);
       }
 
       case 'write_file': {

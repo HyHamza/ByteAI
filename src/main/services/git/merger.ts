@@ -114,6 +114,7 @@ export async function syncAndMergeJulesSession(
       cwd: dir,
       encoding: 'utf-8',
       stdio: ['pipe', 'pipe', 'pipe'],
+      timeout: 30000,
     }).trim();
   };
 
