@@ -217,11 +217,17 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
         };
       } else if (m.role === 'assistant') {
         const lastMsg = activeTurn?.assistantMessages[activeTurn.assistantMessages.length - 1];
+        const lastMsgHasTools = Boolean(lastMsg?.toolCalls && lastMsg.toolCalls.length > 0);
+        const allToolsFinished = Boolean(
+          lastMsgHasTools &&
+          lastMsg?.toolCalls?.every((t) => t.status === 'completed' || t.status === 'error')
+        );
         const lastMsgCompleted = Boolean(
           lastMsg &&
-          (!lastMsg.toolCalls || lastMsg.toolCalls.length === 0) &&
-          lastMsg.content &&
-          lastMsg.content.trim().length > 0
+          (
+            (!lastMsgHasTools && lastMsg.content && lastMsg.content.trim().length > 0) ||
+            (allToolsFinished && lastMsg.content && lastMsg.content.trim().length > 0 && lastMsg.executionDuration)
+          )
         );
 
         // If the active turn already concluded with a response,
@@ -247,8 +253,30 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
       list.push(activeTurn);
     }
 
+    // If currently streaming, check if the last turn in list has already concluded its assistant response.
+    // If so, append a dedicated live turn so live execution NEVER pollutes past completed turns!
+    if (isStreaming && list.length > 0) {
+      const lastTurn = list[list.length - 1];
+      const lastAsst = lastTurn.assistantMessages[lastTurn.assistantMessages.length - 1];
+      const isConcluded = Boolean(
+        lastAsst &&
+        lastAsst.content &&
+        lastAsst.content.trim().length > 0 &&
+        lastAsst.executionDuration
+      );
+
+      // If the turn already ended with a completed assistant response and has no fresh pending system message:
+      if (isConcluded && (!lastTurn.systemMessages || lastTurn.systemMessages.length === 0)) {
+        list.push({
+          id: `live_turn_pending`,
+          assistantMessages: [],
+          systemMessages: [],
+        });
+      }
+    }
+
     return list;
-  }, [messages]);
+  }, [messages, isStreaming]);
 
   // Check if scroll container is at bottom
   const checkIsAtBottom = () => {
@@ -541,13 +569,13 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
 
           return (
             <div key={turn.id} className="w-full space-y-3">
-              {/* User Message: Top-Aligned Full-Width Card (Antigravity Style) */}
+              {/* User Message: Top-Aligned Full-Width Card (Antigravity Style - Sticky on Scroll) */}
               {turn.userMessage && (
                 <div 
                   ref={isLatestTurn ? latestUserMsgRef : undefined}
-                  className="w-full relative group/user pt-1"
+                  className="w-full sticky top-0 z-20 pt-1 pb-2 bg-[var(--bg-canvas)]/95 backdrop-blur-md group/user"
                 >
-                  <div className="w-full bg-[var(--bg-surface)] border border-[var(--border-card)] text-[var(--text-primary)] px-4 py-3 rounded-2xl text-[13px] leading-relaxed shadow-sm select-text cursor-text relative space-y-2.5">
+                  <div className="w-full bg-[var(--bg-surface)] border border-[var(--border-card)] text-[var(--text-primary)] px-4 py-3 rounded-2xl text-[13px] leading-relaxed shadow-md select-text cursor-text relative space-y-2.5">
                     {/* Render message attachments if present */}
                     {turn.userMessage.attachments && turn.userMessage.attachments.length > 0 && (
                       <div className="flex flex-wrap gap-2 pt-0.5">
@@ -581,7 +609,7 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
                     )}
 
                     {turn.userMessage.content && (
-                      <div className="whitespace-pre-wrap select-text pr-8">{turn.userMessage.content}</div>
+                      <div className="whitespace-pre-wrap select-text pr-8 max-h-56 overflow-y-auto">{turn.userMessage.content}</div>
                     )}
 
                     <button

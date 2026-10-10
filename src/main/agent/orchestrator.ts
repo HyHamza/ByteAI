@@ -282,6 +282,8 @@ export class AgentOrchestrator {
       timestamp: Date.now(),
     };
     store.addMessage(sessionId, messageRecord);
+    this.emitSessionsUpdated();
+    this.emitClearStream(sessionId);
 
     // Auto-generate title ONLY for genuine human messages (never for system alerts)
     const isGenericTitle = !session.title || 
@@ -613,6 +615,7 @@ Call 'jules_continue_session' (or 'jules_create_task' if starting a new phase) w
         executionDuration: Math.max(1, Math.round((Date.now() - turnStartTime) / 1000)),
       };
       store.addMessage(sessionId, stepMsg);
+      this.emitSessionsUpdated();
 
       const hasBackgroundRunningTask = stepToolRecords.some(
         (tc) => tc.output && tc.output.includes('Tool is running as a background task with task id:')

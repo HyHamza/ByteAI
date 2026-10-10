@@ -297,9 +297,23 @@ export const App: React.FC = () => {
         else next.delete(sessionId);
         return next;
       });
-      if (sessionId === activeSessionIdRef.current && status !== 'running') {
-        flushStreamBuffers();
-        setIsStreaming(false);
+      if (sessionId === activeSessionIdRef.current) {
+        if (status === 'running') {
+          flushStreamBuffers();
+          setIsStreaming(true);
+          setStreamingContent('');
+          setStreamingReasoning('');
+          setStreamingTools([]);
+          setRetryStatus(null);
+          api.getSession?.(sessionId).then((full) => {
+            if (full) {
+              setSessions((prev) => prev.map((s) => (s.id === sessionId ? full : s)));
+            }
+          }).catch(() => {});
+        } else {
+          flushStreamBuffers();
+          setIsStreaming(false);
+        }
       }
     });
 
