@@ -14,6 +14,7 @@ const STATE_FILE = path.join(os.homedir(), '.seniorengineer', 'jules_supervisor_
 interface SupervisorState {
   handledActivities: string[];
   handledCompletions: string[];
+  lastSupervisorTurnAt?: Record<string, number>;
 }
 
 export class JulesPoller {
@@ -22,6 +23,7 @@ export class JulesPoller {
   private handledCompletions: Set<string> = new Set();
   private handledActivities: Set<string> = new Set();
   private processingActivities: Set<string> = new Set();
+  private lastSupervisorTurnAt: Map<string, number> = new Map();
   private isProcessingTurn = false;
 
   private constructor() {
@@ -46,15 +48,23 @@ export class JulesPoller {
         if (Array.isArray(parsed.handledCompletions)) {
           this.handledCompletions = new Set(parsed.handledCompletions);
         }
+        if (parsed.lastSupervisorTurnAt && typeof parsed.lastSupervisorTurnAt === 'object') {
+          this.lastSupervisorTurnAt = new Map(Object.entries(parsed.lastSupervisorTurnAt));
+        }
       }
     } catch (_) {}
   }
 
   private saveState() {
     try {
+      const turnObj: Record<string, number> = {};
+      for (const [k, v] of this.lastSupervisorTurnAt.entries()) {
+        turnObj[k] = v;
+      }
       const data: SupervisorState = {
         handledActivities: Array.from(this.handledActivities),
         handledCompletions: Array.from(this.handledCompletions),
+        lastSupervisorTurnAt: turnObj,
       };
       fs.mkdirSync(path.dirname(STATE_FILE), { recursive: true });
       fs.writeFileSync(STATE_FILE, JSON.stringify(data, null, 2), 'utf-8');
@@ -63,6 +73,7 @@ export class JulesPoller {
 
   public trackSession(sessionId: string) {
     this.handledCompletions.delete(sessionId);
+    this.lastSupervisorTurnAt.delete(sessionId);
     this.saveState();
     if (!this.intervalId) {
       this.startPolling();
@@ -147,8 +158,8 @@ export class JulesPoller {
       for (const s of sessions) {
         if (s.state === 'COMPLETED') {
           await this.handleSessionCompleted(s);
-        } else if (s.state !== 'CANCELLED' && s.state !== 'FAILED') {
-          // Check ANY active session (IN_PROGRESS, AWAITING_FEEDBACK, etc.) for unhandled agent questions
+        } else if (s.state === 'AWAITING_USER_FEEDBACK' || s.state === 'AWAITING_USER_INPUT') {
+          // Jules is paused in Google Cloud waiting for explicit architectural review or question reply
           await this.handleAwaitingFeedback(s);
         }
       }
@@ -158,41 +169,55 @@ export class JulesPoller {
   }
 
   private async handleAwaitingFeedback(s: JulesSessionSummary) {
-    if (s.state === 'COMPLETED' || s.state === 'CANCELLED' || s.state === 'FAILED') return;
+    if (s.state !== 'AWAITING_USER_FEEDBACK' && s.state !== 'AWAITING_USER_INPUT') return;
     if (this.isProcessingTurn) return; // Wait for current turn to complete
+
+    // Cooldown check: Do not re-trigger an autonomous supervisor turn for the same session within 3 minutes
+    const lastTurn = this.lastSupervisorTurnAt.get(s.id) || 0;
+    if (Date.now() - lastTurn < 180_000) {
+      return;
+    }
 
     const client = JulesClient.getInstance();
     const activities = await client.listActivities(s.id).catch(() => []);
     if (!activities || activities.length === 0) return;
 
-    const isAwaitingFeedback = s.state === 'AWAITING_USER_FEEDBACK' || s.state === 'AWAITING_USER_INPUT';
+    const isUserMsg = (a: any) =>
+      a.originator === 'user' ||
+      a.metadata?.originator === 'user' ||
+      a.userMessaged ||
+      a.metadata?.userMessaged ||
+      a.type === 'USER_MESSAGE';
 
-    // Find the latest message or activity from the agent (newest to oldest)
+    const isAgentMsg = (a: any) =>
+      a.originator === 'agent' ||
+      a.metadata?.originator === 'agent' ||
+      a.agentMessaged ||
+      a.metadata?.agentMessaged ||
+      a.type === 'AGENT_MESSAGE';
+
+    // Find the latest interactive message between user and agent
     const reversed = [...activities].reverse();
-    let targetAct = reversed.find(
-      (a) =>
-        (a.originator === 'agent' || a.metadata?.originator === 'agent' || a.agentMessaged || a.metadata?.agentMessaged) &&
-        (a.agentMessaged?.agentMessage || a.agentMessaged?.message || a.metadata?.agentMessaged?.agentMessage || a.metadata?.agentMessaged?.message || a.type === 'AGENT_MESSAGE' || a.description)
-    );
+    const lastConversational = reversed.find((a) => isUserMsg(a) || isAgentMsg(a) || a.metadata?.planGenerated);
 
-    // If session is explicitly in AWAITING_USER_FEEDBACK, take the newest activity regardless of format
-    if (!targetAct && isAwaitingFeedback && activities.length > 0) {
-      targetAct = reversed[0];
+    // If the latest message was from user/Byte, we already answered Jules! Do not wake up Byte.
+    if (lastConversational && isUserMsg(lastConversational)) {
+      return;
     }
+
+    // Find the latest agent message or plan proposal requiring review
+    const targetAct = reversed.find(
+      (a) =>
+        (isAgentMsg(a) && (a.agentMessaged?.agentMessage || a.agentMessaged?.message || a.metadata?.agentMessaged?.agentMessage || a.metadata?.agentMessaged?.message || a.description)) ||
+        a.metadata?.planGenerated
+    );
 
     if (!targetAct || !targetAct.id) return;
 
     // Check if there is already a newer user message that answered this activity
     const targetActIndex = activities.findIndex((a) => a.id === targetAct.id);
     if (targetActIndex !== -1) {
-      const subsequentUserMsg = activities.slice(targetActIndex + 1).find(
-        (a) =>
-          a.originator === 'user' ||
-          a.metadata?.originator === 'user' ||
-          a.userMessaged ||
-          a.metadata?.userMessaged ||
-          a.type === 'USER_MESSAGE'
-      );
+      const subsequentUserMsg = activities.slice(targetActIndex + 1).find(isUserMsg);
       if (subsequentUserMsg) {
         if (!this.handledActivities.has(targetAct.id)) {
           this.handledActivities.add(targetAct.id);
@@ -206,25 +231,20 @@ export class JulesPoller {
       return; // Already reviewed or currently processing
     }
 
-    const julesMessage = 
+    const julesMessage =
       targetAct.agentMessaged?.agentMessage ||
       targetAct.agentMessaged?.message ||
       targetAct.metadata?.agentMessaged?.agentMessage ||
       targetAct.metadata?.agentMessaged?.message ||
+      (targetAct.metadata?.planGenerated ? 'Jules has generated an execution plan and is waiting for your review and approval.' : '') ||
       targetAct.description ||
-      targetAct.metadata?.progressUpdated?.description ||
-      (isAwaitingFeedback
-        ? 'Jules has updated the project in Google Cloud and is currently paused awaiting your architectural feedback / review to proceed.'
-        : 'Jules is waiting for your input to continue working.');
-
-    const isQuestion = julesMessage.includes('?') || 
-      /does this sound|should i|can you confirm|how would you|do you prefer|please confirm|what do you think|your thoughts/i.test(julesMessage);
+      'Jules has updated the project in Google Cloud and is currently paused awaiting your architectural feedback / review to proceed.';
 
     // 1. Show OS native Desktop Notification (even if window is minimized or hidden)
     if (Notification.isSupported()) {
       try {
         const notif = new Notification({
-          title: isQuestion ? 'Byte - Jules Awaiting Decision' : 'Byte - Jules Worker Update',
+          title: 'Byte - Jules Awaiting Decision',
           body: `Task: ${s.title || s.id}\n${julesMessage.slice(0, 120)}...`,
           silent: false,
         });
@@ -265,10 +285,8 @@ export class JulesPoller {
       }
     }
 
-    // 3. Formulate autonomous supervisor prompt
-    let supervisorPrompt = '';
-    if (isAwaitingFeedback || isQuestion) {
-      supervisorPrompt = `[CRITICAL ACTION REQUIRED: JULES WORKER IS BLOCKED AND WAITING FOR YOU]
+    // 3. Formulate autonomous supervisor prompt (strictly for unblocking blocked workers)
+    const supervisorPrompt = `[CRITICAL ACTION REQUIRED: JULES WORKER IS BLOCKED AND WAITING FOR YOU]
 Jules Session ID: ${s.id}
 Task Title: ${s.title || 'Ongoing Task'}
 Current Status: ${s.state || 'AWAITING_USER_FEEDBACK'}
@@ -286,55 +304,31 @@ AUTONOMOUS LEAD DIRECTIVES FOR BYTE:
    - answer: "<Your clear engineering decision, approval, or architectural directions for Jules>"
 3. Review Jules' proposal or changes above: if sound and aligned with the user's objective, APPROVE IT AND INSTRUCT JULES TO PROCEED IMMEDIATELY!
 4. Call 'jules_reply_question' NOW to unblock Jules. Then give a concise 1-line update to the user.`;
-    } else {
-      supervisorPrompt = `[AUTONOMOUS JULES WORKER UPDATE]
-Jules Session ID: ${s.id}
-Task Title: ${s.title || 'Ongoing Task'}
-Current Status: ${s.state || 'IN_PROGRESS'}
-
-Jules Worker reported:
-"""
-${julesMessage}
-"""
-
-SUPERVISOR DIRECTIVES FOR BYTE:
-1. You are the Senior Lead Architect supervising this Jules worker.
-2. Review Jules' findings/report above against the user's objective.
-3. If Jules has completed its task or phase, report the findings clearly to the user.
-4. If Jules requires guidance, call 'jules_reply_question' with session_id: "${s.id}" and your answer.`;
-    }
 
     this.isProcessingTurn = true;
     this.processingActivities.add(targetAct.id);
+    this.lastSupervisorTurnAt.set(s.id, Date.now());
 
     try {
       await AgentOrchestrator.getInstance().runAutonomousTurn(chatSession.id, supervisorPrompt, undefined, true);
 
       // Verify if Jules received a reply
       const updatedActs = await client.listActivities(s.id).catch(() => []);
-      const hasReplied = updatedActs.some(
-        (a) =>
-          a.originator === 'user' ||
-          a.metadata?.originator === 'user' ||
-          a.userMessaged ||
-          a.metadata?.userMessaged ||
-          a.type === 'USER_MESSAGE'
-      );
+      const hasReplied = updatedActs.some(isUserMsg);
 
-      if (!hasReplied && (isAwaitingFeedback || isQuestion)) {
+      if (!hasReplied) {
         // Fallback: If the model generated text in chat instead of calling the tool, auto-forward it to Jules!
         const refreshedSession = store.getSession(chatSession.id);
         const lastMsg = refreshedSession?.messages[refreshedSession.messages.length - 1];
         if (lastMsg && lastMsg.role === 'assistant' && lastMsg.content && lastMsg.content.trim()) {
           console.log(`[JulesPoller] Auto-forwarding assistant reply to unblock Jules session ${s.id}`);
           await client.sendFollowup(s.id, lastMsg.content.trim()).catch(() => {});
-          this.handledActivities.add(targetAct.id);
-          this.saveState();
         }
-      } else if (hasReplied) {
-        this.handledActivities.add(targetAct.id);
-        this.saveState();
       }
+
+      this.handledActivities.add(targetAct.id);
+      this.lastSupervisorTurnAt.set(s.id, Date.now());
+      this.saveState();
     } finally {
       this.processingActivities.delete(targetAct.id);
       this.isProcessingTurn = false;
