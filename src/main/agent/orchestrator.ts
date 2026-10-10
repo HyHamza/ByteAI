@@ -422,14 +422,27 @@ Git Repository: ${activeRepo} (${activeBranch})`;
 
         if (imageAttachments.length > 0) {
           const contentParts: any[] = [];
-          if (textContent.trim()) {
-            contentParts.push({
-              type: 'text',
-              text: textContent,
-            });
-          }
 
-          for (const img of imageAttachments) {
+          // Build clear numbering index for LLM (e.g. 1st screenshot, 2nd screenshot, etc.)
+          const indexLines = imageAttachments.map((img, idx) => {
+            const num = idx + 1;
+            const ordinal = num === 1 ? '1st' : num === 2 ? '2nd' : num === 3 ? '3rd' : `${num}th`;
+            return `• ${ordinal} Screenshot (#${num}): "${img.name}"`;
+          }).join('\n');
+
+          const userTextHeader = textContent.trim()
+            ? `${textContent}\n\n[ATTACHED SCREENSHOTS / IMAGES INDEX (${imageAttachments.length} total):\n${indexLines}\nNote: When user refers to '1st screenshot', '2nd screenshot', etc., match them with the corresponding numbered screenshots above.]`
+            : `[ATTACHED SCREENSHOTS / IMAGES INDEX (${imageAttachments.length} total):\n${indexLines}\nNote: When user refers to '1st screenshot', '2nd screenshot', etc., match them with the corresponding numbered screenshots above.]`;
+
+          contentParts.push({
+            type: 'text',
+            text: userTextHeader,
+          });
+
+          imageAttachments.forEach((img, idx) => {
+            const num = idx + 1;
+            const ordinal = num === 1 ? '1st' : num === 2 ? '2nd' : num === 3 ? '3rd' : `${num}th`;
+
             let dataUrl = img.dataUrl;
             if (!dataUrl && img.path && fs.existsSync(img.path)) {
               try {
@@ -439,6 +452,11 @@ Git Repository: ${activeRepo} (${activeBranch})`;
                 dataUrl = `data:${mime};base64,${buf.toString('base64')}`;
               } catch (_) {}
             }
+
+            contentParts.push({
+              type: 'text',
+              text: `--- Screenshot #${num} (${ordinal} Screenshot): "${img.name}" ---`,
+            });
 
             if (dataUrl) {
               contentParts.push({
@@ -450,10 +468,10 @@ Git Repository: ${activeRepo} (${activeBranch})`;
             } else {
               contentParts.push({
                 type: 'text',
-                text: `[Attached Image: "${img.name}" (Local path: ${img.path})]`,
+                text: `[Attached Image #${num}: "${img.name}" (Local path: ${img.path})]`,
               });
             }
-          }
+          });
 
           llmMessages.push({
             role: 'user',

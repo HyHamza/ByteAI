@@ -145,7 +145,22 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       }
     }
 
-    onSendMessage(submittedText, attachments);
+    let imageCounter = 0;
+    const processedAttachments = attachments.map((att) => {
+      if (att.type === 'image') {
+        imageCounter++;
+        const rawName = att.name || `image_${imageCounter}.png`;
+        const cleanBase = rawName.replace(/^screenshot_\d+[-_]?/i, '');
+        const indexedName = `screenshot_${imageCounter}_${cleanBase}`;
+        return {
+          ...att,
+          name: indexedName,
+        };
+      }
+      return att;
+    });
+
+    onSendMessage(submittedText, processedAttachments);
     setText('');
     setAttachments([]);
     setIsDutyShiftEnabled(false);
@@ -282,6 +297,67 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     }
   };
 
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const clipboardData = e.clipboardData;
+    if (!clipboardData) return;
+
+    const items = clipboardData.items;
+    const files = clipboardData.files;
+    const newImageFiles: File[] = [];
+
+    if (items && items.length > 0) {
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.type.startsWith('image/')) {
+          const file = item.getAsFile();
+          if (file) newImageFiles.push(file);
+        }
+      }
+    } else if (files && files.length > 0) {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (file.type.startsWith('image/') || /\.(png|jpe?g|webp|gif|svg)$/i.test(file.name)) {
+          newImageFiles.push(file);
+        }
+      }
+    }
+
+    if (newImageFiles.length > 0) {
+      const pastedText = clipboardData.getData('text/plain');
+      // If pure image paste, prevent default placeholder text insertion
+      if (!pastedText) {
+        e.preventDefault();
+      }
+
+      newImageFiles.forEach((file) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const dataUrl = event.target?.result as string;
+          setAttachments((prev) => {
+            const nextImgNum = prev.filter((a) => a.type === 'image').length + 1;
+            const ext = file.name && file.name.includes('.') ? file.name.split('.').pop() || 'png' : 'png';
+            const base = (file.name && file.name !== 'image.png' && file.name !== 'blob')
+              ? file.name
+              : `screenshot_${nextImgNum}.${ext}`;
+
+            return [
+              ...prev,
+              {
+                id: `att_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+                name: base,
+                path: (file as any).path || base,
+                size: file.size,
+                type: 'image',
+                dataUrl,
+              },
+            ];
+          });
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+  };
+
   // Auto-resize textarea
   useEffect(() => {
     if (textareaRef.current) {
@@ -328,39 +404,51 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
+        onPaste={handlePaste}
         className={`w-full ${isCenteredLayout ? 'max-w-2xl' : 'max-w-3xl'} bg-[var(--bg-surface-hover)] border ${isDraggingOver ? 'border-[var(--border-subtle)] bg-[var(--bg-surface-hover)]' : 'border-[var(--border-card)]'} rounded-2xl p-3 shadow-2xl transition-all focus-within:border-[var(--border-subtle)] relative`}
       >
         <form onSubmit={handleSubmit} className="flex flex-col">
           {/* Attachment Preview Chips */}
           {attachments.length > 0 && (
             <div className="flex flex-wrap gap-2 pb-2 mb-1.5 border-b border-[var(--border-subtle)] animate-in fade-in duration-150">
-              {attachments.map((att) => (
-                <div 
-                  key={att.id}
-                  className="flex items-center space-x-2 bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] hover:border-[var(--border-subtle)] text-[var(--text-primary)] px-2.5 py-1 rounded-xl text-xs group/att transition-all shadow-sm max-w-[220px]"
-                >
-                  {att.type === 'image' && att.dataUrl ? (
-                    <img 
-                      src={att.dataUrl} 
-                      alt={att.name} 
-                      className="w-5 h-5 rounded object-cover shrink-0 border border-white/10" 
-                    />
-                  ) : att.type === 'image' ? (
-                    <ImageIcon className="w-4 h-4 text-sky-400 shrink-0" />
-                  ) : (
-                    <FileText className="w-4 h-4 text-amber-400 shrink-0" />
-                  )}
-                  <span className="truncate font-mono text-[11px] text-[var(--text-primary)]">{att.name}</span>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveAttachment(att.id)}
-                    className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/10 p-0.5 rounded-full transition-colors cursor-pointer"
-                    title="Remove attachment"
+              {attachments.map((att, idx) => {
+                const imageIndex = att.type === 'image'
+                  ? attachments.slice(0, idx + 1).filter((a) => a.type === 'image').length
+                  : undefined;
+
+                return (
+                  <div 
+                    key={att.id}
+                    className="flex items-center space-x-2 bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] hover:border-[var(--border-subtle)] text-[var(--text-primary)] px-2.5 py-1 rounded-xl text-xs group/att transition-all shadow-sm max-w-[240px]"
                   >
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-              ))}
+                    {imageIndex && (
+                      <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-sky-500/20 text-sky-400 border border-sky-500/30 shrink-0 font-mono">
+                        #{imageIndex}
+                      </span>
+                    )}
+                    {att.type === 'image' && att.dataUrl ? (
+                      <img 
+                        src={att.dataUrl} 
+                        alt={att.name} 
+                        className="w-5 h-5 rounded object-cover shrink-0 border border-white/10" 
+                      />
+                    ) : att.type === 'image' ? (
+                      <ImageIcon className="w-4 h-4 text-sky-400 shrink-0" />
+                    ) : (
+                      <FileText className="w-4 h-4 text-amber-400 shrink-0" />
+                    )}
+                    <span className="truncate font-mono text-[11px] text-[var(--text-primary)]" title={att.name}>{att.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveAttachment(att.id)}
+                      className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/10 p-0.5 rounded-full transition-colors cursor-pointer"
+                      title="Remove attachment"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           )}
 
@@ -420,6 +508,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             placeholder={attachments.length > 0 ? "Add instructions or press Enter to analyze attachments..." : "Ask anything, @ to mention, / for actions"}
             disabled={disabled || isStreaming}
             rows={isCenteredLayout ? 2 : 1}

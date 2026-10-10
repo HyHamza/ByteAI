@@ -579,32 +579,43 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
                     {/* Render message attachments if present */}
                     {turn.userMessage.attachments && turn.userMessage.attachments.length > 0 && (
                       <div className="flex flex-wrap gap-2 pt-0.5">
-                        {turn.userMessage.attachments.map((att) => (
-                          <div
-                            key={att.id}
-                            className="flex items-center space-x-2 bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl p-1.5 pr-3 text-xs text-[var(--text-primary)] shadow-sm max-w-[280px]"
-                          >
-                            {att.type === 'image' && att.dataUrl ? (
-                              <img
-                                src={att.dataUrl}
-                                alt={att.name}
-                                className="w-8 h-8 rounded-lg object-cover border border-white/10 shrink-0"
-                              />
-                            ) : att.type === 'image' ? (
-                              <div className="w-8 h-8 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center shrink-0">
-                                <ImageIcon className="w-4 h-4 text-sky-400" />
+                        {turn.userMessage.attachments.map((att, attIdx) => {
+                          const imageIndex = att.type === 'image'
+                            ? turn.userMessage!.attachments!.slice(0, attIdx + 1).filter((a) => a.type === 'image').length
+                            : undefined;
+
+                          return (
+                            <div
+                              key={att.id}
+                              className="flex items-center space-x-2 bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl p-1.5 pr-3 text-xs text-[var(--text-primary)] shadow-sm max-w-[280px]"
+                            >
+                              {imageIndex && (
+                                <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-sky-500/20 text-sky-400 border border-sky-500/30 shrink-0 font-mono">
+                                  #{imageIndex}
+                                </span>
+                              )}
+                              {att.type === 'image' && att.dataUrl ? (
+                                <img
+                                  src={att.dataUrl}
+                                  alt={att.name}
+                                  className="w-8 h-8 rounded-lg object-cover border border-white/10 shrink-0"
+                                />
+                              ) : att.type === 'image' ? (
+                                <div className="w-8 h-8 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center shrink-0">
+                                  <ImageIcon className="w-4 h-4 text-sky-400" />
+                                </div>
+                              ) : (
+                                <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0">
+                                  <FileText className="w-4 h-4 text-amber-400" />
+                                </div>
+                              )}
+                              <div className="flex flex-col min-w-0">
+                                <span className="font-mono text-[11px] text-[var(--text-primary)] truncate font-medium">{att.name}</span>
+                                <span className="text-[10px] text-[var(--text-secondary)] font-mono">{Math.max(1, Math.round(att.size / 1024))} KB</span>
                               </div>
-                            ) : (
-                              <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0">
-                                <FileText className="w-4 h-4 text-amber-400" />
-                              </div>
-                            )}
-                            <div className="flex flex-col min-w-0">
-                              <span className="font-mono text-[11px] text-[var(--text-primary)] truncate font-medium">{att.name}</span>
-                              <span className="text-[10px] text-[var(--text-secondary)] font-mono">{Math.max(1, Math.round(att.size / 1024))} KB</span>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
 
