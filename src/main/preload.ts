@@ -43,6 +43,12 @@ const api: ElectronAPI = {
     return () => ipcRenderer.removeListener('chat:completed', handler);
   },
 
+  onStreamClear: (callback) => {
+    const handler = (_: any, sessionId: string) => callback(sessionId);
+    ipcRenderer.on('chat:clear-stream', handler);
+    return () => ipcRenderer.removeListener('chat:clear-stream', handler);
+  },
+
   onTitleUpdated: (callback) => {
     const handler = (_: any, payload: { sessionId: string; title: string }) => callback(payload);
     ipcRenderer.on('chat:title-updated', handler);

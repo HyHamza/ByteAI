@@ -261,6 +261,17 @@ export const App: React.FC = () => {
       }
     });
 
+    const unsubClear = api.onStreamClear?.((sessId: string) => {
+      if (sessId === activeSessionIdRef.current) {
+        tokenBuffer = '';
+        if (tokenRaf) {
+          cancelAnimationFrame(tokenRaf);
+          tokenRaf = null;
+        }
+        setStreamingContent('');
+      }
+    });
+
     const unsubTitle = api.onTitleUpdated?.(({ sessionId, title }) => {
       setSessions((prev) =>
         prev.map((s) => (s.id === sessionId ? { ...s, title } : s))
@@ -316,6 +327,7 @@ export const App: React.FC = () => {
       unsubModelResolved?.();
       unsubTool();
       unsubCompleted();
+      unsubClear?.();
       unsubTitle?.();
       unsubSessions?.();
       unsubAgent?.();

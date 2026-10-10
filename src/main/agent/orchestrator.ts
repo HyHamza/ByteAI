@@ -538,8 +538,10 @@ Call 'jules_continue_session' (or 'jules_create_task' if starting a new phase) w
         break;
       }
 
-      // Flush any pending stream tokens to the UI before tool execution
+      // Flush any pending stream tokens and clear live stream text so intermediate step intents
+      // are cleanly associated with their tool calls in the trajectory, rather than accumulating at the bottom
       this.flushStreamBuffers(sessionId);
+      this.emitClearStream(sessionId);
 
       // Execute each tool call for this step
       const stepToolRecords: ToolExecutionRecord[] = [];
@@ -566,6 +568,8 @@ Call 'jules_continue_session' (or 'jules_create_task' if starting a new phase) w
           args: toolArgs,
           status: 'running',
           startedAt: Date.now(),
+          intent: result.content?.trim() || undefined,
+          thinking: result.reasoning?.trim() || undefined,
         };
 
         this.emitToolCall(sessionId, assistantMsgId, toolRecord);
@@ -786,6 +790,15 @@ Call 'jules_continue_session' (or 'jules_create_task' if starting a new phase) w
     for (const win of windows) {
       if (!win.isDestroyed()) {
         win.webContents.send('chat:completed', sessionId);
+      }
+    }
+  }
+
+  private emitClearStream(sessionId: string) {
+    const windows = BrowserWindow.getAllWindows();
+    for (const win of windows) {
+      if (!win.isDestroyed()) {
+        win.webContents.send('chat:clear-stream', sessionId);
       }
     }
   }

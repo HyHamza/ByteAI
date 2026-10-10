@@ -398,7 +398,11 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
           let responseText = '';
 
           if (isLiveInThisTurn) {
-            responseText = currentStreamContent;
+            // While tools are actively running in this turn, intermediate step intent belongs in the trajectory flow,
+            // never accumulating into the bottom response area. The bottom response area is reserved for the final conclusion.
+            const hasRunningTool = (streamingTools && streamingTools.some((t) => t.status === 'running')) ||
+              (turn.assistantMessages.some((m) => m.toolCalls && m.toolCalls.some((t) => t.status === 'running')));
+            responseText = hasRunningTool ? '' : currentStreamContent;
           } else if (finalAsstMsg && finalAsstMsg.content) {
             responseText = finalAsstMsg.content.trim();
           }
@@ -434,6 +438,23 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
             // Tools executed in this step:
             if (am.toolCalls && am.toolCalls.length > 0) {
               for (const tc of am.toolCalls) {
+                // Interleave tool's specific thinking or intent directly above the tool if available
+                if (tc.thinking && tc.thinking.trim() && tc.thinking.trim() !== am.thinking?.trim()) {
+                  trajectoryItems.push({
+                    type: 'thought',
+                    id: `th_tc_thk_${tc.id}`,
+                    content: tc.thinking.trim(),
+                    durationSec: Math.max(1, Math.round(tc.thinking.trim().length / 60)),
+                  });
+                }
+                if (tc.intent && tc.intent.trim() && tc.intent.trim() !== am.content?.trim()) {
+                  trajectoryItems.push({
+                    type: 'thought',
+                    id: `th_tc_int_${tc.id}`,
+                    content: tc.intent.trim(),
+                    durationSec: Math.max(1, Math.round(tc.intent.trim().length / 60)),
+                  });
+                }
                 trajectoryItems.push({
                   type: 'tool',
                   id: tc.id,
@@ -445,17 +466,25 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
 
           // 3. If currently live streaming in this turn:
           if (isLiveInThisTurn) {
-            if (streamingReasoning && streamingReasoning.trim()) {
-              trajectoryItems.push({
-                type: 'thought',
-                id: 'live_reasoning',
-                content: streamingReasoning.trim(),
-                durationSec: streamingSeconds || 1,
-              });
-            }
             if (streamingTools && streamingTools.length > 0) {
               for (const tc of streamingTools) {
                 if (!trajectoryItems.some((it) => it.type === 'tool' && it.tool.id === tc.id)) {
+                  if (tc.thinking && tc.thinking.trim()) {
+                    trajectoryItems.push({
+                      type: 'thought',
+                      id: `th_live_thk_${tc.id}`,
+                      content: tc.thinking.trim(),
+                      durationSec: Math.max(1, Math.round(tc.thinking.trim().length / 60)),
+                    });
+                  }
+                  if (tc.intent && tc.intent.trim()) {
+                    trajectoryItems.push({
+                      type: 'thought',
+                      id: `th_live_int_${tc.id}`,
+                      content: tc.intent.trim(),
+                      durationSec: Math.max(1, Math.round(tc.intent.trim().length / 60)),
+                    });
+                  }
                   trajectoryItems.push({
                     type: 'tool',
                     id: tc.id,
@@ -463,6 +492,15 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
                   });
                 }
               }
+            }
+
+            if (streamingReasoning && streamingReasoning.trim()) {
+              trajectoryItems.push({
+                type: 'thought',
+                id: 'live_reasoning',
+                content: streamingReasoning.trim(),
+                durationSec: streamingSeconds || 1,
+              });
             }
           }
 

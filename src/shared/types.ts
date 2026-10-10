@@ -65,6 +65,8 @@ export interface ToolExecutionRecord {
   status: 'pending' | 'running' | 'completed' | 'error';
   startedAt: number;
   completedAt?: number;
+  intent?: string;
+  thinking?: string;
 }
 
 export type TaskState = 'idle' | 'running_agent' | 'waiting_jules' | 'awaiting_feedback' | 'completed';
@@ -161,6 +163,7 @@ export interface ElectronAPI {
   onModelResolved?: (callback: (payload: ModelResolvedPayload) => void) => () => void;
   onToolCallUpdate: (callback: (payload: ToolCallPayload) => void) => () => void;
   onExecutionCompleted: (callback: (sessionId: string) => void) => () => void;
+  onStreamClear?: (callback: (sessionId: string) => void) => () => void;
   onTitleUpdated?: (callback: (payload: { sessionId: string; title: string }) => void) => () => void;
   getRunningSessions?: () => Promise<string[]>;
   onAgentStatus?: (callback: (payload: { sessionId: string; status: 'running' | 'idle' }) => void) => () => void;
