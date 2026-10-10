@@ -4,7 +4,7 @@ import { DataStore } from '../db/store';
 
 export interface LLMMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
-  content: string | null;
+  content: string | null | any[];
   tool_calls?: any[];
   tool_call_id?: string;
 }

@@ -447,7 +447,14 @@ export async function executeToolCall(
         if (!fs.existsSync(fullPath)) {
           return `Error: File not found: ${args.path}`;
         }
+        const ext = path.extname(fullPath).toLowerCase();
+        const isImage = ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.svg', '.bmp', '.ico'].includes(ext);
         const stat = await fs.promises.stat(fullPath);
+
+        if (isImage) {
+          return `[Image File: ${path.basename(fullPath)}] Format: ${ext.replace('.', '').toUpperCase()}, Size: ${Math.round(stat.size / 1024)} KB. This is a binary image file provided directly to the model's visual comprehension.`;
+        }
+
         if (stat.size > 2 * 1024 * 1024) {
           return `Error: File ${args.path} is too large (${Math.round(stat.size / 1024)} KB). Use start_line and end_line to inspect specific ranges.`;
         }

@@ -119,6 +119,19 @@ function pruneContextWindow(messages: LLMMessage[]): LLMMessage[] {
   const systemMsg = messages[0];
   const historyMsgs = messages.slice(1);
 
+  // Strip base64 image data from older history turns to prevent token bloat
+  for (let i = 0; i < historyMsgs.length - 2; i++) {
+    const m = historyMsgs[i];
+    if (m.role === 'user' && Array.isArray(m.content)) {
+      m.content = m.content.map((part) => {
+        if (part && part.type === 'image_url') {
+          return { type: 'text', text: '[Previous attached image processed in earlier turn]' };
+        }
+        return part;
+      });
+    }
+  }
+
   // If over 18,000 characters (~4,500 tokens), compress older tool outputs
   let totalLength = historyMsgs.reduce((acc, m) => acc + (typeof m.content === 'string' ? m.content.length : 0), 0);
   if (totalLength > 18000) {
@@ -394,22 +407,62 @@ Git Repository: ${activeRepo} (${activeBranch})`;
           });
         }
       } else if (m.role === 'user') {
-        let contentWithAttachments = m.content || '';
-        if (m.attachments && m.attachments.length > 0) {
-          const attDesc = m.attachments.map((a) => {
-            if (a.type === 'image') {
-              return `[Attached Image: "${a.name}" (Local path: ${a.path})]`;
-            }
+        let textContent = m.content || '';
+        const nonImageAttachments = m.attachments?.filter((a) => a.type !== 'image') || [];
+        const imageAttachments = m.attachments?.filter((a) => a.type === 'image') || [];
+
+        if (nonImageAttachments.length > 0) {
+          const fileDesc = nonImageAttachments.map((a) => {
             return `[Attached File: "${a.name}" (Local path: ${a.path}, Size: ${Math.round(a.size / 1024)} KB)]`;
           }).join('\n');
-          contentWithAttachments = contentWithAttachments 
-            ? `${contentWithAttachments}\n\nATTACHED FILES/IMAGES:\n${attDesc}`
-            : `ATTACHED FILES/IMAGES:\n${attDesc}`;
+          textContent = textContent 
+            ? `${textContent}\n\nATTACHED FILES:\n${fileDesc}`
+            : `ATTACHED FILES:\n${fileDesc}`;
         }
-        if (contentWithAttachments.trim()) {
+
+        if (imageAttachments.length > 0) {
+          const contentParts: any[] = [];
+          if (textContent.trim()) {
+            contentParts.push({
+              type: 'text',
+              text: textContent,
+            });
+          }
+
+          for (const img of imageAttachments) {
+            let dataUrl = img.dataUrl;
+            if (!dataUrl && img.path && fs.existsSync(img.path)) {
+              try {
+                const ext = path.extname(img.path).toLowerCase();
+                const mime = ext === '.svg' ? 'image/svg+xml' : ext === '.png' ? 'image/png' : ext === '.gif' ? 'image/gif' : ext === '.webp' ? 'image/webp' : 'image/jpeg';
+                const buf = fs.readFileSync(img.path);
+                dataUrl = `data:${mime};base64,${buf.toString('base64')}`;
+              } catch (_) {}
+            }
+
+            if (dataUrl) {
+              contentParts.push({
+                type: 'image_url',
+                image_url: {
+                  url: dataUrl,
+                },
+              });
+            } else {
+              contentParts.push({
+                type: 'text',
+                text: `[Attached Image: "${img.name}" (Local path: ${img.path})]`,
+              });
+            }
+          }
+
           llmMessages.push({
             role: 'user',
-            content: contentWithAttachments,
+            content: contentParts,
+          });
+        } else if (textContent.trim()) {
+          llmMessages.push({
+            role: 'user',
+            content: textContent,
           });
         }
       } else if (m.role === 'system' || m.isSystemNotification) {
