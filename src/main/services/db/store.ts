@@ -30,6 +30,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   vadEnabled: true,
   userName: 'Hamza',
   userEmail: 'talkdrove@gmail.com',
+  preventSleep: false,
 };
 
 const GREETINGS = new Set([

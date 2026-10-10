@@ -30,6 +30,7 @@ export interface AppSettings {
   vadEnabled?: boolean;
   userName?: string;
   userEmail?: string;
+  preventSleep?: boolean;
 }
 
 export interface AttachmentFile {

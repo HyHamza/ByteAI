@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, Menu, MenuItem, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, Menu, MenuItem, shell, powerSaveBlocker } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { DataStore } from './services/db/store';
@@ -14,6 +14,22 @@ import { DutyManager } from './services/duty/manager';
 import type { AppMode, ChatSession, AttachmentFile } from '../shared/types';
 
 let mainWindow: BrowserWindow | null = null;
+let powerSaveBlockerId: number | null = null;
+
+function syncPowerSaveBlocker(enabled: boolean) {
+  if (enabled) {
+    if (powerSaveBlockerId === null || !powerSaveBlocker.isStarted(powerSaveBlockerId)) {
+      powerSaveBlockerId = powerSaveBlocker.start('prevent-display-sleep');
+      console.log(`[PowerSaveBlocker] Device sleep prevention active (ID: ${powerSaveBlockerId})`);
+    }
+  } else {
+    if (powerSaveBlockerId !== null && powerSaveBlocker.isStarted(powerSaveBlockerId)) {
+      powerSaveBlocker.stop(powerSaveBlockerId);
+      console.log(`[PowerSaveBlocker] Device sleep prevention disabled (ID: ${powerSaveBlockerId})`);
+    }
+    powerSaveBlockerId = null;
+  }
+}
 
 function createWindow() {
   const preloadPath = path.join(__dirname, '../preload/preload.js');
@@ -84,6 +100,10 @@ app.whenReady().then(() => {
   createWindow();
   JulesPoller.getInstance().startPolling(10000);
 
+  // Initialize prevent sleep blocker based on persisted user preference
+  const initialSettings = DataStore.getInstance().getSettings();
+  syncPowerSaveBlocker(Boolean(initialSettings.preventSleep));
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
@@ -106,6 +126,9 @@ function setupIpcHandlers() {
 
   ipcMain.handle('settings:save', async (_, partial) => {
     store.saveSettings(partial);
+    if (partial.preventSleep !== undefined) {
+      syncPowerSaveBlocker(Boolean(partial.preventSleep));
+    }
     return true;
   });
 

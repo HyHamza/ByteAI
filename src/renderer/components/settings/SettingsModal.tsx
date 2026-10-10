@@ -18,7 +18,8 @@ import {
   Terminal, 
   ExternalLink,
   Trash2,
-  Plus
+  Plus,
+  Zap
 } from 'lucide-react';
 import type { AppSettings, ProjectInfo } from '@/shared/types';
 import { api } from '../../api';
@@ -480,6 +481,50 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             <option value="standard">Standard AI Developer</option>
                             <option value="jules">Jules Senior Lead Supervisor</option>
                           </select>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Power Management / Prevent Sleep Mode */}
+                    <div>
+                      <h4 className="text-xs font-semibold text-[var(--text-primary)] mb-2 flex items-center space-x-1.5">
+                        <Zap className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Power Management</span>
+                      </h4>
+                      <div className="bg-[var(--bg-surface)] border border-[var(--border-card)] rounded-xl p-3.5 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="pr-4">
+                            <div className="flex items-center space-x-2">
+                              <span className="text-xs font-medium text-[var(--text-primary)]">Prevent Device Sleep Mode</span>
+                              {form.preventSleep ? (
+                                <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-amber-500/15 text-amber-400 border border-amber-500/30 font-medium">
+                                  Active (Awake)
+                                </span>
+                              ) : (
+                                <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-[var(--bg-surface-hover)] text-[var(--text-muted)] border border-[var(--border-subtle)] font-medium">
+                                  Disabled
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-[var(--text-secondary)] mt-0.5">
+                              Prevents your computer and display from going to sleep while Byte is open. Essential for uninterrupted long-running tasks, test suites, and overnight duty shifts.
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={Boolean(form.preventSleep)}
+                            onClick={() => setForm({ ...form, preventSleep: !form.preventSleep })}
+                            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                              form.preventSleep ? 'bg-amber-500' : 'bg-[var(--border-card)]'
+                            }`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                                form.preventSleep ? 'translate-x-4' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
                         </div>
                       </div>
                     </div>
