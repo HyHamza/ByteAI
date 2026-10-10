@@ -243,20 +243,21 @@ export const App: React.FC = () => {
       }
     });
 
-    const unsubCompleted = api.onExecutionCompleted((sessId: string) => {
+    const unsubCompleted = api.onExecutionCompleted(async (sessId: string) => {
       if (sessId === activeSessionIdRef.current) {
         flushStreamBuffers();
-        setIsStreaming(false);
         setRetryStatus(null);
+        try {
+          const fullSess = await api.getSession?.(sessId);
+          if (fullSess) {
+            setSessions((prev) => prev.map((s) => (s.id === sessId ? fullSess : s)));
+          }
+        } catch (_) {}
+        setIsStreaming(false);
         setStreamingContent('');
         setStreamingReasoning('');
         setStreamingTools([]);
         setLiveResolvedModel(null);
-        api.getSession?.(sessId).then((fullSess) => {
-          if (fullSess) {
-            setSessions((prev) => prev.map((s) => (s.id === sessId ? fullSess : s)));
-          }
-        });
       }
     });
 

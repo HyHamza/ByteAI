@@ -494,22 +494,17 @@ Git Repository: ${activeRepo} (${activeBranch})`;
         tool_calls: result.toolCalls && result.toolCalls.length > 0 ? result.toolCalls : undefined,
       });
 
-      // If no tool calls were requested, check if a mandatory tool invocation was required!
+      // If no tool calls were requested, check if a mandatory tool invocation was required (ONLY for autonomous watchdog events, never for human messages!)
       if (!result.toolCalls || result.toolCalls.length === 0) {
-        const isDutyActive = !!DutyManager.getInstance().getActiveShift(sessionId);
-        const claimsDispatch = /(dispatched|delegated|assigned).*(jules|worker|task|phase)/i.test(result.content || '');
-        const userAskedDuty = /(work all night|work for \d+\s*hours|overnight|\b\d+\s*hours duty\b)/i.test(userText);
-        const hasMandatoryDirective = userText.includes('[DUTY SHIFT') || userText.includes('[AUTONOMOUS DUTY WATCHDOG');
-        const hasPriorReconTools = llmMessages.some((m) => m.role === 'tool');
+        const isAutonomousWatchdogEvent = isSystemNotification && (userText.includes('[DUTY SHIFT') || userText.includes('[AUTONOMOUS DUTY WATCHDOG'));
 
-        if ((isDutyActive || claimsDispatch || userAskedDuty || hasMandatoryDirective || (mode === 'jules' && hasPriorReconTools)) && turnCount < 6) {
-          console.warn(`[orchestrator] Enforcement notice: model returned without Jules dispatch on turn ${turnCount}. Directing Jules tool invocation...`);
+        if (isAutonomousWatchdogEvent && turnCount < 3) {
+          console.warn(`[orchestrator] Enforcement notice: autonomous duty watchdog returned without Jules dispatch on turn ${turnCount}. Directing Jules tool invocation...`);
           llmMessages.push({
             role: 'user',
             content: `[MANDATORY DELEGATION DIRECTIVE]:
-You completed local workspace reconnaissance and file inspection. Now you MUST dispatch the actual task to Jules in Google Cloud!
-Call 'jules_create_task' (or 'jules_continue_session' if an active session exists) with the concrete files and improvements needed.
-DO NOT return conversational text or empty output without calling a tool. Invoke the Jules tool NOW!`,
+You are on an active autonomous duty shift. Sitting idle or returning conversational text without dispatching work to Jules is prohibited.
+Call 'jules_continue_session' (or 'jules_create_task' if starting a new phase) with the concrete phase specification now!`,
           });
           continue;
         }

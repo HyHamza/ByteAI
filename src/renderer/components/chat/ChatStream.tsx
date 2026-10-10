@@ -216,9 +216,9 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
           lastMsg.content.trim().length > 0
         );
 
-        // If the active turn already concluded with a response and has no user prompt,
-        // start a separate turn for this autonomous/supervisor assistant turn!
-        if (activeTurn && lastMsgCompleted && !activeTurn.userMessage) {
+        // If the active turn already concluded with a response,
+        // finalize it into a completed turn so its response is never overwritten or merged into!
+        if (activeTurn && lastMsgCompleted) {
           list.push(activeTurn);
           activeTurn = null;
         }
@@ -422,7 +422,7 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
 
             // Intermediate step note / intent text directly before tool execution
             // In Antigravity, thoughts and action intents belong in the timeline directly above their tools
-            if (!isLastMsg && am.content && am.content.trim()) {
+            if (!isLastMsg && am.content && am.content.trim() && am.toolCalls && am.toolCalls.length > 0) {
               trajectoryItems.push({
                 type: 'thought',
                 id: `th_cnt_${am.id}`,
