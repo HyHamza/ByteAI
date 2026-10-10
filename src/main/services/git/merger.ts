@@ -297,21 +297,33 @@ export async function syncAndMergeJulesSession(
 
       if (fetched) {
         // Merge into current branch
-        try {
-          const commitMsg = prNumber
-            ? `Merge Jules PR #${prNumber} (${session.title || sessionId}) into ${currentBranch}`
-            : `Merge Jules task ${session.title || sessionId} into ${currentBranch}`;
+        let mergeSucceeded = false;
+        const commitMsg = prNumber
+          ? `Merge Jules PR #${prNumber} (${session.title || sessionId}) into ${currentBranch}`
+          : `Merge Jules task ${session.title || sessionId} into ${currentBranch}`;
 
+        try {
           runGit(`git merge ${tempBranch} --no-edit -m "${commitMsg}"`);
-        } catch (mergeErr: any) {
-          try { runGit('git merge --abort'); } catch (_) {}
-          if (stashed) {
-            try { runGit('git stash pop'); } catch (_) {}
+          mergeSucceeded = true;
+        } catch (_) {
+          // If clean merge hit conflicts, attempt merging with -X theirs (prefer incoming Jules changes for conflicting hunks)
+          try {
+            runGit('git merge --abort');
+          } catch (_) {}
+
+          try {
+            runGit(`git merge ${tempBranch} -X theirs --no-edit -m "${commitMsg} (resolved with -X theirs)"`);
+            mergeSucceeded = true;
+          } catch (mergeErr: any) {
+            try { runGit('git merge --abort'); } catch (_) {}
+            if (stashed) {
+              try { runGit('git stash pop'); } catch (_) {}
+            }
+            return {
+              success: false,
+              message: `Merge conflict encountered between local branch '${currentBranch}' and Jules PR. Merge was aborted. You can inspect branch '${tempBranch}' or resolve manually using the 'resolve_merge_conflict' tool with strategy: 'theirs'.`,
+            };
           }
-          return {
-            success: false,
-            message: `Merge conflict encountered between local branch '${currentBranch}' and Jules PR. Merge was aborted. You can inspect branch '${tempBranch}'.`,
-          };
         }
 
         // Push merged branch

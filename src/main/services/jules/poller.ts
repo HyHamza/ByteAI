@@ -73,14 +73,14 @@ export class JulesPoller {
 
   public trackSession(sessionId: string) {
     this.handledCompletions.delete(sessionId);
-    this.lastSupervisorTurnAt.delete(sessionId);
+    // Keep lastSupervisorTurnAt cooldown intact so calling continue doesn't cause immediate re-triggers!
     this.saveState();
     if (!this.intervalId) {
       this.startPolling();
     }
   }
 
-  public startPolling(pollIntervalMs = 12000) {
+  public startPolling(pollIntervalMs = 15000) {
     if (this.intervalId) clearInterval(this.intervalId);
 
     this.intervalId = setInterval(async () => {
@@ -154,8 +154,15 @@ export class JulesPoller {
         }
       }
 
-      // Find sessions requiring active intervention
+      // Only check sessions that belong to our application (active or existing chat sessions)
+      const knownJulesIds = new Set(
+        chatSessions.map((cs) => cs.julesSessionId).filter(Boolean)
+      );
+
       for (const s of sessions) {
+        // Skip sessions that don't belong to any chat session in this app
+        if (!knownJulesIds.has(s.id)) continue;
+
         if (s.state === 'COMPLETED') {
           await this.handleSessionCompleted(s);
         } else if (s.state === 'AWAITING_USER_FEEDBACK' || s.state === 'AWAITING_USER_INPUT') {
@@ -196,22 +203,32 @@ export class JulesPoller {
       a.metadata?.agentMessaged ||
       a.type === 'AGENT_MESSAGE';
 
+    const isGenuineQuestionOrPlan = (a: any) => {
+      if (a.metadata?.planGenerated || a.type === 'PLAN_GENERATED') return true;
+      if (isAgentMsg(a)) {
+        const msg =
+          a.agentMessaged?.agentMessage ||
+          a.agentMessaged?.message ||
+          a.metadata?.agentMessaged?.agentMessage ||
+          a.metadata?.agentMessaged?.message;
+        if (msg && typeof msg === 'string' && msg.trim().length > 0) return true;
+      }
+      return false;
+    };
+
     // Find the latest interactive message between user and agent
     const reversed = [...activities].reverse();
-    const lastConversational = reversed.find((a) => isUserMsg(a) || isAgentMsg(a) || a.metadata?.planGenerated);
+    const lastConversational = reversed.find((a) => isUserMsg(a) || isGenuineQuestionOrPlan(a));
 
     // If the latest message was from user/Byte, we already answered Jules! Do not wake up Byte.
     if (lastConversational && isUserMsg(lastConversational)) {
       return;
     }
 
-    // Find the latest agent message or plan proposal requiring review
-    const targetAct = reversed.find(
-      (a) =>
-        (isAgentMsg(a) && (a.agentMessaged?.agentMessage || a.agentMessaged?.message || a.metadata?.agentMessaged?.agentMessage || a.metadata?.agentMessaged?.message || a.description)) ||
-        a.metadata?.planGenerated
-    );
+    // Find the latest genuine question or plan proposal requiring review
+    const targetAct = reversed.find(isGenuineQuestionOrPlan);
 
+    // If no genuine question or plan is pending, Jules is just doing routine work—do NOT wake Byte up!
     if (!targetAct || !targetAct.id) return;
 
     // Check if there is already a newer user message that answered this activity

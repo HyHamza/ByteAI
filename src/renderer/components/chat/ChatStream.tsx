@@ -208,6 +208,21 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
           systemMessages: [],
         };
       } else if (m.role === 'assistant') {
+        const lastMsg = activeTurn?.assistantMessages[activeTurn.assistantMessages.length - 1];
+        const lastMsgCompleted = Boolean(
+          lastMsg &&
+          (!lastMsg.toolCalls || lastMsg.toolCalls.length === 0) &&
+          lastMsg.content &&
+          lastMsg.content.trim().length > 0
+        );
+
+        // If the active turn already concluded with a response and has no user prompt,
+        // start a separate turn for this autonomous/supervisor assistant turn!
+        if (activeTurn && lastMsgCompleted && !activeTurn.userMessage) {
+          list.push(activeTurn);
+          activeTurn = null;
+        }
+
         if (!activeTurn) {
           activeTurn = {
             id: m.id,
@@ -378,36 +393,17 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
           const isLatestTurn = turnIdx === turns.length - 1;
           const isLiveInThisTurn = isLatestTurn && isStreaming;
 
-          // 1. Identify which assistant message provides the concluding responseText
+          // 1. Identify concluding responseText (strictly from final assistant message)
+          const finalAsstMsg = turn.assistantMessages[turn.assistantMessages.length - 1];
           let responseText = '';
-          let finalResponseMsgId: string | null = null;
 
           if (isLiveInThisTurn) {
             responseText = currentStreamContent;
-          } else {
-            const standaloneTextMsgs = turn.assistantMessages.filter(
-              (am) => (!am.toolCalls || am.toolCalls.length === 0) && am.content && am.content.trim()
-            );
-            if (standaloneTextMsgs.length > 1) {
-              responseText = standaloneTextMsgs.map((m) => m.content.trim()).join('\n\n---\n\n');
-              finalResponseMsgId = standaloneTextMsgs[standaloneTextMsgs.length - 1].id;
-            } else if (standaloneTextMsgs.length === 1) {
-              responseText = standaloneTextMsgs[0].content.trim();
-              finalResponseMsgId = standaloneTextMsgs[0].id;
-            } else {
-              // Fallback to last message with content (e.g. Jules dispatch or background task with toolCalls)
-              for (let i = turn.assistantMessages.length - 1; i >= 0; i--) {
-                const am = turn.assistantMessages[i];
-                if (am.content && am.content.trim()) {
-                  responseText = am.content.trim();
-                  finalResponseMsgId = am.id;
-                  break;
-                }
-              }
-            }
+          } else if (finalAsstMsg && finalAsstMsg.content) {
+            responseText = finalAsstMsg.content.trim();
           }
 
-          // 2. Construct Antigravity chronological trajectory items (thoughts and tools)
+          // 2. Construct Antigravity chronological trajectory items (thoughts, step intents, and tools)
           const trajectoryItems: TrajectoryItem[] = [];
 
           for (let amIdx = 0; amIdx < turn.assistantMessages.length; amIdx++) {
@@ -422,15 +418,11 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
                 content: am.thinking.trim(),
                 durationSec: Math.max(1, Math.round(am.thinking.trim().length / 60)),
               });
-            } else if (
-              am.id !== finalResponseMsgId &&
-              !isLastMsg &&
-              am.content &&
-              am.toolCalls &&
-              am.toolCalls.length > 0 &&
-              am.content.trim()
-            ) {
-              // Intermediate step note/recon text directly before tool execution
+            }
+
+            // Intermediate step note / intent text directly before tool execution
+            // In Antigravity, thoughts and action intents belong in the timeline directly above their tools
+            if (!isLastMsg && am.content && am.content.trim()) {
               trajectoryItems.push({
                 type: 'thought',
                 id: `th_cnt_${am.id}`,
