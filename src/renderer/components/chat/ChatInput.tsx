@@ -17,7 +17,8 @@ import {
   Code,
   MicOff,
   Moon,
-  Clock
+  Clock,
+  Zap
 } from 'lucide-react';
 import type { AppMode, AttachmentFile } from '@/shared/types';
 import { api } from '../../api';
@@ -39,6 +40,8 @@ interface ChatInputProps {
   disabled?: boolean;
   isCenteredLayout?: boolean;
   sessionId?: string;
+  isAutonomousMode?: boolean;
+  onToggleAutonomousMode?: () => void;
 }
 
 function formatModelDisplayName(modelId: string): string {
@@ -87,6 +90,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   disabled = false,
   isCenteredLayout = false,
   sessionId,
+  isAutonomousMode = false,
+  onToggleAutonomousMode,
 }) => {
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<AttachmentFile[]>([]);
@@ -541,6 +546,28 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   </div>
                 )}
               </div>
+
+              {/* Autonomous Mode Toggle Pill (Available in all modes) */}
+              <button
+                type="button"
+                onClick={onToggleAutonomousMode}
+                className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[11.5px] font-medium border transition-all cursor-pointer ${
+                  isAutonomousMode
+                    ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 shadow-sm shadow-amber-500/10'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-[var(--bg-surface-hover)] border-[var(--border-subtle)]'
+                }`}
+                title={
+                  isAutonomousMode
+                    ? 'Autonomous Mode is ON: Byte will drive this task to full completion without stopping. If idle for 2 minutes, the system automatically wakes Byte up to continue working.'
+                    : 'Turn ON Autonomous Mode: AI will work autonomously until the task is complete without waiting for user input.'
+                }
+              >
+                <Zap className={`w-3.5 h-3.5 ${isAutonomousMode ? 'text-amber-400 fill-amber-400' : 'text-[var(--text-muted)]'}`} />
+                <span>Autonomous</span>
+                <span className={`text-[9.5px] font-mono px-1 py-0.2 rounded font-semibold ${isAutonomousMode ? 'bg-amber-500/25 text-amber-200' : 'bg-black/20 text-[var(--text-muted)]'}`}>
+                  {isAutonomousMode ? 'ON' : 'OFF'}
+                </span>
+              </button>
 
               {/* Duty Shift Pill & Popover (Jules Mode Only) */}
               {mode === 'jules' && (

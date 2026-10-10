@@ -9,7 +9,8 @@ import {
   Sparkles,
   Bot,
   Moon,
-  Square
+  Square,
+  Zap
 } from 'lucide-react';
 import type { AppMode, AppSettings } from '@/shared/types';
 import { useDutyShift } from '../../hooks/useDutyShift';
@@ -28,6 +29,8 @@ interface HeaderProps {
   onToggleJulesPanel: () => void;
   isSidebarOpen?: boolean;
   onToggleSidebar?: () => void;
+  isAutonomousMode?: boolean;
+  onToggleAutonomousMode?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -44,6 +47,8 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleJulesPanel,
   isSidebarOpen = true,
   onToggleSidebar,
+  isAutonomousMode,
+  onToggleAutonomousMode,
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const { activeShift, remainingTimeDisplay, stopShift } = useDutyShift();
@@ -167,6 +172,19 @@ export const Header: React.FC<HeaderProps> = ({
                 Stop
               </button>
             </div>
+          )}
+
+          {/* Autonomous Mode Active Badge */}
+          {isAutonomousMode && (
+            <button
+              type="button"
+              onClick={onToggleAutonomousMode}
+              className="flex items-center space-x-1.5 px-2.5 py-1 bg-amber-500/10 border border-amber-500/30 rounded-full text-xs text-amber-300 font-medium hover:bg-amber-500/20 transition-all cursor-pointer"
+              title="Autonomous Mode is ON: AI works continuously without waiting for input. Click to toggle."
+            >
+              <Zap className="w-3 h-3 text-amber-400 fill-amber-400" />
+              <span>Autonomous</span>
+            </button>
           )}
 
           {/* Antigravity Blue Pill: Jules Mission Control */}

@@ -127,6 +127,14 @@ const api: ElectronAPI = {
     ipcRenderer.on('duty:updated', handler);
     return () => ipcRenderer.removeListener('duty:updated', handler);
   },
+
+  // Autonomous Mode
+  toggleAutonomousMode: (sessionId: string) => ipcRenderer.invoke('autonomous:toggle', { sessionId }),
+  onAutonomousModeUpdated: (callback: (payload: { sessionId: string; enabled: boolean }) => void) => {
+    const handler = (_: any, payload: any) => callback(payload);
+    ipcRenderer.on('session:autonomous-mode-updated', handler);
+    return () => ipcRenderer.removeListener('session:autonomous-mode-updated', handler);
+  },
 };
 
 contextBridge.exposeInMainWorld('electronAPI', api);

@@ -11,6 +11,7 @@ import { syncAndMergeJulesSession } from './services/git/merger';
 import { TaskManager } from './services/task/manager';
 import { GroqSpeechTranscriber } from './services/speech/groq';
 import { DutyManager } from './services/duty/manager';
+import { AutonomousWatchdog } from './services/autonomous/watchdog';
 import type { AppMode, ChatSession, AttachmentFile } from '../shared/types';
 
 let mainWindow: BrowserWindow | null = null;
@@ -99,6 +100,7 @@ app.whenReady().then(() => {
   setupIpcHandlers();
   createWindow();
   JulesPoller.getInstance().startPolling(10000);
+  AutonomousWatchdog.getInstance();
 
   // Initialize prevent sleep blocker based on persisted user preference
   const initialSettings = DataStore.getInstance().getSettings();
@@ -234,12 +236,16 @@ function setupIpcHandlers() {
       mode: mode || settings.mode,
       createdAt: Date.now(),
       updatedAt: Date.now(),
+      autonomousMode: Boolean(settings.defaultAutonomousMode),
       messages: [],
     };
     return store.saveSession(newSession);
   });
 
   ipcMain.handle('sessions:update', async (_, { sessionId, updates }: { sessionId: string; updates: Partial<ChatSession> }) => {
+    if (updates.autonomousMode !== undefined) {
+      AutonomousWatchdog.getInstance().setAutonomousMode(sessionId, updates.autonomousMode);
+    }
     return store.updateSession(sessionId, updates);
   });
 
@@ -404,6 +410,11 @@ function setupIpcHandlers() {
 
   ipcMain.handle('duty:get-active', async (_, { sessionId }: { sessionId?: string }) => {
     return DutyManager.getInstance().getActiveShift(sessionId);
+  });
+
+  // ── Autonomous Mode Watchdog IPC
+  ipcMain.handle('autonomous:toggle', async (_, { sessionId }: { sessionId: string }) => {
+    return AutonomousWatchdog.getInstance().toggleAutonomousMode(sessionId);
   });
 }
 

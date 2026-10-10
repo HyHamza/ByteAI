@@ -31,6 +31,7 @@ export interface AppSettings {
   userName?: string;
   userEmail?: string;
   preventSleep?: boolean;
+  defaultAutonomousMode?: boolean;
 }
 
 export interface AttachmentFile {
@@ -81,6 +82,7 @@ export interface ChatSession {
   messages: ChatMessage[];
   julesSessionId?: string;
   taskState?: TaskState;
+  autonomousMode?: boolean;
 }
 
 export interface JulesSessionSummary {
@@ -214,6 +216,10 @@ export interface ElectronAPI {
   resumeDutyShift: (shiftId: string) => Promise<boolean>;
   getActiveDutyShift: (sessionId?: string) => Promise<DutyShift | null>;
   onDutyShiftUpdated: (callback: (shift: DutyShift | null) => void) => () => void;
+
+  // Autonomous Mode API (Per-Session Task Watchdog)
+  toggleAutonomousMode?: (sessionId: string) => Promise<boolean>;
+  onAutonomousModeUpdated?: (callback: (payload: { sessionId: string; enabled: boolean }) => void) => () => void;
 }
 
 export interface DutyShiftPhase {

@@ -185,6 +185,16 @@ const mockAPI: ElectronAPI = {
   resumeDutyShift: async () => true,
   getActiveDutyShift: async () => null,
   onDutyShiftUpdated: () => () => {},
+
+  toggleAutonomousMode: async (sessionId: string) => {
+    const s = mockSessions.find((sess) => sess.id === sessionId);
+    if (s) {
+      s.autonomousMode = !s.autonomousMode;
+      return s.autonomousMode;
+    }
+    return false;
+  },
+  onAutonomousModeUpdated: () => () => {},
 };
 
 export const api: ElectronAPI =

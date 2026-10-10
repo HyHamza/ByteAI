@@ -482,6 +482,41 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             <option value="jules">Jules Senior Lead Supervisor</option>
                           </select>
                         </div>
+
+                        <div className="pt-2 border-t border-[var(--border-subtle)] flex items-center justify-between">
+                          <div className="pr-4">
+                            <div className="flex items-center space-x-2">
+                              <span className="text-xs font-medium text-[var(--text-primary)]">Continuous Autonomous Mode</span>
+                              {form.defaultAutonomousMode ? (
+                                <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-amber-500/15 text-amber-400 border border-amber-500/30 font-medium">
+                                  Default ON
+                                </span>
+                              ) : (
+                                <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-[var(--bg-surface-hover)] text-[var(--text-muted)] border border-[var(--border-subtle)] font-medium">
+                                  Default OFF
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-[var(--text-secondary)] mt-0.5">
+                              Enables continuous autonomous execution on new tasks. If inactive for 2 minutes, Byte will automatically wake up and continue driving the task to 100% completion.
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={Boolean(form.defaultAutonomousMode)}
+                            onClick={() => setForm({ ...form, defaultAutonomousMode: !form.defaultAutonomousMode })}
+                            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                              form.defaultAutonomousMode ? 'bg-amber-500' : 'bg-[var(--border-card)]'
+                            }`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                                form.defaultAutonomousMode ? 'translate-x-4' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                        </div>
                       </div>
                     </div>
 

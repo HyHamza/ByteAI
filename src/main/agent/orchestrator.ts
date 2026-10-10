@@ -8,6 +8,7 @@ import { DataStore, isSubstantiveMessage } from '../services/db/store';
 import { detectGitRepo } from '../services/git/detector';
 import { TaskManager, type BackgroundTask } from '../services/task/manager';
 import { DutyManager } from '../services/duty/manager';
+import { AutonomousWatchdog } from '../services/autonomous/watchdog';
 
 const STANDARD_SYSTEM_PROMPT = `You are Byte, a powerful autonomous software engineering AI assistant.
 You operate on goals and objectives.
@@ -251,6 +252,7 @@ export class AgentOrchestrator {
     this.activeCancellations.delete(sessionId);
     this.runningSessions.add(sessionId);
     this.emitAgentStatus(sessionId, 'running');
+    AutonomousWatchdog.getInstance().recordActivity(sessionId);
 
     const turnStartTime = Date.now();
     try {
@@ -265,7 +267,8 @@ export class AgentOrchestrator {
       userText.startsWith('[JULES') ||
       userText.startsWith('[Jules') ||
       userText.startsWith('[AUTONOMOUS SUPERVISOR') ||
-      userText.startsWith('[AUTONOMOUS DUTY')
+      userText.startsWith('[AUTONOMOUS DUTY') ||
+      userText.startsWith('[AUTONOMOUS MODE')
     );
 
     // Save message with proper role and flag so user chat is never polluted by system wakeups
@@ -631,6 +634,7 @@ Call 'jules_continue_session' (or 'jules_create_task' if starting a new phase) w
       this.flushStreamBuffers(sessionId);
       this.runningSessions.delete(sessionId);
       this.emitAgentStatus(sessionId, 'idle');
+      AutonomousWatchdog.getInstance().recordActivity(sessionId);
       this.emitCompleted(sessionId);
       this.emitSessionsUpdated();
 

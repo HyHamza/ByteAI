@@ -319,6 +319,12 @@ export const App: React.FC = () => {
       });
     });
 
+    const unsubAutonomous = api.onAutonomousModeUpdated?.(({ sessionId, enabled }) => {
+      setSessions((prev) =>
+        prev.map((s) => (s.id === sessionId ? { ...s, autonomousMode: enabled } : s))
+      );
+    });
+
     return () => {
       flushStreamBuffers();
       unsubToken();
@@ -333,6 +339,7 @@ export const App: React.FC = () => {
       unsubAgent?.();
       unsubJulesAll?.();
       unsubJulesUpdate?.();
+      unsubAutonomous?.();
     };
   }, []);
 
@@ -389,6 +396,20 @@ export const App: React.FC = () => {
       setSessions((prev) =>
         prev.map((s) => (s.id === activeSessionId ? { ...s, mode } : s))
       );
+    }
+  };
+
+  const handleToggleAutonomousMode = async () => {
+    if (!activeSessionId) return;
+    try {
+      const newState = await api.toggleAutonomousMode?.(activeSessionId);
+      if (typeof newState === 'boolean') {
+        setSessions((prev) =>
+          prev.map((s) => (s.id === activeSessionId ? { ...s, autonomousMode: newState } : s))
+        );
+      }
+    } catch (err) {
+      console.error('Failed to toggle autonomous mode:', err);
     }
   };
 
@@ -603,6 +624,8 @@ export const App: React.FC = () => {
         onToggleJulesPanel={() => setIsJulesPanelOpen(!isJulesPanelOpen)}
         isSidebarOpen={isSidebarOpen}
         onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+        isAutonomousMode={Boolean(activeSession?.autonomousMode)}
+        onToggleAutonomousMode={handleToggleAutonomousMode}
       />
 
       <div className="flex flex-1 overflow-hidden">
@@ -758,6 +781,8 @@ export const App: React.FC = () => {
                 disabled={!activeSessionId}
                 isCenteredLayout={true}
                 sessionId={activeSessionId || activeSession?.id}
+                isAutonomousMode={Boolean(activeSession?.autonomousMode)}
+                onToggleAutonomousMode={handleToggleAutonomousMode}
               />
             </div>
           ) : (
@@ -788,6 +813,8 @@ export const App: React.FC = () => {
                 disabled={!activeSessionId}
                 isCenteredLayout={false}
                 sessionId={activeSessionId || activeSession?.id}
+                isAutonomousMode={Boolean(activeSession?.autonomousMode)}
+                onToggleAutonomousMode={handleToggleAutonomousMode}
               />
             </>
           )}

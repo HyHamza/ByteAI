@@ -516,6 +516,11 @@ export class DataStore {
       model: m.model || undefined,
     }));
 
+    let meta: any = {};
+    try {
+      if (r.metadata) meta = JSON.parse(r.metadata);
+    } catch (_) {}
+
     return {
       id: r.id,
       title: r.title,
@@ -524,6 +529,8 @@ export class DataStore {
       julesSessionId: r.jules_session_id || undefined,
       createdAt: r.created_at,
       updatedAt: r.updated_at,
+      autonomousMode: meta.autonomousMode !== undefined ? meta.autonomousMode : undefined,
+      taskState: meta.taskState || undefined,
       messages,
     };
   }
@@ -535,6 +542,11 @@ export class DataStore {
     // 2. Persist to SQLite WAL
     this.db.exec('BEGIN TRANSACTION');
     try {
+      const meta = {
+        autonomousMode: session.autonomousMode,
+        taskState: session.taskState,
+      };
+
       this.stmtUpsertSession.run(
         session.id,
         session.title,
@@ -543,7 +555,7 @@ export class DataStore {
         session.julesSessionId || null,
         session.createdAt,
         session.updatedAt || Date.now(),
-        null
+        JSON.stringify(meta)
       );
 
       if (Array.isArray(session.messages)) {

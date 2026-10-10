@@ -18,7 +18,8 @@ import {
   FileText,
   AlertTriangle,
   Brain,
-  ShieldAlert
+  ShieldAlert,
+  Zap
 } from 'lucide-react';
 import type { ChatMessage, ToolExecutionRecord, AppMode, AttachmentFile } from '@/shared/types';
 import { ToolCard, AntigravityToolStream, AntigravityTrajectoryFlow, TrajectoryItem } from './ToolCard';
@@ -60,7 +61,8 @@ function isSystemNotificationMessage(m: ChatMessage): boolean {
     content.startsWith('[JULES') ||
     content.startsWith('[Jules') ||
     content.startsWith('[AUTONOMOUS SUPERVISOR') ||
-    content.startsWith('[AUTONOMOUS DUTY')
+    content.startsWith('[AUTONOMOUS DUTY') ||
+    content.startsWith('[AUTONOMOUS MODE')
   );
 }
 
@@ -68,11 +70,14 @@ const SystemEventCard: React.FC<{ message: ChatMessage }> = ({ message }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const text = message.content || '';
   
-  const isDutyAlert = text.includes('DUTY SHIFT') || text.includes('WATCHDOG');
+  const isAutonomousAlert = text.includes('AUTONOMOUS MODE');
+  const isDutyAlert = text.includes('DUTY SHIFT');
   const isJulesEvent = text.includes('Jules') || text.includes('jules');
   const isTaskFinished = text.includes('Task') && text.includes('finished');
 
-  const title = isDutyAlert
+  const title = isAutonomousAlert
+    ? 'Autonomous Mode Inactivity Watchdog'
+    : isDutyAlert
     ? 'Autonomous Duty Shift Watchdog'
     : isJulesEvent
     ? 'Jules Cloud Supervisor Update'
@@ -91,11 +96,14 @@ const SystemEventCard: React.FC<{ message: ChatMessage }> = ({ message }) => {
       >
         <div className="flex items-center space-x-2.5 min-w-0">
           <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${
+            isAutonomousAlert ? 'bg-amber-500/15 border border-amber-500/30' :
             isDutyAlert ? 'bg-amber-500/15 border border-amber-500/30' :
             isJulesEvent ? 'bg-sky-500/15 border border-sky-500/30' :
             'bg-cyan-500/15 border border-cyan-500/30'
           }`}>
-            {isDutyAlert ? (
+            {isAutonomousAlert ? (
+              <Zap className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+            ) : isDutyAlert ? (
               <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
             ) : isJulesEvent ? (
               <Sparkles className="w-3.5 h-3.5 text-sky-400" />
