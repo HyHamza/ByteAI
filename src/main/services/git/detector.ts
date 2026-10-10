@@ -8,8 +8,16 @@ export interface GitRepoInfo {
   rawRemoteUrl: string | null;
 }
 
+const gitRepoCache = new Map<string, { info: GitRepoInfo; timestamp: number }>();
+const CACHE_TTL_MS = 15000;
+
 export function detectGitRepo(dir: string): GitRepoInfo {
   if (!dir) return { repo: null, branch: null, rawRemoteUrl: null };
+
+  const cached = gitRepoCache.get(dir);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+    return cached.info;
+  }
 
   try {
     if (!fs.existsSync(dir)) return { repo: null, branch: null, rawRemoteUrl: null };
@@ -17,7 +25,9 @@ export function detectGitRepo(dir: string): GitRepoInfo {
     // Check if .git folder or file exists
     const gitPath = path.join(dir, '.git');
     if (!fs.existsSync(gitPath)) {
-      return { repo: null, branch: null, rawRemoteUrl: null };
+      const res = { repo: null, branch: null, rawRemoteUrl: null };
+      gitRepoCache.set(dir, { info: res, timestamp: Date.now() });
+      return res;
     }
 
     // Get remote origin URL
@@ -48,27 +58,33 @@ export function detectGitRepo(dir: string): GitRepoInfo {
       } catch (_) {}
     }
 
+    let result: GitRepoInfo;
     if (!originUrl) {
-      return { repo: null, branch, rawRemoteUrl: null };
+      result = { repo: null, branch, rawRemoteUrl: null };
+    } else {
+      // Parse GitHub format:
+      // https://github.com/Owner/Repo.git or git@github.com:Owner/Repo.git
+      const cleaned = originUrl.replace(/\.git$/i, '').trim();
+      const match = cleaned.match(/github\.com[:/]([^/]+)\/([^/]+)/i);
+
+      if (match) {
+        const owner = match[1];
+        const repoName = match[2];
+        result = {
+          repo: `sources/github/${owner}/${repoName}`,
+          branch,
+          rawRemoteUrl: originUrl,
+        };
+      } else {
+        result = { repo: null, branch, rawRemoteUrl: originUrl };
+      }
     }
 
-    // Parse GitHub format:
-    // https://github.com/Owner/Repo.git or git@github.com:Owner/Repo.git
-    const cleaned = originUrl.replace(/\.git$/i, '').trim();
-    const match = cleaned.match(/github\.com[:/]([^/]+)\/([^/]+)/i);
-
-    if (match) {
-      const owner = match[1];
-      const repoName = match[2];
-      return {
-        repo: `sources/github/${owner}/${repoName}`,
-        branch,
-        rawRemoteUrl: originUrl,
-      };
-    }
-
-    return { repo: null, branch, rawRemoteUrl: originUrl };
+    gitRepoCache.set(dir, { info: result, timestamp: Date.now() });
+    return result;
   } catch (err) {
-    return { repo: null, branch: null, rawRemoteUrl: null };
+    const fallback = { repo: null, branch: null, rawRemoteUrl: null };
+    gitRepoCache.set(dir, { info: fallback, timestamp: Date.now() });
+    return fallback;
   }
 }

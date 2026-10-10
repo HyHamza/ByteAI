@@ -135,11 +135,48 @@ export const App: React.FC = () => {
 
   // Listen for IPC streaming tokens, tool calls, and background states
   useEffect(() => {
+    let tokenBuffer = '';
+    let tokenRaf: number | null = null;
+    let reasoningBuffer = '';
+    let reasoningRaf: number | null = null;
+
+    const flushStreamBuffers = () => {
+      if (tokenRaf) {
+        cancelAnimationFrame(tokenRaf);
+        tokenRaf = null;
+      }
+      if (tokenBuffer) {
+        const chunk = tokenBuffer;
+        tokenBuffer = '';
+        setStreamingContent((prev) => prev + chunk);
+      }
+      if (reasoningRaf) {
+        cancelAnimationFrame(reasoningRaf);
+        reasoningRaf = null;
+      }
+      if (reasoningBuffer) {
+        const chunk = reasoningBuffer;
+        reasoningBuffer = '';
+        setStreamingReasoning((prev) => prev + chunk);
+      }
+    };
+
     const unsubToken = api.onStreamToken((payload: StreamTokenPayload) => {
       if (payload.sessionId === activeSessionIdRef.current) {
         setIsStreaming(true);
         setRetryStatus(null);
-        setStreamingContent((prev) => prev + payload.delta);
+        tokenBuffer += payload.delta;
+
+        if (!tokenRaf) {
+          tokenRaf = requestAnimationFrame(() => {
+            tokenRaf = null;
+            if (tokenBuffer) {
+              const chunk = tokenBuffer;
+              tokenBuffer = '';
+              setStreamingContent((prev) => prev + chunk);
+            }
+          });
+        }
       }
     });
 
@@ -147,7 +184,18 @@ export const App: React.FC = () => {
       if (payload.sessionId === activeSessionIdRef.current) {
         setIsStreaming(true);
         setRetryStatus(null);
-        setStreamingReasoning((prev) => prev + payload.delta);
+        reasoningBuffer += payload.delta;
+
+        if (!reasoningRaf) {
+          reasoningRaf = requestAnimationFrame(() => {
+            reasoningRaf = null;
+            if (reasoningBuffer) {
+              const chunk = reasoningBuffer;
+              reasoningBuffer = '';
+              setStreamingReasoning((prev) => prev + chunk);
+            }
+          });
+        }
       }
     });
 
@@ -170,6 +218,7 @@ export const App: React.FC = () => {
 
     const unsubTool = api.onToolCallUpdate((payload: ToolCallPayload) => {
       if (payload.sessionId === activeSessionIdRef.current) {
+        flushStreamBuffers();
         setRetryStatus(null);
         if (
           payload.toolCall.toolName === 'jules_continue_session' ||
@@ -192,6 +241,7 @@ export const App: React.FC = () => {
 
     const unsubCompleted = api.onExecutionCompleted((sessId: string) => {
       if (sessId === activeSessionIdRef.current) {
+        flushStreamBuffers();
         setIsStreaming(false);
         setRetryStatus(null);
         setStreamingContent('');
@@ -223,6 +273,7 @@ export const App: React.FC = () => {
         return next;
       });
       if (sessionId === activeSessionIdRef.current && status !== 'running') {
+        flushStreamBuffers();
         setIsStreaming(false);
       }
     });
@@ -244,6 +295,7 @@ export const App: React.FC = () => {
     });
 
     return () => {
+      flushStreamBuffers();
       unsubToken();
       unsubReasoning?.();
       unsubRetry?.();

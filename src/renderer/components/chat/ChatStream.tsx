@@ -246,13 +246,24 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
 
   // SMART AUTO-SCROLL:
   // When new stream tokens or messages arrive, ONLY scroll down if already at bottom!
+  const scrollRafRef = useRef<number | null>(null);
   useEffect(() => {
     if (isAtBottomRef.current) {
-      const el = scrollContainerRef.current;
-      if (el) {
-        el.scrollTop = el.scrollHeight;
-      }
+      if (scrollRafRef.current) cancelAnimationFrame(scrollRafRef.current);
+      scrollRafRef.current = requestAnimationFrame(() => {
+        scrollRafRef.current = null;
+        const el = scrollContainerRef.current;
+        if (el) {
+          el.scrollTop = el.scrollHeight;
+        }
+      });
     }
+    return () => {
+      if (scrollRafRef.current) {
+        cancelAnimationFrame(scrollRafRef.current);
+        scrollRafRef.current = null;
+      }
+    };
   }, [messages, currentStreamContent, streamingTools]);
 
   // When a user message is sent:

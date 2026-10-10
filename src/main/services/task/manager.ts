@@ -110,9 +110,10 @@ export class TaskManager {
 
     this.tasks.set(taskId, task);
 
+    const logStream = fs.createWriteStream(logPath, { flags: 'a', encoding: 'utf-8' });
     const appendLog = (chunk: string) => {
       try {
-        fs.appendFileSync(logPath, chunk);
+        logStream.write(chunk);
       } catch (_) {}
     };
 
@@ -146,6 +147,7 @@ export class TaskManager {
         task.process = undefined;
 
         appendLog(`\n${'='.repeat(60)}\n[Task Finished] ${new Date().toISOString()} Exit Code: ${code}\n`);
+        try { logStream.end(); } catch (_) {}
 
         if (hasResolvedSync) {
           // This task was running asynchronously in the background. Trigger reactive wakeup!

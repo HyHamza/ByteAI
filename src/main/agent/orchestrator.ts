@@ -174,6 +174,8 @@ export class AgentOrchestrator {
   private activeCancellations: Set<string> = new Set();
   private runningSessions: Set<string> = new Set();
   private pendingTurnQueues: Map<string, string[]> = new Map();
+  private tokenBuffer: Map<string, { delta: string; messageId: string; timer: NodeJS.Timeout | null }> = new Map();
+  private reasoningBuffer: Map<string, { delta: string; messageId: string; timer: NodeJS.Timeout | null }> = new Map();
 
   public static getInstance(): AgentOrchestrator {
     if (!AgentOrchestrator.instance) {
@@ -566,6 +568,9 @@ DO NOT return conversational text or empty output without calling a tool. Invoke
         break;
       }
 
+      // Flush any pending stream tokens to the UI before tool execution
+      this.flushStreamBuffers(sessionId);
+
       // Execute each tool call for this step
       const stepToolRecords: ToolExecutionRecord[] = [];
       let hasDispatchedJules = false;
@@ -645,6 +650,7 @@ DO NOT return conversational text or empty output without calling a tool. Invoke
       }
     }
     } finally {
+      this.flushStreamBuffers(sessionId);
       this.runningSessions.delete(sessionId);
       this.emitAgentStatus(sessionId, 'idle');
       this.emitCompleted(sessionId);
@@ -683,7 +689,42 @@ DO NOT return conversational text or empty output without calling a tool. Invoke
     }
   }
 
-  private emitToken(sessionId: string, delta: string, messageId = '') {
+  public flushStreamBuffers(sessionId: string) {
+    this.flushToken(sessionId);
+    this.flushReasoning(sessionId);
+  }
+
+  private emitToken(sessionId: string, delta: string, messageId = '', immediate = false) {
+    if (immediate) {
+      this.flushToken(sessionId);
+      this.broadcastToken(sessionId, delta, messageId);
+      return;
+    }
+
+    const existing = this.tokenBuffer.get(sessionId) || { delta: '', messageId, timer: null };
+    existing.delta += delta;
+    existing.messageId = messageId || existing.messageId;
+
+    if (!existing.timer) {
+      existing.timer = setTimeout(() => {
+        this.flushToken(sessionId);
+      }, 35);
+    }
+
+    this.tokenBuffer.set(sessionId, existing);
+  }
+
+  private flushToken(sessionId: string) {
+    const existing = this.tokenBuffer.get(sessionId);
+    if (!existing) return;
+    if (existing.timer) clearTimeout(existing.timer);
+    this.tokenBuffer.delete(sessionId);
+    if (existing.delta) {
+      this.broadcastToken(sessionId, existing.delta, existing.messageId);
+    }
+  }
+
+  private broadcastToken(sessionId: string, delta: string, messageId = '') {
     const windows = BrowserWindow.getAllWindows();
     for (const win of windows) {
       if (!win.isDestroyed()) {
@@ -692,7 +733,37 @@ DO NOT return conversational text or empty output without calling a tool. Invoke
     }
   }
 
-  private emitReasoning(sessionId: string, delta: string, messageId = '') {
+  private emitReasoning(sessionId: string, delta: string, messageId = '', immediate = false) {
+    if (immediate) {
+      this.flushReasoning(sessionId);
+      this.broadcastReasoning(sessionId, delta, messageId);
+      return;
+    }
+
+    const existing = this.reasoningBuffer.get(sessionId) || { delta: '', messageId, timer: null };
+    existing.delta += delta;
+    existing.messageId = messageId || existing.messageId;
+
+    if (!existing.timer) {
+      existing.timer = setTimeout(() => {
+        this.flushReasoning(sessionId);
+      }, 35);
+    }
+
+    this.reasoningBuffer.set(sessionId, existing);
+  }
+
+  private flushReasoning(sessionId: string) {
+    const existing = this.reasoningBuffer.get(sessionId);
+    if (!existing) return;
+    if (existing.timer) clearTimeout(existing.timer);
+    this.reasoningBuffer.delete(sessionId);
+    if (existing.delta) {
+      this.broadcastReasoning(sessionId, existing.delta, existing.messageId);
+    }
+  }
+
+  private broadcastReasoning(sessionId: string, delta: string, messageId = '') {
     const windows = BrowserWindow.getAllWindows();
     for (const win of windows) {
       if (!win.isDestroyed()) {
