@@ -24,6 +24,7 @@ import type { AppMode, AttachmentFile } from '@/shared/types';
 import { api } from '../../api';
 import { useVoiceDictation } from '../../hooks/useVoiceDictation';
 import { useDutyShift } from '../../hooks/useDutyShift';
+import { ImagePreviewModal } from '../common/ImagePreviewModal';
 
 interface ChatInputProps {
   onSendMessage: (text: string, attachments?: AttachmentFile[]) => void;
@@ -104,6 +105,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [dutyHours, setDutyHours] = useState(8);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const hiddenFileInputRef = useRef<HTMLInputElement>(null);
+  const lastPasteTimeRef = useRef<number>(0);
+  const [previewModalImg, setPreviewModalImg] = useState<{ url: string; name?: string; size?: number } | null>(null);
 
   const { activeShift, remainingTimeDisplay, startShift, stopShift } = useDutyShift(sessionId);
 
@@ -298,6 +301,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   const handlePaste = (e: React.ClipboardEvent) => {
+    e.stopPropagation();
+    const now = Date.now();
+    if (now - lastPasteTimeRef.current < 400) {
+      return;
+    }
+
     const clipboardData = e.clipboardData;
     if (!clipboardData) return;
 
@@ -323,6 +332,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     }
 
     if (newImageFiles.length > 0) {
+      lastPasteTimeRef.current = now;
       const pastedText = clipboardData.getData('text/plain');
       // If pure image paste, prevent default placeholder text insertion
       if (!pastedText) {
@@ -404,7 +414,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        onPaste={handlePaste}
         className={`w-full ${isCenteredLayout ? 'max-w-2xl' : 'max-w-3xl'} bg-[var(--bg-surface-hover)] border ${isDraggingOver ? 'border-[var(--border-subtle)] bg-[var(--bg-surface-hover)]' : 'border-[var(--border-card)]'} rounded-2xl p-3 shadow-2xl transition-all focus-within:border-[var(--border-subtle)] relative`}
       >
         <form onSubmit={handleSubmit} className="flex flex-col">
@@ -430,14 +439,26 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                       <img 
                         src={att.dataUrl} 
                         alt={att.name} 
-                        className="w-5 h-5 rounded object-cover shrink-0 border border-white/10" 
+                        onClick={() => setPreviewModalImg({ url: att.dataUrl!, name: att.name, size: att.size })}
+                        className="w-5 h-5 rounded object-cover shrink-0 border border-white/10 cursor-pointer hover:opacity-80 transition-opacity" 
+                        title="Click to preview & zoom"
                       />
                     ) : att.type === 'image' ? (
                       <ImageIcon className="w-4 h-4 text-sky-400 shrink-0" />
                     ) : (
                       <FileText className="w-4 h-4 text-amber-400 shrink-0" />
                     )}
-                    <span className="truncate font-mono text-[11px] text-[var(--text-primary)]" title={att.name}>{att.name}</span>
+                    <span 
+                      onClick={() => {
+                        if (att.type === 'image' && att.dataUrl) {
+                          setPreviewModalImg({ url: att.dataUrl, name: att.name, size: att.size });
+                        }
+                      }}
+                      className={`truncate font-mono text-[11px] text-[var(--text-primary)] ${att.type === 'image' && att.dataUrl ? 'cursor-pointer hover:underline hover:text-sky-400' : ''}`}
+                      title={att.type === 'image' && att.dataUrl ? 'Click to preview & zoom' : att.name}
+                    >
+                      {att.name}
+                    </span>
                     <button
                       type="button"
                       onClick={() => handleRemoveAttachment(att.id)}
@@ -885,6 +906,15 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           )}
         </div>
       )}
+
+      {/* Fullscreen Image Preview & Zoom Modal */}
+      <ImagePreviewModal
+        isOpen={Boolean(previewModalImg)}
+        onClose={() => setPreviewModalImg(null)}
+        imageUrl={previewModalImg?.url || ''}
+        imageName={previewModalImg?.name}
+        imageSize={previewModalImg?.size}
+      />
     </div>
   );
 };

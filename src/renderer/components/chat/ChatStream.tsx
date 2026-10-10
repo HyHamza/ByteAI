@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import type { ChatMessage, ToolExecutionRecord, AppMode, AttachmentFile } from '@/shared/types';
 import { ToolCard, AntigravityToolStream, AntigravityTrajectoryFlow, TrajectoryItem } from './ToolCard';
+import { ImagePreviewModal } from '../common/ImagePreviewModal';
 
 interface ChatStreamProps {
   messages: ChatMessage[];
@@ -158,6 +159,7 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
   const [expandedTrajectories, setExpandedTrajectories] = useState<Record<string, boolean>>({});
   const [expandedThinking, setExpandedThinking] = useState<Record<string, boolean>>({});
   const [feedbackMap, setFeedbackMap] = useState<Record<string, 'up' | 'down'>>({});
+  const [previewModalImg, setPreviewModalImg] = useState<{ url: string; name?: string; size?: number } | null>(null);
 
   // Active streaming timer
   const [streamingSeconds, setStreamingSeconds] = useState(0);
@@ -598,7 +600,9 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
                                 <img
                                   src={att.dataUrl}
                                   alt={att.name}
-                                  className="w-8 h-8 rounded-lg object-cover border border-white/10 shrink-0"
+                                  onClick={() => setPreviewModalImg({ url: att.dataUrl!, name: att.name, size: att.size })}
+                                  className="w-8 h-8 rounded-lg object-cover border border-white/10 shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+                                  title="Click to preview & zoom"
                                 />
                               ) : att.type === 'image' ? (
                                 <div className="w-8 h-8 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center shrink-0">
@@ -610,7 +614,17 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
                                 </div>
                               )}
                               <div className="flex flex-col min-w-0">
-                                <span className="font-mono text-[11px] text-[var(--text-primary)] truncate font-medium">{att.name}</span>
+                                <span 
+                                  onClick={() => {
+                                    if (att.type === 'image' && att.dataUrl) {
+                                      setPreviewModalImg({ url: att.dataUrl, name: att.name, size: att.size });
+                                    }
+                                  }}
+                                  className={`font-mono text-[11px] text-[var(--text-primary)] truncate font-medium ${att.type === 'image' && att.dataUrl ? 'cursor-pointer hover:underline hover:text-sky-400' : ''}`}
+                                  title={att.type === 'image' && att.dataUrl ? 'Click to preview & zoom' : att.name}
+                                >
+                                  {att.name}
+                                </span>
                                 <span className="text-[10px] text-[var(--text-secondary)] font-mono">{Math.max(1, Math.round(att.size / 1024))} KB</span>
                               </div>
                             </div>
@@ -904,6 +918,15 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
           <span>Scroll to bottom</span>
         </button>
       )}
+
+      {/* Fullscreen Image Preview & Zoom Modal */}
+      <ImagePreviewModal
+        isOpen={Boolean(previewModalImg)}
+        onClose={() => setPreviewModalImg(null)}
+        imageUrl={previewModalImg?.url || ''}
+        imageName={previewModalImg?.name}
+        imageSize={previewModalImg?.size}
+      />
     </div>
   );
 };
