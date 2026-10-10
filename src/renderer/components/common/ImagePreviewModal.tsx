@@ -120,15 +120,55 @@ export const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
 
   const handleCopyImage = async () => {
     try {
-      if (imageUrl.startsWith('data:image')) {
-        const res = await fetch(imageUrl);
-        const blob = await res.blob();
-        await navigator.clipboard.write([
-          new ClipboardItem({ [blob.type]: blob }),
-        ]);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+      // 1. Try Electron native clipboard API first
+      if (window.electronAPI?.copyImageToClipboard) {
+        const success = await window.electronAPI.copyImageToClipboard({ imageUrl });
+        if (success) {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+          return;
+        }
       }
+
+      // 2. Fallback: Draw image to an off-screen HTML5 Canvas and convert to PNG Blob
+      // Standard ClipboardItem requires 'image/png' format
+      await new Promise<void>((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          try {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.naturalWidth || img.width;
+            canvas.height = img.naturalHeight || img.height;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+              reject(new Error('Canvas 2D context not available'));
+              return;
+            }
+            ctx.drawImage(img, 0, 0);
+            canvas.toBlob(async (blob) => {
+              if (blob) {
+                try {
+                  await navigator.clipboard.write([
+                    new ClipboardItem({ 'image/png': blob }),
+                  ]);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                  resolve();
+                } catch (writeErr) {
+                  reject(writeErr);
+                }
+              } else {
+                reject(new Error('Canvas blob generation failed'));
+              }
+            }, 'image/png');
+          } catch (canvasErr) {
+            reject(canvasErr);
+          }
+        };
+        img.onerror = () => reject(new Error('Failed loading image for clipboard copy'));
+        img.src = imageUrl;
+      });
     } catch (err) {
       console.warn('Failed copying image to clipboard:', err);
     }

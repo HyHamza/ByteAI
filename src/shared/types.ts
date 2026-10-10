@@ -220,6 +220,9 @@ export interface ElectronAPI {
   // Autonomous Mode API (Per-Session Task Watchdog)
   toggleAutonomousMode?: (sessionId: string) => Promise<boolean>;
   onAutonomousModeUpdated?: (callback: (payload: { sessionId: string; enabled: boolean }) => void) => () => void;
+
+  // Native Clipboard API
+  copyImageToClipboard?: (payload: { imageUrl?: string; filePath?: string }) => Promise<boolean>;
 }
 
 export interface DutyShiftPhase {

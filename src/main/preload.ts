@@ -135,6 +135,9 @@ const api: ElectronAPI = {
     ipcRenderer.on('session:autonomous-mode-updated', handler);
     return () => ipcRenderer.removeListener('session:autonomous-mode-updated', handler);
   },
+
+  // Native Clipboard API
+  copyImageToClipboard: (payload: { imageUrl?: string; filePath?: string }) => ipcRenderer.invoke('clipboard:copy-image', payload),
 };
 
 contextBridge.exposeInMainWorld('electronAPI', api);

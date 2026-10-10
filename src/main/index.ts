@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, Menu, MenuItem, shell, powerSaveBlocker } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, Menu, MenuItem, shell, powerSaveBlocker, clipboard, nativeImage } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { DataStore } from './services/db/store';
@@ -415,6 +415,34 @@ function setupIpcHandlers() {
   // ── Autonomous Mode Watchdog IPC
   ipcMain.handle('autonomous:toggle', async (_, { sessionId }: { sessionId: string }) => {
     return AutonomousWatchdog.getInstance().toggleAutonomousMode(sessionId);
+  });
+
+  // ── Native OS Clipboard Image Copy
+  ipcMain.handle('clipboard:copy-image', async (_, { imageUrl, filePath }: { imageUrl?: string; filePath?: string }) => {
+    try {
+      if (imageUrl && imageUrl.startsWith('data:image')) {
+        const img = nativeImage.createFromDataURL(imageUrl);
+        clipboard.writeImage(img);
+        return true;
+      }
+      if (filePath && fs.existsSync(filePath)) {
+        const img = nativeImage.createFromPath(filePath);
+        clipboard.writeImage(img);
+        return true;
+      }
+      if (imageUrl && !imageUrl.startsWith('data:image')) {
+        const cleanPath = imageUrl.replace(/^file:\/\/\/?/, '');
+        if (fs.existsSync(cleanPath)) {
+          const img = nativeImage.createFromPath(cleanPath);
+          clipboard.writeImage(img);
+          return true;
+        }
+      }
+      return false;
+    } catch (err) {
+      console.error('[clipboard:copy-image] Error:', err);
+      return false;
+    }
   });
 }
 
