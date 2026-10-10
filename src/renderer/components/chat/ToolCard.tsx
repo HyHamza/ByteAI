@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { 
   Terminal, 
   FileText, 
@@ -240,6 +242,22 @@ export const AntigravityThoughtItem: React.FC<{
   );
 };
 
+// ── Antigravity Style Step Text / AI Narrative Item ─────────────────────────
+export const AntigravityStepTextItem: React.FC<{
+  content: string;
+  isIndented?: boolean;
+}> = ({ content, isIndented = false }) => {
+  if (!content || !content.trim()) return null;
+
+  return (
+    <div className={`font-sans text-[13px] text-[var(--text-primary)] leading-relaxed py-1.5 select-text ${isIndented ? 'pl-4' : ''}`}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+        {content.trim()}
+      </ReactMarkdown>
+    </div>
+  );
+};
+
 // ── Antigravity Style Analyzed File Sub-Item ────────────────────────────────
 export const AntigravityAnalyzedItem: React.FC<{ tool: ToolExecutionRecord }> = ({ tool }) => {
   const [showDetail, setShowDetail] = useState(false);
@@ -315,7 +333,7 @@ export const AntigravityAnalyzedItem: React.FC<{ tool: ToolExecutionRecord }> = 
 
 // ── Antigravity Style Explored Group (Collapsed by Default) ─────────────────
 export const AntigravityExploredGroup: React.FC<{
-  items: (TrajectoryTool | TrajectoryThought)[];
+  items: (TrajectoryTool | TrajectoryThought | TrajectoryText)[];
   fileCount: number;
 }> = ({ items, fileCount }) => {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -348,6 +366,15 @@ export const AntigravityExploredGroup: React.FC<{
                   key={it.id}
                   content={it.content}
                   durationSec={it.durationSec}
+                  isIndented={true}
+                />
+              );
+            }
+            if (it.type === 'text') {
+              return (
+                <AntigravityStepTextItem
+                  key={it.id}
+                  content={it.content}
                   isIndented={true}
                 />
               );
@@ -598,14 +625,20 @@ export interface TrajectoryTool {
   tool: ToolExecutionRecord;
 }
 
-export type TrajectoryItem = TrajectoryThought | TrajectoryTool;
+export interface TrajectoryText {
+  type: 'text';
+  id: string;
+  content: string;
+}
+
+export type TrajectoryItem = TrajectoryThought | TrajectoryTool | TrajectoryText;
 
 export type TrajectoryGroup =
   | {
       type: 'explored_group';
       id: string;
       fileCount: number;
-      items: (TrajectoryTool | TrajectoryThought)[];
+      items: (TrajectoryTool | TrajectoryThought | TrajectoryText)[];
     }
   | {
       type: 'edit';
@@ -623,6 +656,11 @@ export type TrajectoryGroup =
       thought: TrajectoryThought;
     }
   | {
+      type: 'text';
+      id: string;
+      content: string;
+    }
+  | {
       type: 'other';
       id: string;
       tool: ToolExecutionRecord;
@@ -630,7 +668,7 @@ export type TrajectoryGroup =
 
 export function groupTrajectoryItems(items: TrajectoryItem[]): TrajectoryGroup[] {
   const groups: TrajectoryGroup[] = [];
-  let currentExploreItems: (TrajectoryTool | TrajectoryThought)[] = [];
+  let currentExploreItems: (TrajectoryTool | TrajectoryThought | TrajectoryText)[] = [];
   let currentExploreFiles = 0;
 
   const flushExplore = () => {
@@ -679,6 +717,13 @@ export function groupTrajectoryItems(items: TrajectoryItem[]): TrajectoryGroup[]
           thought: item,
         });
       }
+    } else if (item.type === 'text') {
+      flushExplore();
+      groups.push({
+        type: 'text',
+        id: item.id,
+        content: item.content,
+      });
     } else {
       flushExplore();
       if (item.type === 'tool') {
@@ -728,6 +773,9 @@ export const AntigravityTrajectoryFlow: React.FC<{ items: TrajectoryItem[] }> = 
               durationSec={g.thought.durationSec}
             />
           );
+        }
+        if (g.type === 'text') {
+          return <AntigravityStepTextItem key={g.id} content={g.content} />;
         }
         return <AntigravityGenericItem key={g.id} tool={g.tool} />;
       })}

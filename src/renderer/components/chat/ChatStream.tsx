@@ -424,21 +424,19 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
               });
             }
 
-            // Intermediate step note / intent text directly before tool execution
-            // In Antigravity, thoughts and action intents belong in the timeline directly above their tools
+            // Intermediate step text where the AI talks to the user directly before tool execution
             if (!isLastMsg && am.content && am.content.trim() && am.toolCalls && am.toolCalls.length > 0) {
               trajectoryItems.push({
-                type: 'thought',
-                id: `th_cnt_${am.id}`,
+                type: 'text',
+                id: `txt_${am.id}`,
                 content: am.content.trim(),
-                durationSec: Math.max(1, Math.round(am.content.trim().length / 60)),
               });
             }
 
             // Tools executed in this step:
             if (am.toolCalls && am.toolCalls.length > 0) {
               for (const tc of am.toolCalls) {
-                // Interleave tool's specific thinking or intent directly above the tool if available
+                // Interleave tool's specific thinking or text directly above the tool if available
                 if (tc.thinking && tc.thinking.trim() && tc.thinking.trim() !== am.thinking?.trim()) {
                   trajectoryItems.push({
                     type: 'thought',
@@ -449,10 +447,9 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
                 }
                 if (tc.intent && tc.intent.trim() && tc.intent.trim() !== am.content?.trim()) {
                   trajectoryItems.push({
-                    type: 'thought',
-                    id: `th_tc_int_${tc.id}`,
+                    type: 'text',
+                    id: `txt_tc_${tc.id}`,
                     content: tc.intent.trim(),
-                    durationSec: Math.max(1, Math.round(tc.intent.trim().length / 60)),
                   });
                 }
                 trajectoryItems.push({
@@ -479,10 +476,9 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
                   }
                   if (tc.intent && tc.intent.trim()) {
                     trajectoryItems.push({
-                      type: 'thought',
-                      id: `th_live_int_${tc.id}`,
+                      type: 'text',
+                      id: `txt_live_${tc.id}`,
                       content: tc.intent.trim(),
-                      durationSec: Math.max(1, Math.round(tc.intent.trim().length / 60)),
                     });
                   }
                   trajectoryItems.push({
