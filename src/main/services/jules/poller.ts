@@ -165,42 +165,58 @@ export class JulesPoller {
     const activities = await client.listActivities(s.id).catch(() => []);
     if (!activities || activities.length === 0) return;
 
-    // Find the latest message or question from the agent (newest to oldest)
+    const isAwaitingFeedback = s.state === 'AWAITING_USER_FEEDBACK' || s.state === 'AWAITING_USER_INPUT';
+
+    // Find the latest message or activity from the agent (newest to oldest)
     const reversed = [...activities].reverse();
-    const agentMsgAct = reversed.find(
+    let targetAct = reversed.find(
       (a) =>
-        (a.metadata?.originator === 'agent' || a.metadata?.agentMessaged) &&
-        (a.metadata?.agentMessaged?.agentMessage || a.metadata?.agentMessaged?.message || a.type === 'AGENT_MESSAGE')
+        (a.originator === 'agent' || a.metadata?.originator === 'agent' || a.agentMessaged || a.metadata?.agentMessaged) &&
+        (a.agentMessaged?.agentMessage || a.agentMessaged?.message || a.metadata?.agentMessaged?.agentMessage || a.metadata?.agentMessaged?.message || a.type === 'AGENT_MESSAGE' || a.description)
     );
 
-    if (!agentMsgAct || !agentMsgAct.id) return;
+    // If session is explicitly in AWAITING_USER_FEEDBACK, take the newest activity regardless of format
+    if (!targetAct && isAwaitingFeedback && activities.length > 0) {
+      targetAct = reversed[0];
+    }
 
-    // Check if there is already a newer user message that answered this agent message
-    const agentMsgIndex = activities.findIndex((a) => a.id === agentMsgAct.id);
-    if (agentMsgIndex !== -1) {
-      const subsequentUserMsg = activities.slice(agentMsgIndex + 1).find(
-        (a) => a.metadata?.originator === 'user' || a.metadata?.userMessaged || a.type === 'USER_MESSAGE'
+    if (!targetAct || !targetAct.id) return;
+
+    // Check if there is already a newer user message that answered this activity
+    const targetActIndex = activities.findIndex((a) => a.id === targetAct.id);
+    if (targetActIndex !== -1) {
+      const subsequentUserMsg = activities.slice(targetActIndex + 1).find(
+        (a) =>
+          a.originator === 'user' ||
+          a.metadata?.originator === 'user' ||
+          a.userMessaged ||
+          a.metadata?.userMessaged ||
+          a.type === 'USER_MESSAGE'
       );
       if (subsequentUserMsg) {
-        if (!this.handledActivities.has(agentMsgAct.id)) {
-          this.handledActivities.add(agentMsgAct.id);
+        if (!this.handledActivities.has(targetAct.id)) {
+          this.handledActivities.add(targetAct.id);
           this.saveState();
         }
         return; // Already answered
       }
     }
 
-    if (this.handledActivities.has(agentMsgAct.id) || this.processingActivities.has(agentMsgAct.id)) {
+    if (this.handledActivities.has(targetAct.id) || this.processingActivities.has(targetAct.id)) {
       return; // Already reviewed or currently processing
     }
 
     const julesMessage = 
-      agentMsgAct.metadata?.agentMessaged?.agentMessage ||
-      agentMsgAct.metadata?.agentMessaged?.message ||
-      agentMsgAct.description ||
-      'Jules is waiting for your input to continue working.';
+      targetAct.agentMessaged?.agentMessage ||
+      targetAct.agentMessaged?.message ||
+      targetAct.metadata?.agentMessaged?.agentMessage ||
+      targetAct.metadata?.agentMessaged?.message ||
+      targetAct.description ||
+      targetAct.metadata?.progressUpdated?.description ||
+      (isAwaitingFeedback
+        ? 'Jules has updated the project in Google Cloud and is currently paused awaiting your architectural feedback / review to proceed.'
+        : 'Jules is waiting for your input to continue working.');
 
-    const isAwaitingFeedback = s.state === 'AWAITING_USER_FEEDBACK';
     const isQuestion = julesMessage.includes('?') || 
       /does this sound|should i|can you confirm|how would you|do you prefer|please confirm|what do you think|your thoughts/i.test(julesMessage);
 
@@ -257,7 +273,7 @@ Jules Session ID: ${s.id}
 Task Title: ${s.title || 'Ongoing Task'}
 Current Status: ${s.state || 'AWAITING_USER_FEEDBACK'}
 
-Jules Worker asked:
+Jules Worker Status / Request:
 """
 ${julesMessage}
 """
@@ -268,7 +284,7 @@ AUTONOMOUS LEAD DIRECTIVES FOR BYTE:
    - Tool: jules_reply_question
    - session_id: "${s.id}"
    - answer: "<Your clear engineering decision, approval, or architectural directions for Jules>"
-3. Review Jules' proposal above: if it is architecturally sound and aligns with the user's objective, APPROVE IT AND INSTRUCT JULES TO PROCEED IMMEDIATELY!
+3. Review Jules' proposal or changes above: if sound and aligned with the user's objective, APPROVE IT AND INSTRUCT JULES TO PROCEED IMMEDIATELY!
 4. Call 'jules_reply_question' NOW to unblock Jules. Then give a concise 1-line update to the user.`;
     } else {
       supervisorPrompt = `[AUTONOMOUS JULES WORKER UPDATE]
@@ -289,7 +305,7 @@ SUPERVISOR DIRECTIVES FOR BYTE:
     }
 
     this.isProcessingTurn = true;
-    this.processingActivities.add(agentMsgAct.id);
+    this.processingActivities.add(targetAct.id);
 
     try {
       await AgentOrchestrator.getInstance().runAutonomousTurn(chatSession.id, supervisorPrompt, undefined, true);
@@ -297,7 +313,12 @@ SUPERVISOR DIRECTIVES FOR BYTE:
       // Verify if Jules received a reply
       const updatedActs = await client.listActivities(s.id).catch(() => []);
       const hasReplied = updatedActs.some(
-        (a) => a.metadata?.originator === 'user' || a.metadata?.userMessaged || a.type === 'USER_MESSAGE'
+        (a) =>
+          a.originator === 'user' ||
+          a.metadata?.originator === 'user' ||
+          a.userMessaged ||
+          a.metadata?.userMessaged ||
+          a.type === 'USER_MESSAGE'
       );
 
       if (!hasReplied && (isAwaitingFeedback || isQuestion)) {
@@ -307,15 +328,15 @@ SUPERVISOR DIRECTIVES FOR BYTE:
         if (lastMsg && lastMsg.role === 'assistant' && lastMsg.content && lastMsg.content.trim()) {
           console.log(`[JulesPoller] Auto-forwarding assistant reply to unblock Jules session ${s.id}`);
           await client.sendFollowup(s.id, lastMsg.content.trim()).catch(() => {});
-          this.handledActivities.add(agentMsgAct.id);
+          this.handledActivities.add(targetAct.id);
           this.saveState();
         }
       } else if (hasReplied) {
-        this.handledActivities.add(agentMsgAct.id);
+        this.handledActivities.add(targetAct.id);
         this.saveState();
       }
     } finally {
-      this.processingActivities.delete(agentMsgAct.id);
+      this.processingActivities.delete(targetAct.id);
       this.isProcessingTurn = false;
     }
   }

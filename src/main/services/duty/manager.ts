@@ -92,24 +92,26 @@ export class DutyManager {
 
       let isJulesRunning = false;
       let isSessionCompleted = false;
+      let isAwaitingFeedback = false;
 
       if (julesId) {
         try {
           const client = JulesClient.getInstance();
           const session = await client.getSession(julesId);
-          // Active states including cloud provisioning / queued states
-          const runningStates = [
+          // Active coding / cloud provisioning states (AWAITING_USER_FEEDBACK is NOT running; it requires immediate Byte attention!)
+          const activeCodingStates = [
             'IN_PROGRESS',
             'PLANNING',
             'CODING',
             'INITIALIZING',
             'QUEUED',
             'PENDING',
-            'AWAITING_USER_FEEDBACK',
-            'AWAITING_USER_INPUT',
           ];
-          if (runningStates.includes(session?.state)) {
+          if (activeCodingStates.includes(session?.state)) {
             isJulesRunning = true;
+          } else if (session?.state === 'AWAITING_USER_FEEDBACK' || session?.state === 'AWAITING_USER_INPUT') {
+            isAwaitingFeedback = true;
+            isJulesRunning = false; // Stopped waiting for Byte's feedback!
           } else if (session?.state === 'COMPLETED') {
             isSessionCompleted = true;
           }
@@ -127,7 +129,9 @@ export class DutyManager {
           : '(No phases recorded yet)';
 
         const nextPhaseNumber = active.phasesCompleted.length + 1;
-        const nextActionDirective = isSessionCompleted
+        const nextActionDirective = isAwaitingFeedback
+          ? `CRITICAL ALERT: Jules is currently PAUSED in Google Cloud in state 'AWAITING_USER_FEEDBACK' on session (${julesId})! Jules cannot continue working until you reply! You MUST review Jules' progress/questions and call 'jules_reply_question' with session_id: "${julesId}" and your instructions, or call 'jules_continue_session' if directing the next phase. DO NOT return conversational text without calling a tool!`
+          : isSessionCompleted
           ? `The previous Jules session (${julesId}) has finished. Completed sessions cannot accept messages in Google Cloud. You MUST call 'jules_create_task' to start Phase ${nextPhaseNumber} for your mission, or call 'jules_finalize_and_merge' to merge changes.`
           : julesId
           ? `Call 'jules_continue_session' with the next technical instructions (or 'jules_create_task' if starting Phase ${nextPhaseNumber}).`
@@ -136,7 +140,7 @@ export class DutyManager {
         const watchdogPrompt = `[DUTY SHIFT WATCHDOG ALERT: INACTIVITY DETECTED (> 2 MINUTES)]
 Duty Shift: ${remainingDisplay} remaining of ${active.totalHours}h shift
 Mission: "${active.missionPrompt}"
-Alert: The system watchdog detected that Jules and Byte have both been idle for over 2 minutes without active tasks.
+Alert: The system watchdog detected that Jules and Byte have both been idle for over 2 minutes without active tasks. ${isAwaitingFeedback ? 'Jules is waiting for your architectural feedback!' : ''}
 
 Phases Completed So Far:
 ${phasesSummary}
