@@ -277,6 +277,10 @@ Log: file:///${normalizedLogPath}
     return results.sort((a, b) => b.startTime - a.startTime);
   }
 
+  public getRunningTasks(sessionId?: string): Array<Omit<BackgroundTask, 'process'>> {
+    return this.listTasks(sessionId).filter((t) => t.status === 'running');
+  }
+
   public getTaskLogs(taskId: string): { status: string; exitCode: number | null; output: string; logPath: string; isRunning: boolean } {
     const task = this.tasks.get(taskId);
     if (!task) {

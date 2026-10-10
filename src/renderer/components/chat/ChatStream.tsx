@@ -218,27 +218,6 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
           systemMessages: [],
         };
       } else if (m.role === 'assistant') {
-        const lastMsg = activeTurn?.assistantMessages[activeTurn.assistantMessages.length - 1];
-        const lastMsgHasTools = Boolean(lastMsg?.toolCalls && lastMsg.toolCalls.length > 0);
-        const allToolsFinished = Boolean(
-          lastMsgHasTools &&
-          lastMsg?.toolCalls?.every((t) => t.status === 'completed' || t.status === 'error')
-        );
-        const lastMsgCompleted = Boolean(
-          lastMsg &&
-          (
-            (!lastMsgHasTools && lastMsg.content && lastMsg.content.trim().length > 0) ||
-            (allToolsFinished && lastMsg.content && lastMsg.content.trim().length > 0 && lastMsg.executionDuration)
-          )
-        );
-
-        // If the active turn already concluded with a response,
-        // finalize it into a completed turn so its response is never overwritten or merged into!
-        if (activeTurn && lastMsgCompleted) {
-          list.push(activeTurn);
-          activeTurn = null;
-        }
-
         if (!activeTurn) {
           activeTurn = {
             id: m.id,
@@ -255,26 +234,13 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
       list.push(activeTurn);
     }
 
-    // If currently streaming, check if the last turn in list has already concluded its assistant response.
-    // If so, append a dedicated live turn so live execution NEVER pollutes past completed turns!
-    if (isStreaming && list.length > 0) {
-      const lastTurn = list[list.length - 1];
-      const lastAsst = lastTurn.assistantMessages[lastTurn.assistantMessages.length - 1];
-      const isConcluded = Boolean(
-        lastAsst &&
-        lastAsst.content &&
-        lastAsst.content.trim().length > 0 &&
-        lastAsst.executionDuration
-      );
-
-      // If the turn already ended with a completed assistant response and has no fresh pending system message:
-      if (isConcluded && (!lastTurn.systemMessages || lastTurn.systemMessages.length === 0)) {
-        list.push({
-          id: `live_turn_pending`,
-          assistantMessages: [],
-          systemMessages: [],
-        });
-      }
+    // If currently streaming and list is empty, start a live turn
+    if (isStreaming && list.length === 0) {
+      list.push({
+        id: `live_turn_pending`,
+        assistantMessages: [],
+        systemMessages: [],
+      });
     }
 
     return list;
@@ -431,7 +397,7 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
           const isLatestTurn = turnIdx === turns.length - 1;
           const isLiveInThisTurn = isLatestTurn && isStreaming;
 
-          // 1. Identify concluding responseText (strictly from final assistant message)
+          // 1. Identify concluding responseText (strictly from final assistant message without tool calls)
           const finalAsstMsg = turn.assistantMessages[turn.assistantMessages.length - 1];
           let responseText = '';
 
@@ -442,7 +408,10 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
               (turn.assistantMessages.some((m) => m.toolCalls && m.toolCalls.some((t) => t.status === 'running')));
             responseText = hasRunningTool ? '' : currentStreamContent;
           } else if (finalAsstMsg && finalAsstMsg.content) {
-            responseText = finalAsstMsg.content.trim();
+            const finalHasTools = Boolean(finalAsstMsg.toolCalls && finalAsstMsg.toolCalls.length > 0);
+            if (!finalHasTools) {
+              responseText = finalAsstMsg.content.trim();
+            }
           }
 
           // 2. Construct Antigravity chronological trajectory items (thoughts, step intents, and tools)
@@ -463,12 +432,15 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
             }
 
             // Intermediate step text where the AI talks to the user directly before tool execution
-            if (!isLastMsg && am.content && am.content.trim() && am.toolCalls && am.toolCalls.length > 0) {
-              trajectoryItems.push({
-                type: 'text',
-                id: `txt_${am.id}`,
-                content: am.content.trim(),
-              });
+            if (am.content && am.content.trim()) {
+              const hasTools = Boolean(am.toolCalls && am.toolCalls.length > 0);
+              if (hasTools || !isLastMsg) {
+                trajectoryItems.push({
+                  type: 'text',
+                  id: `txt_${am.id}`,
+                  content: am.content.trim(),
+                });
+              }
             }
 
             // Tools executed in this step:

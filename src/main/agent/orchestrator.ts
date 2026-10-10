@@ -132,27 +132,44 @@ function pruneContextWindow(messages: LLMMessage[]): LLMMessage[] {
     }
   }
 
-  // If over 18,000 characters (~4,500 tokens), compress older tool outputs
+  // Compress older tool outputs if context exceeds 60,000 chars (~15,000 tokens)
   let totalLength = historyMsgs.reduce((acc, m) => acc + (typeof m.content === 'string' ? m.content.length : 0), 0);
-  if (totalLength > 18000) {
-    for (let i = 0; i < historyMsgs.length - 4; i++) {
+  if (totalLength > 60000) {
+    for (let i = 0; i < historyMsgs.length - 6; i++) {
       const m = historyMsgs[i];
-      if (m.role === 'tool' && typeof m.content === 'string' && m.content.length > 600) {
-        m.content = m.content.slice(0, 300) + '\n... [truncated for context limit] ...\n' + m.content.slice(-200);
+      if (m.role === 'tool' && typeof m.content === 'string' && m.content.length > 1000) {
+        m.content = m.content.slice(0, 500) + '\n... [truncated older tool output for context efficiency] ...\n' + m.content.slice(-400);
       }
     }
   }
 
-  // If still over 22,000 characters, keep system prompt + summary notice + last 8 messages
+  // If still extremely large (> 160,000 characters / ~40,000 tokens), prune older intermediate steps
   totalLength = historyMsgs.reduce((acc, m) => acc + (typeof m.content === 'string' ? m.content.length : 0), 0);
-  if (totalLength > 22000 && historyMsgs.length > 8) {
-    const keepCount = 8;
-    const kept = historyMsgs.slice(-keepCount);
-    return [
-      systemMsg,
-      { role: 'system', content: '[Notice: Older turns pruned to respect model token limits.]' },
-      ...kept,
-    ];
+  if (totalLength > 160000 && historyMsgs.length > 12) {
+    // CRITICAL: Always preserve the initial user objective message!
+    const firstUserMsgIndex = historyMsgs.findIndex((m) => m.role === 'user');
+    const firstUserMsg = firstUserMsgIndex !== -1 ? historyMsgs[firstUserMsgIndex] : null;
+
+    // Keep the most recent messages, but ensure we don't start with an orphaned 'tool' role
+    let startIndex = Math.max(0, historyMsgs.length - 14);
+    // If startIndex points to a 'tool' message, walk backward to include its preceding assistant message
+    while (startIndex > 0 && historyMsgs[startIndex].role === 'tool') {
+      startIndex--;
+    }
+
+    const recentMsgs = historyMsgs.slice(startIndex);
+    const resultMsgs: LLMMessage[] = [systemMsg];
+
+    if (firstUserMsg && startIndex > (firstUserMsgIndex !== -1 ? firstUserMsgIndex : 0)) {
+      resultMsgs.push(firstUserMsg);
+      resultMsgs.push({
+        role: 'system',
+        content: '[Context notice: Intermediate steps and tool results summarized and trimmed to respect model context limits.]',
+      });
+    }
+
+    resultMsgs.push(...recentMsgs);
+    return resultMsgs;
   }
 
   return [systemMsg, ...historyMsgs];
