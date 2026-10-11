@@ -245,6 +245,14 @@ export const App: React.FC = () => {
       if (payload.sessionId === activeSessionIdRef.current) {
         flushStreamBuffers();
         setRetryStatus(null);
+        // Step reasoning has finished for this step; clear live reasoning buffer so it doesn't linger
+        reasoningBuffer = '';
+        if (reasoningRaf) {
+          cancelAnimationFrame(reasoningRaf);
+          reasoningRaf = null;
+        }
+        setStreamingReasoning('');
+
         if (
           payload.toolCall.toolName === 'jules_continue_session' ||
           payload.toolCall.toolName === 'jules_create_task' ||
@@ -289,7 +297,13 @@ export const App: React.FC = () => {
           cancelAnimationFrame(tokenRaf);
           tokenRaf = null;
         }
+        reasoningBuffer = '';
+        if (reasoningRaf) {
+          cancelAnimationFrame(reasoningRaf);
+          reasoningRaf = null;
+        }
         setStreamingContent('');
+        setStreamingReasoning('');
       }
     });
 
@@ -333,7 +347,13 @@ export const App: React.FC = () => {
           }).catch(() => {});
         } else {
           flushStreamBuffers();
-          setIsStreaming(false);
+          // Seamless completion: do not clear isStreaming immediately to allow onExecutionCompleted
+          // to fetch full updated messages first without any momentary flicker or disappearing content.
+          setTimeout(() => {
+            if (activeSessionIdRef.current === sessionId) {
+              setIsStreaming(false);
+            }
+          }, 600);
         }
       }
     });
@@ -577,6 +597,7 @@ export const App: React.FC = () => {
 
     setIsStreaming(true);
     setStreamingContent('');
+    setStreamingReasoning('');
     setStreamingTools([]);
 
     await api.sendMessage(activeSessionId, text, attachments);

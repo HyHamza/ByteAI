@@ -399,6 +399,11 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
 
           // 1. Identify concluding responseText (strictly from final assistant message without tool calls)
           const finalAsstMsg = turn.assistantMessages[turn.assistantMessages.length - 1];
+          const finalHasTools = Boolean(finalAsstMsg?.toolCalls && finalAsstMsg.toolCalls.length > 0);
+          const persistedResponse = (finalAsstMsg && !finalHasTools && finalAsstMsg.content)
+            ? finalAsstMsg.content.trim()
+            : '';
+
           let responseText = '';
 
           if (isLiveInThisTurn) {
@@ -406,12 +411,13 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
             // never accumulating into the bottom response area. The bottom response area is reserved for the final conclusion.
             const hasRunningTool = (streamingTools && streamingTools.some((t) => t.status === 'running')) ||
               (turn.assistantMessages.some((m) => m.toolCalls && m.toolCalls.some((t) => t.status === 'running')));
-            responseText = hasRunningTool ? '' : currentStreamContent;
-          } else if (finalAsstMsg && finalAsstMsg.content) {
-            const finalHasTools = Boolean(finalAsstMsg.toolCalls && finalAsstMsg.toolCalls.length > 0);
-            if (!finalHasTools) {
-              responseText = finalAsstMsg.content.trim();
-            }
+            responseText = hasRunningTool ? '' : (currentStreamContent || persistedResponse);
+          } else if (persistedResponse) {
+            responseText = persistedResponse;
+          } else if (isLatestTurn && currentStreamContent) {
+            // Seamless handoff during turn completion before React reconciles updated session messages:
+            // Never allow responseText to drop to empty string when generation stops!
+            responseText = currentStreamContent.trim();
           }
 
           // 2. Construct Antigravity chronological trajectory items (thoughts, step intents, and tools)
@@ -473,10 +479,35 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
 
           // 3. If currently live streaming in this turn:
           if (isLiveInThisTurn) {
-            if (streamingTools && streamingTools.length > 0) {
+            const hasRunningTools = Boolean(streamingTools && streamingTools.length > 0);
+
+            // Step reasoning belongs BEFORE any live tools!
+            if (streamingReasoning && streamingReasoning.trim()) {
+              const reasoningText = streamingReasoning.trim();
+              const alreadyHasThought = trajectoryItems.some(
+                (it) => it.type === 'thought' && it.content === reasoningText
+              );
+              if (!alreadyHasThought) {
+                // If tools are running, thinking has concluded for this step.
+                // Freeze duration so it never ticks up endlessly while tools run at the bottom!
+                const thoughtSec = hasRunningTools
+                  ? Math.max(1, Math.round(reasoningText.length / 60))
+                  : (streamingSeconds || 1);
+
+                trajectoryItems.push({
+                  type: 'thought',
+                  id: 'live_reasoning',
+                  content: reasoningText,
+                  durationSec: thoughtSec,
+                });
+              }
+            }
+
+            // Live tools executed in this step (appear AFTER thought, spinning while running at the bottom)
+            if (hasRunningTools) {
               for (const tc of streamingTools) {
                 if (!trajectoryItems.some((it) => it.type === 'tool' && it.tool.id === tc.id)) {
-                  if (tc.thinking && tc.thinking.trim()) {
+                  if (tc.thinking && tc.thinking.trim() && tc.thinking.trim() !== streamingReasoning?.trim()) {
                     trajectoryItems.push({
                       type: 'thought',
                       id: `th_live_thk_${tc.id}`,
@@ -499,15 +530,6 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
                 }
               }
             }
-
-            if (streamingReasoning && streamingReasoning.trim()) {
-              trajectoryItems.push({
-                type: 'thought',
-                id: 'live_reasoning',
-                content: streamingReasoning.trim(),
-                durationSec: streamingSeconds || 1,
-              });
-            }
           }
 
           // Calculate turn duration
@@ -526,7 +548,8 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
           const hasAssistantActivity =
             turn.assistantMessages.length > 0 ||
             (turn.systemMessages && turn.systemMessages.length > 0) ||
-            isLiveInThisTurn;
+            isLiveInThisTurn ||
+            (isLatestTurn && Boolean(currentStreamContent || trajectoryItems.length > 0));
           const hasTrajectoryContent = trajectoryItems.length > 0 || duration > 0 || isLiveInThisTurn;
           const defaultExpanded = isLiveInThisTurn;
           const isExpanded = expandedTrajectories[turn.id] !== undefined ? expandedTrajectories[turn.id] : defaultExpanded;
