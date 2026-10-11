@@ -6,39 +6,155 @@
     --bg-surface-hover: #f1f3f5;
     --border-subtle: #e9ecef;
     --border-card: #dee2e6;
-    --text-primary: #212529;
-    --text-secondary: #495057;
-    --text-muted: #868e96;
+    --text-primary: #111827;
+    --text-secondary: #4b5563;
+    --text-muted: #6b7280;
     --accent-blue: #1a73e8;
+    --bg-header: #ffffff;
+    --bg-card: #f8f9fa;
+    --border-highlight: #fed7aa;
+    --bg-highlight: #eff6ff;
+    --border-highlight-blue: #bfdbfe;
+    --bg-highlight-purple: #faf5ff;
+    --border-highlight-purple: #e9d5ff;
+    --bg-highlight-amber: #fffbeb;
+    --border-highlight-amber: #fde68a;
   }
 
+  /* Invert Byte mascot logo on white backgrounds so it renders as a crisp black character with white eyes */
+  .theme-white img[src*="logo-bw"] {
+    filter: invert(1);
+  }
+
+  /* Assistant Markdown Typography in Clean White */
   .theme-white .prose-antigravity {
-    color: var(--text-primary);
+    color: #111827 !important;
+  }
+
+  .theme-white .prose-antigravity p,
+  .theme-white .prose-antigravity li,
+  .theme-white .prose-antigravity span {
+    color: #111827 !important;
   }
 
   .theme-white .prose-antigravity h1,
   .theme-white .prose-antigravity h2,
   .theme-white .prose-antigravity h3,
   .theme-white .prose-antigravity h4 {
-    color: var(--text-primary);
+    color: #0f172a !important;
+    font-weight: 600;
   }
 
   .theme-white .prose-antigravity strong {
-    color: var(--text-primary);
+    color: #0f172a !important;
+    font-weight: 600;
   }
 
   .theme-white .prose-antigravity code {
-    background-color: #f1f3f5;
-    border: 1px solid #dee2e6;
-    color: #d6336c;
+    background-color: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    color: #0369a1;
   }
 
   .theme-white .prose-antigravity pre {
-    background-color: #f8f9fa;
-    border: 1px solid #e9ecef;
+    background-color: #f8fafc;
+    border: 1px solid #e2e8f0;
   }
 
   .theme-white .prose-antigravity pre code {
-    color: var(--text-secondary);
+    color: #1e293b;
+  }
+
+  .theme-white .prose-antigravity blockquote {
+    border-left-color: #3b82f6;
+    color: #475569;
+    background-color: #f8fafc;
+  }
+
+  /* User Message Bubble in Clean White */
+  .theme-white .group\/user > div > div {
+    background-color: #f8fafc;
+    border-color: #e2e8f0;
+    color: #0f172a;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+  }
+
+  /* Prompt input textarea in Clean White */
+  .theme-white form textarea {
+    color: #111827;
+  }
+
+  .theme-white form textarea::placeholder {
+    color: #9ca3af;
+  }
+
+  /* Code block snippets in Assistant responses */
+  .theme-white .group\/code {
+    background-color: #f8fafc;
+    border-color: #e2e8f0;
+  }
+
+  .theme-white .group\/code > div:first-child {
+    background-color: #f1f5f9;
+    border-color: #e2e8f0;
+    color: #475569;
+  }
+
+  .theme-white .group\/code pre {
+    background-color: #f8fafc !important;
+    color: #0f172a !important;
+  }
+
+  .theme-white .group\/code pre code {
+    color: #0f172a !important;
+  }
+
+  /* Trajectory header and thought boxes */
+  .theme-white .group\/trajectory {
+    color: #475569;
+  }
+
+  .theme-white .group\/trajectory:hover {
+    color: #0f172a;
+  }
+
+  /* Clean White Scrollbars */
+  .theme-white ::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+  }
+
+  .theme-white ::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+  }
+
+  /* Clean White Status Badges in Sidebar and Header */
+  .theme-white .bg-emerald-950\/60,
+  .theme-white .bg-emerald-950\/80 {
+    background-color: #ecfdf5 !important;
+    border-color: #a7f3d0 !important;
+    color: #065f46 !important;
+  }
+  .theme-white .bg-amber-950\/70,
+  .theme-white .bg-amber-950\/80 {
+    background-color: #fffbeb !important;
+    border-color: #fde68a !important;
+    color: #92400e !important;
+  }
+  .theme-white .bg-rose-950\/70,
+  .theme-white .bg-rose-950\/80 {
+    background-color: #fff1f2 !important;
+    border-color: #fecdd3 !important;
+    color: #9f1239 !important;
+  }
+  .theme-white .bg-purple-950\/80 {
+    background-color: #faf5ff !important;
+    border-color: #e9d5ff !important;
+    color: #6b21a8 !important;
+  }
+  .theme-white .bg-cyan-950\/80 {
+    background-color: #ecfeff !important;
+    border-color: #a5f3fc !important;
+    color: #155e75 !important;
   }
 }

@@ -1,13 +1,15 @@
-# Theme Setup
+# Byte AI Themes 🎨
 
-To enable the new White Theme in the UI:
-1. Open the **Settings** modal via the gear icon or sidebar.
-2. Select **Appearance** from the left navigation tab in the Settings modal.
-3. Locate the **Theme Styling** section.
-4. Select **Clean White Theme** from the drop-down menu.
-5. The UI will instantly apply the bright, clear aesthetic globally.
+Byte supports three fully styled, production-grade visual themes:
 
-Variables are defined in `src/renderer/styles/themes/whiteTheme.css`. They leverage React Context/effect hooks within `src/renderer/App.tsx` which apply `.theme-white` on the `document.body`.
+1. **Antigravity Obsidian (Default)**: Deep obsidian `#131314` canvas with warm, ambient glow, subtle card borders, and developer-centric contrast.
+2. **Clean White Theme (`whiteTheme`)**: Pure, bright white `#ffffff` canvas with clean borders `#dee2e6`, deep graphite typography `#111827`, inverted mascot branding, and soft pastel status badges.
+3. **High Contrast Deep Charcoal (`contrast`)**: Ultra-deep pitch charcoal `#09090b` canvas with crisp `#ffffff` typography, sharp `#52525b` card borders, and bold, vivid status indicators.
+
+### How to Switch Themes:
+1. Open the **Settings** modal via the gear icon in the sidebar or Header.
+2. Select **Appearance** from the left navigation tab.
+3. Choose your preferred theme from the **Color Theme** drop-down menu. The UI applies the theme instantly in real-time.
 # SeniorEngineer 🚀
 > **Autonomous AI Coding Assistant & Jules Senior Engineer Orchestrator**  
 > Built with **Electron + React + TypeScript + Vite**

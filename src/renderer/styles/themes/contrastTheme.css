@@ -1,0 +1,119 @@
+@layer base {
+  .theme-contrast {
+    --bg-canvas: #09090b;
+    --bg-sidebar: #0f0f12;
+    --bg-surface: #141417;
+    --bg-surface-hover: #222226;
+    --border-subtle: #27272a;
+    --border-card: #3f3f46;
+    --text-primary: #ffffff;
+    --text-secondary: #e4e4e7;
+    --text-muted: #a1a1aa;
+    --accent-blue: #3b82f6;
+    --bg-header: #09090b;
+    --bg-card: #141417;
+    --border-highlight: #78350f;
+    --bg-highlight: #082f49;
+    --border-highlight-blue: #0284c7;
+    --bg-highlight-purple: #3b0764;
+    --border-highlight-purple: #7e22ce;
+    --bg-highlight-amber: #451a03;
+    --border-highlight-amber: #b45309;
+  }
+
+  /* High Contrast Typography: pure white text with maximum readability */
+  .theme-contrast .prose-antigravity {
+    color: #ffffff !important;
+  }
+
+  .theme-contrast .prose-antigravity p,
+  .theme-contrast .prose-antigravity li,
+  .theme-contrast .prose-antigravity span {
+    color: #f4f4f5 !important;
+  }
+
+  .theme-contrast .prose-antigravity h1,
+  .theme-contrast .prose-antigravity h2,
+  .theme-contrast .prose-antigravity h3,
+  .theme-contrast .prose-antigravity h4 {
+    color: #ffffff !important;
+    font-weight: 700;
+  }
+
+  .theme-contrast .prose-antigravity strong {
+    color: #ffffff !important;
+    font-weight: 700;
+  }
+
+  .theme-contrast .prose-antigravity code {
+    background-color: #18181b;
+    border: 1px solid #52525b;
+    color: #38bdf8;
+    font-weight: 600;
+  }
+
+  .theme-contrast .prose-antigravity pre {
+    background-color: #000000;
+    border: 1px solid #52525b;
+  }
+
+  .theme-contrast .prose-antigravity pre code {
+    color: #ffffff;
+  }
+
+  .theme-contrast .prose-antigravity blockquote {
+    border-left-color: #60a5fa;
+    color: #d4d4d8;
+    background-color: #141417;
+  }
+
+  /* High Contrast User Message Bubble */
+  .theme-contrast .group\/user > div > div {
+    background-color: #141417;
+    border-color: #52525b;
+    color: #ffffff;
+    box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.5);
+  }
+
+  /* High Contrast Prompt Input Card */
+  .theme-contrast form textarea {
+    color: #ffffff;
+  }
+
+  .theme-contrast form textarea::placeholder {
+    color: #71717a;
+  }
+
+  /* Code Block Snippets in Assistant Turns */
+  .theme-contrast .group\/code {
+    background-color: #000000;
+    border-color: #52525b;
+  }
+
+  .theme-contrast .group\/code > div:first-child {
+    background-color: #18181b;
+    border-color: #52525b;
+    color: #d4d4d8;
+  }
+
+  .theme-contrast .group\/code pre {
+    background-color: #000000 !important;
+    color: #ffffff !important;
+  }
+
+  /* High Contrast Scrollbars */
+  .theme-contrast ::-webkit-scrollbar-thumb {
+    background: #52525b;
+    border-radius: 4px;
+  }
+
+  .theme-contrast ::-webkit-scrollbar-thumb:hover {
+    background: #71717a;
+  }
+
+  /* High Contrast Selection */
+  .theme-contrast ::selection {
+    background-color: #2563eb !important;
+    color: #ffffff !important;
+  }
+}

@@ -394,7 +394,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const canSubmit = (text.trim().length > 0 || attachments.length > 0) && !disabled;
 
   return (
-    <div className={`w-full flex flex-col items-center ${isCenteredLayout ? 'px-4 py-8' : 'px-4 pb-4 pt-1 bg-gradient-to-t from-[#131314] to-transparent'}`}>
+    <div className={`w-full flex flex-col items-center ${isCenteredLayout ? 'px-4 py-8' : 'px-4 pb-4 pt-1 bg-gradient-to-t from-[var(--bg-canvas)] via-[var(--bg-canvas)]/80 to-transparent'}`}>
       {/* Hidden File Input fallback */}
       <input
         ref={hiddenFileInputRef}

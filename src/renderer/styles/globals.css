@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "./themes/whiteTheme.css";
+@import "./themes/contrastTheme.css";
 
 @layer base {
   :root {
@@ -86,7 +87,7 @@
 
 /* Markdown styling classes for assistant messages */
 .prose-antigravity {
-  color: #d1d4dc;
+  color: var(--text-primary);
   font-size: 13px;
   line-height: 1.65;
 }
@@ -95,7 +96,7 @@
 .prose-antigravity h2,
 .prose-antigravity h3,
 .prose-antigravity h4 {
-  color: #f0f1f4;
+  color: var(--text-primary);
   font-weight: 600;
   margin-top: 1rem;
   margin-bottom: 0.5rem;
@@ -106,12 +107,14 @@
 .prose-antigravity h3 { font-size: 0.95rem; }
 
 .prose-antigravity p {
+  color: inherit;
   margin-top: 0.4rem;
   margin-bottom: 0.4rem;
 }
 
 .prose-antigravity ul,
 .prose-antigravity ol {
+  color: inherit;
   padding-left: 1.25rem;
   margin-top: 0.35rem;
   margin-bottom: 0.35rem;
@@ -126,12 +129,13 @@
 }
 
 .prose-antigravity li {
+  color: inherit;
   margin-top: 0.2rem;
   margin-bottom: 0.2rem;
 }
 
 .prose-antigravity strong {
-  color: #ffffff;
+  color: var(--text-primary);
   font-weight: 600;
 }
 

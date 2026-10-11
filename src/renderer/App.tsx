@@ -59,12 +59,24 @@ export const App: React.FC = () => {
   const [isAppReady, setIsAppReady] = useState(false);
   const [splashStatusText, setSplashStatusText] = useState('Starting Byte AI...');
 
-  // Update body class based on theme
+  // Update document element and body classes based on active theme
   useEffect(() => {
+    const root = document.documentElement;
+    const body = document.body;
+
+    root.classList.remove('dark', 'light', 'theme-white', 'theme-contrast', 'theme-obsidian');
+    body.classList.remove('dark', 'light', 'theme-white', 'theme-contrast', 'theme-obsidian');
+
     if (settings.theme === 'whiteTheme') {
-      document.body.classList.add('theme-white');
+      root.classList.add('light', 'theme-white');
+      body.classList.add('light', 'theme-white');
+    } else if (settings.theme === 'contrast') {
+      root.classList.add('dark', 'theme-contrast');
+      body.classList.add('dark', 'theme-contrast');
     } else {
-      document.body.classList.remove('theme-white');
+      // Default Obsidian dark theme
+      root.classList.add('dark', 'theme-obsidian');
+      body.classList.add('dark', 'theme-obsidian');
     }
   }, [settings.theme]);
 

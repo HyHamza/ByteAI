@@ -107,6 +107,8 @@ function createWindow() {
     callback(false);
   });
 
+  mainWindow.setMenuBarVisibility(false);
+
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show();
   });
@@ -119,6 +121,7 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  Menu.setApplicationMenu(null);
   setupIpcHandlers();
   createWindow();
   JulesPoller.getInstance().startPolling(10000);

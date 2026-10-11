@@ -800,7 +800,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         </div>
                         <select
                           value={form.theme || 'obsidian'}
-                          onChange={(e) => setForm({ ...form, theme: e.target.value as any })}
+                          onChange={(e) => {
+                            const newTheme = e.target.value as any;
+                            setForm((prev) => ({ ...prev, theme: newTheme }));
+                            onSave({ theme: newTheme });
+                          }}
                           className="bg-[var(--bg-canvas)] border border-[var(--border-card)] rounded-lg px-3 py-1.5 text-xs text-[var(--text-primary)] focus:outline-none focus:border-[var(--border-subtle)]"
                         >
                           <option value="obsidian">Antigravity Obsidian (Default)</option>
