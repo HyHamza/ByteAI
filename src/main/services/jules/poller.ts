@@ -163,7 +163,7 @@ export class JulesPoller {
         // Skip sessions that don't belong to any chat session in this app
         if (!knownJulesIds.has(s.id)) continue;
 
-        if (s.state === 'COMPLETED') {
+        if (s.state === 'COMPLETED' || s.state === 'FAILED') {
           await this.handleSessionCompleted(s);
         } else if (s.state === 'AWAITING_USER_FEEDBACK' || s.state === 'AWAITING_USER_INPUT') {
           // Jules is paused in Google Cloud waiting for explicit architectural review or question reply
@@ -400,19 +400,29 @@ AUTONOMOUS LEAD DIRECTIVES FOR BYTE:
         return;
       }
 
-      const summaryMsg = `[JULES SESSION TURN COMPLETED]
+      const isFailed = s.state === 'FAILED';
+      const statusTitle = isFailed ? 'TURN FINISHED (CLOUD SUBMIT FAILED)' : 'TURN COMPLETED';
+      const statusDesc = isFailed
+        ? 'FAILED (Submission failed in Google Cloud, but code changes and Git patch are saved in activity artifacts)'
+        : 'COMPLETED (Turn finished in Google Cloud)';
+
+      const summaryMsg = `[JULES SESSION ${statusTitle}]
 Session ID: ${s.id}
 Task: ${s.title || s.id}
-Status: COMPLETED (Turn finished in Google Cloud)
+Status: ${statusDesc}
 ${s.prUrl ? `Pull Request / Remote Branch: ${s.prUrl}` : 'Jules has finished work on this prompt.'}
 
 CRITICAL DIRECTIVES FOR BYTE:
-1. THIS PHASE/TURN IS COMPLETED. DO NOT call 'jules_reply_question' (this prompt turn is closed).
-2. 90% SESSION REUSE RULE:
+1. THIS PHASE/TURN IS FINISHED. DO NOT call 'jules_reply_question' (this prompt turn is closed).
+2. MERGE PROTOCOL ('jules_finalize_and_merge'):
+   - Even if the cloud session reported state FAILED, SeniorEngineer's built-in merger extracts the full Git patch from activity artifacts, normalizes CRLF/LF line endings, and merges cleanly!
+   - NEVER try to manually apply patches using terminal commands or bash heredocs (\`<< 'PATCH'\` which corrupts on Windows PowerShell).
+   - If work on this session is ready to merge, call 'jules_finalize_and_merge' with session_id: "${s.id}".
+3. 90% SESSION REUSE RULE:
    Whenever working on subsequent phases, refinements, bug fixes, or further requests for this task:
    YOU MUST CONTINUE IN THIS SAME JULES SESSION (${s.id}) USING 'jules_continue_session'!
    Do NOT call 'jules_create_task' to start a new session (90% of the time you must reuse this session).
-3. DEFERRED MERGING (MERGE WHEN LEAVING SESSION):
+4. DEFERRED MERGING (MERGE WHEN LEAVING SESSION):
    Do not perform intermediate merges while work is actively continuing in this session.
    All accumulated commits from this session will be merged when you are LEAVING this session:
    - If more phases/work remain: formulate the next specification and call 'jules_continue_session' NOW.
