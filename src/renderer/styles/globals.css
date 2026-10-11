@@ -30,6 +30,8 @@
     background-color: var(--bg-canvas);
     color: var(--text-primary);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
     overflow: hidden;
@@ -70,8 +72,8 @@
 
   /* Custom minimal Antigravity scrollbars */
   ::-webkit-scrollbar {
-    width: 5px;
-    height: 5px;
+    width: 6px;
+    height: 6px;
   }
   ::-webkit-scrollbar-track {
     background: transparent;
@@ -85,11 +87,11 @@
   }
 }
 
-/* Markdown styling classes for assistant messages */
+/* Markdown styling classes for assistant messages (Clear, prominent, visual like Antigravity) */
 .prose-antigravity {
   color: var(--text-primary);
-  font-size: 13px;
-  line-height: 1.65;
+  font-size: 14.5px;
+  line-height: 1.68;
 }
 
 .prose-antigravity h1,
@@ -98,26 +100,27 @@
 .prose-antigravity h4 {
   color: var(--text-primary);
   font-weight: 600;
-  margin-top: 1rem;
-  margin-bottom: 0.5rem;
+  margin-top: 1.25rem;
+  margin-bottom: 0.6rem;
 }
 
-.prose-antigravity h1 { font-size: 1.25rem; }
-.prose-antigravity h2 { font-size: 1.1rem; }
-.prose-antigravity h3 { font-size: 0.95rem; }
+.prose-antigravity h1 { font-size: 1.5rem; }
+.prose-antigravity h2 { font-size: 1.25rem; }
+.prose-antigravity h3 { font-size: 1.1rem; }
+.prose-antigravity h4 { font-size: 1rem; }
 
 .prose-antigravity p {
   color: inherit;
-  margin-top: 0.4rem;
-  margin-bottom: 0.4rem;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
 }
 
 .prose-antigravity ul,
 .prose-antigravity ol {
   color: inherit;
-  padding-left: 1.25rem;
-  margin-top: 0.35rem;
-  margin-bottom: 0.35rem;
+  padding-left: 1.4rem;
+  margin-top: 0.45rem;
+  margin-bottom: 0.45rem;
 }
 
 .prose-antigravity ul {
@@ -130,8 +133,8 @@
 
 .prose-antigravity li {
   color: inherit;
-  margin-top: 0.2rem;
-  margin-bottom: 0.2rem;
+  margin-top: 0.25rem;
+  margin-bottom: 0.25rem;
 }
 
 .prose-antigravity strong {
@@ -141,21 +144,21 @@
 
 .prose-antigravity code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 11.5px;
+  font-size: 13px;
   background-color: #1a1b1e;
   border: 1px solid #2d2f34;
-  padding: 0.15rem 0.35rem;
-  border-radius: 4px;
+  padding: 0.18rem 0.42rem;
+  border-radius: 5px;
   color: #7dd3fc;
 }
 
 .prose-antigravity pre {
-  margin-top: 0.6rem;
-  margin-bottom: 0.6rem;
+  margin-top: 0.75rem;
+  margin-bottom: 0.75rem;
   background-color: #121315;
   border: 1px solid #282a2f;
-  border-radius: 8px;
-  padding: 0.75rem 1rem;
+  border-radius: 10px;
+  padding: 0.85rem 1.1rem;
   overflow-x: auto;
 }
 
@@ -164,13 +167,14 @@
   border: none;
   padding: 0;
   color: #e2e8f0;
-  font-size: 12px;
+  font-size: 13.5px;
+  line-height: 1.6;
 }
 
 .prose-antigravity blockquote {
   border-left: 3px solid #3b82f6;
-  padding-left: 0.75rem;
-  margin: 0.5rem 0;
+  padding-left: 0.85rem;
+  margin: 0.65rem 0;
   color: #9ca3af;
   font-style: italic;
 }
@@ -178,8 +182,8 @@
 .prose-antigravity table {
   width: 100%;
   border-collapse: collapse;
-  margin: 0.75rem 0;
-  font-size: 12px;
+  margin: 0.85rem 0;
+  font-size: 13.5px;
 }
 
 .prose-antigravity th,

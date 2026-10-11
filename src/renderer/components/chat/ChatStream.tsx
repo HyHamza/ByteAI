@@ -363,28 +363,28 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
       <div 
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-4 py-6 space-y-6 max-w-4xl w-full mx-auto select-text"
+        className="flex-1 overflow-y-auto px-5 lg:px-8 py-6 space-y-7 max-w-4xl lg:max-w-5xl w-full mx-auto select-text"
       >
         {/* Top action bar: Copy entire chat */}
         {messages.length > 0 && (
-          <div className="flex items-center justify-between pb-3 mb-2 border-b border-[var(--border-subtle)] select-none">
-            <span className="text-[11px] text-[var(--text-muted)] font-mono">
+          <div className="flex items-center justify-between pb-3.5 mb-2 border-b border-[var(--border-subtle)] select-none">
+            <span className="text-[12px] text-[var(--text-muted)] font-mono">
               {messages.length} message{messages.length === 1 ? '' : 's'}
             </span>
             <button
               type="button"
               onClick={handleCopyFullChat}
-              className="flex items-center space-x-1.5 text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] border border-[var(--border-card)] px-2.5 py-1 rounded-lg transition-colors cursor-pointer shadow-sm"
+              className="flex items-center space-x-2 text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] border border-[var(--border-card)] px-3 py-1.5 rounded-lg transition-colors cursor-pointer shadow-sm"
               title="Copy entire chat history including tool records"
             >
               {copiedFullChat ? (
                 <>
-                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  <Check className="w-4 h-4 text-emerald-400" />
                   <span className="text-emerald-400 font-medium">Copied Entire Chat</span>
                 </>
               ) : (
                 <>
-                  <Copy className="w-3.5 h-3.5" />
+                  <Copy className="w-4 h-4" />
                   <span>Copy Entire Chat</span>
                 </>
               )}
@@ -549,7 +549,7 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
                   ref={isLatestTurn ? latestUserMsgRef : undefined}
                   className="w-full sticky top-0 z-20 pt-1 pb-2 bg-[var(--bg-canvas)]/95 backdrop-blur-md group/user"
                 >
-                  <div className="w-full bg-[var(--bg-surface)] border border-[var(--border-card)] text-[var(--text-primary)] px-4 py-3 rounded-2xl text-[13px] leading-relaxed shadow-md select-text cursor-text relative space-y-2.5">
+                  <div className="w-full bg-[var(--bg-surface)] border border-[var(--border-card)] text-[var(--text-primary)] px-5 py-3.5 rounded-2xl text-[14.5px] leading-relaxed shadow-md select-text cursor-text relative space-y-3">
                     {/* Render message attachments if present */}
                     {turn.userMessage.attachments && turn.userMessage.attachments.length > 0 && (
                       <div className="flex flex-wrap gap-2 pt-0.5">
@@ -561,10 +561,10 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
                           return (
                             <div
                               key={att.id}
-                              className="flex items-center space-x-2 bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl p-1.5 pr-3 text-xs text-[var(--text-primary)] shadow-sm max-w-[280px]"
+                              className="flex items-center space-x-2 bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl p-2 pr-3.5 text-xs text-[var(--text-primary)] shadow-sm max-w-[300px]"
                             >
                               {imageIndex && (
-                                <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-sky-500/20 text-sky-400 border border-sky-500/30 shrink-0 font-mono">
+                                <span className="px-1.5 py-0.2 rounded text-[10.5px] font-bold bg-sky-500/20 text-sky-400 border border-sky-500/30 shrink-0 font-mono">
                                   #{imageIndex}
                                 </span>
                               )}
@@ -573,16 +573,16 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
                                   src={att.dataUrl}
                                   alt={att.name}
                                   onClick={() => setPreviewModalImg({ url: att.dataUrl!, name: att.name, size: att.size })}
-                                  className="w-8 h-8 rounded-lg object-cover border border-white/10 shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+                                  className="w-9 h-9 rounded-lg object-cover border border-white/10 shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
                                   title="Click to preview & zoom"
                                 />
                               ) : att.type === 'image' ? (
-                                <div className="w-8 h-8 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center shrink-0">
-                                  <ImageIcon className="w-4 h-4 text-sky-400" />
+                                <div className="w-9 h-9 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center shrink-0">
+                                  <ImageIcon className="w-4.5 h-4.5 text-sky-400" />
                                 </div>
                               ) : (
-                                <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0">
-                                  <FileText className="w-4 h-4 text-amber-400" />
+                                <div className="w-9 h-9 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0">
+                                  <FileText className="w-4.5 h-4.5 text-amber-400" />
                                 </div>
                               )}
                               <div className="flex flex-col min-w-0">
@@ -592,12 +592,12 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
                                       setPreviewModalImg({ url: att.dataUrl, name: att.name, size: att.size });
                                     }
                                   }}
-                                  className={`font-mono text-[11px] text-[var(--text-primary)] truncate font-medium ${att.type === 'image' && att.dataUrl ? 'cursor-pointer hover:underline hover:text-sky-400' : ''}`}
+                                  className={`font-mono text-[12px] text-[var(--text-primary)] truncate font-medium ${att.type === 'image' && att.dataUrl ? 'cursor-pointer hover:underline hover:text-sky-400' : ''}`}
                                   title={att.type === 'image' && att.dataUrl ? 'Click to preview & zoom' : att.name}
                                 >
                                   {att.name}
                                 </span>
-                                <span className="text-[10px] text-[var(--text-secondary)] font-mono">{Math.max(1, Math.round(att.size / 1024))} KB</span>
+                                <span className="text-[10.5px] text-[var(--text-secondary)] font-mono">{Math.max(1, Math.round(att.size / 1024))} KB</span>
                               </div>
                             </div>
                           );
@@ -606,19 +606,19 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
                     )}
 
                     {turn.userMessage.content && (
-                      <div className="whitespace-pre-wrap select-text pr-8 max-h-56 overflow-y-auto">{turn.userMessage.content}</div>
+                      <div className="whitespace-pre-wrap select-text pr-8 max-h-56 overflow-y-auto leading-relaxed">{turn.userMessage.content}</div>
                     )}
 
                     <button
                       type="button"
                       onClick={() => copyToClipboard(turn.userMessage!.content, `user_${turn.userMessage!.id}`)}
-                      className="absolute top-2.5 right-2.5 opacity-0 group-hover/user:opacity-100 transition-opacity p-1.5 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)] cursor-pointer"
+                      className="absolute top-3 right-3 opacity-0 group-hover/user:opacity-100 transition-opacity p-1.5 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)] cursor-pointer"
                       title="Copy message"
                     >
                       {copiedCodeId === `user_${turn.userMessage!.id}` ? (
-                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                        <Check className="w-4 h-4 text-emerald-400" />
                       ) : (
-                        <Copy className="w-3.5 h-3.5" />
+                        <Copy className="w-4 h-4" />
                       )}
                     </button>
                   </div>
@@ -636,26 +636,26 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
 
               {/* Assistant Turn Response: Unified with Single "Worked for Xs >" and Content */}
               {hasAssistantActivity && (
-                <div className="w-full space-y-2 text-xs leading-relaxed group/asst pt-1">
+                <div className="w-full space-y-2.5 text-xs leading-relaxed group/asst pt-1">
                   {/* Single Unified "Worked for Xs >" Banner for the entire turn */}
                   {hasTrajectoryContent && (
                     <div className="flex items-center space-x-2 py-1 w-fit select-none">
                       <div 
                         onClick={() => toggleTrajectory(turn.id, defaultExpanded)}
-                        className="flex items-center space-x-2 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer transition-colors group/trajectory font-medium"
+                        className="flex items-center space-x-2 text-[13px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer transition-colors group/trajectory font-medium"
                       >
                         {isLiveInThisTurn ? (
                           retryStatus ? (
                             <div className="flex items-center space-x-2 text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md animate-pulse">
-                              <Loader2 className="w-3 h-3 animate-spin text-amber-400" />
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" />
                               <span>Retrying connection ({retryStatus.attempt}/{retryStatus.maxRetries})...</span>
-                              <span className="text-[10px] text-amber-300/80 font-mono">
+                              <span className="text-[11px] text-amber-300/80 font-mono">
                                 {Math.round(retryStatus.delayMs / 1000)}s backoff
                               </span>
                             </div>
                           ) : (
                             <div className="flex items-center space-x-1.5 text-cyan-400">
-                              <Loader2 className="w-3 h-3 animate-spin" />
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
                               <span>Working for {formatDuration(duration || 1)}...</span>
                             </div>
                           )
@@ -663,15 +663,15 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
                           <span>Worked for {formatDuration(duration || 1)}</span>
                         )}
                         {isExpanded ? (
-                          <ChevronDown className="w-3.5 h-3.5 text-[var(--text-muted)] group-hover/trajectory:text-[var(--text-primary)]" />
+                          <ChevronDown className="w-4 h-4 text-[var(--text-muted)] group-hover/trajectory:text-[var(--text-primary)]" />
                         ) : (
-                          <ChevronRight className="w-3.5 h-3.5 text-[var(--text-muted)] group-hover/trajectory:text-[var(--text-primary)]" />
+                          <ChevronRight className="w-4 h-4 text-[var(--text-muted)] group-hover/trajectory:text-[var(--text-primary)]" />
                         )}
                       </div>
 
                       {turnModel && (
-                        <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[10.5px] font-mono text-[var(--text-muted)]">
-                          <Bot className="w-3 h-3 text-cyan-400/80 shrink-0" />
+                        <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[11px] font-mono text-[var(--text-muted)]">
+                          <Bot className="w-3.5 h-3.5 text-cyan-400/80 shrink-0" />
                           <span>{turnModel}</span>
                         </span>
                       )}
@@ -687,7 +687,7 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
 
                   {/* Response Markdown Content */}
                   {responseText ? (
-                    <div className="prose-antigravity select-text cursor-text text-[var(--text-primary)] text-[13px] leading-relaxed">
+                    <div className="prose-antigravity select-text cursor-text text-[var(--text-primary)] text-[14.5px] leading-relaxed">
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
                         components={{
@@ -707,28 +707,28 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
                             const codeId = `code_${match ? match[1] : 'snippet'}_${codeString.length}_${codeString.slice(0, 10).replace(/\W/g, '')}`;
 
                             return (
-                              <div className="relative group/code my-2 rounded-xl overflow-hidden border border-[var(--border-card)] bg-[var(--bg-sidebar)]">
-                                <div className="flex items-center justify-between px-3 py-1.5 bg-[var(--bg-surface-hover)] border-b border-[var(--border-subtle)] text-[11px] text-[var(--text-muted)]">
-                                  <span>{match ? match[1] : 'code'}</span>
+                              <div className="relative group/code my-2.5 rounded-xl overflow-hidden border border-[var(--border-card)] bg-[var(--bg-sidebar)]">
+                                <div className="flex items-center justify-between px-3.5 py-1.5 bg-[var(--bg-surface-hover)] border-b border-[var(--border-subtle)] text-[12px] text-[var(--text-muted)]">
+                                  <span className="font-mono">{match ? match[1] : 'code'}</span>
                                   <button
                                     type="button"
                                     onClick={() => copyToClipboard(codeString, codeId)}
-                                    className="flex items-center space-x-1 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
+                                    className="flex items-center space-x-1.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
                                   >
                                     {copiedCodeId === codeId ? (
                                       <>
-                                        <Check className="w-3 h-3 text-emerald-400" />
-                                        <span className="text-emerald-400">Copied</span>
+                                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                                        <span className="text-emerald-400 font-medium">Copied</span>
                                       </>
                                     ) : (
                                       <>
-                                        <Copy className="w-3 h-3" />
+                                        <Copy className="w-3.5 h-3.5" />
                                         <span>Copy</span>
                                       </>
                                     )}
                                   </button>
                                 </div>
-                                <pre className="p-3 text-[12px] overflow-x-auto text-[var(--text-primary)] font-mono leading-relaxed bg-[var(--bg-sidebar)] m-0">
+                                <pre className="p-3.5 text-[13px] overflow-x-auto text-[var(--text-primary)] font-mono leading-relaxed bg-[var(--bg-sidebar)] m-0">
                                   <code>{children}</code>
                                 </pre>
                               </div>
@@ -748,10 +748,10 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
                         <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
                         <span>Upstream Provider / LLM Error</span>
                       </div>
-                      <div className="text-red-300/90 whitespace-pre-wrap font-mono text-[11.5px] bg-[var(--bg-sidebar)]/80 p-2.5 rounded-lg border border-red-500/20 leading-relaxed overflow-x-auto">
+                      <div className="text-red-300/90 whitespace-pre-wrap font-mono text-[12px] bg-[var(--bg-sidebar)]/80 p-2.5 rounded-lg border border-red-500/20 leading-relaxed overflow-x-auto">
                         {responseText.replace(/^⚠️ LLM Error:\s*/, '')}
                       </div>
-                      <p className="text-[11px] text-red-400/80">
+                      <p className="text-[11.5px] text-red-400/80">
                         Check your API Base URL, API Key, or select "Auto Model" / a supported model in Settings.
                       </p>
                     </div>
@@ -768,7 +768,7 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
                             Attempt {retryStatus.attempt} of {retryStatus.maxRetries}
                           </span>
                         </div>
-                        <div className="text-[11px] text-amber-300/80 mt-0.5">
+                        <div className="text-[11.5px] text-amber-300/80 mt-0.5">
                           {retryStatus.reason} • Next attempt in {Math.round(retryStatus.delayMs / 1000)}s
                         </div>
                       </div>
@@ -777,59 +777,59 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
 
                   {/* Thinking indicator when streaming with no output yet */}
                   {isLiveInThisTurn && !responseText && !retryStatus && trajectoryItems.length === 0 && (
-                    <div className="flex items-center space-x-2 text-[var(--text-muted)] italic text-xs pl-1 animate-pulse">
-                      <Brain className="w-3.5 h-3.5 text-purple-400 shrink-0 animate-spin" />
+                    <div className="flex items-center space-x-2 text-[var(--text-muted)] italic text-[13px] pl-1 animate-pulse">
+                      <Brain className="w-4 h-4 text-purple-400 shrink-0 animate-spin" />
                       <span>{streamingReasoning ? 'Reasoning and analyzing...' : 'Thinking and planning...'}</span>
                     </div>
                   )}
 
                   {/* Single Unified Turn Footer: Timestamp + Model Name + Actions */}
                   {!isLiveInThisTurn && responseText && (
-                    <div className="flex items-center justify-between pt-2 select-none text-[11px] text-[var(--text-muted)]">
-                      <div className="flex items-center space-x-2">
+                    <div className="flex items-center justify-between pt-2.5 select-none text-[12px] text-[var(--text-muted)]">
+                      <div className="flex items-center space-x-2.5">
                         <span>{timeFormatted}</span>
                         {turnModel && (
-                          <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[10.5px] font-mono text-[var(--text-secondary)]">
-                            <Bot className="w-3 h-3 text-cyan-400 shrink-0" />
+                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[11px] font-mono text-[var(--text-secondary)]">
+                            <Bot className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
                             <span>{turnModel}</span>
                           </span>
                         )}
                       </div>
 
-                      <div className="flex items-center space-x-1 opacity-0 group-hover/asst:opacity-100 transition-opacity">
+                      <div className="flex items-center space-x-1.5 opacity-0 group-hover/asst:opacity-100 transition-opacity">
                         <button
                           type="button"
                           onClick={() => copyToClipboard(responseText, asstTurnId)}
-                          className="p-1 hover:text-[var(--text-primary)] rounded hover:bg-[var(--bg-surface-hover)] transition-colors cursor-pointer"
+                          className="p-1.5 hover:text-[var(--text-primary)] rounded hover:bg-[var(--bg-surface-hover)] transition-colors cursor-pointer"
                           title="Copy response"
                         >
                           {copiedCodeId === asstTurnId ? (
-                            <Check className="w-3.5 h-3.5 text-emerald-400" />
+                            <Check className="w-4 h-4 text-emerald-400" />
                           ) : (
-                            <Copy className="w-3.5 h-3.5" />
+                            <Copy className="w-4 h-4" />
                           )}
                         </button>
 
                         <button
                           type="button"
                           onClick={() => setFeedbackMap((prev) => ({ ...prev, [turn.id]: prev[turn.id] === 'up' ? undefined! : 'up' }))}
-                          className={`p-1 rounded hover:bg-[var(--bg-surface-hover)] transition-colors cursor-pointer ${
+                          className={`p-1.5 rounded hover:bg-[var(--bg-surface-hover)] transition-colors cursor-pointer ${
                             feedbackMap[turn.id] === 'up' ? 'text-cyan-400' : 'hover:text-[var(--text-primary)]'
                           }`}
                           title="Good response"
                         >
-                          <ThumbsUp className="w-3.5 h-3.5" />
+                          <ThumbsUp className="w-4 h-4" />
                         </button>
 
                         <button
                           type="button"
                           onClick={() => setFeedbackMap((prev) => ({ ...prev, [turn.id]: prev[turn.id] === 'down' ? undefined! : 'down' }))}
-                          className={`p-1 rounded hover:bg-[var(--bg-surface-hover)] transition-colors cursor-pointer ${
+                          className={`p-1.5 rounded hover:bg-[var(--bg-surface-hover)] transition-colors cursor-pointer ${
                             feedbackMap[turn.id] === 'down' ? 'text-amber-400' : 'hover:text-[var(--text-primary)]'
                           }`}
                           title="Bad response"
                         >
-                          <ThumbsDown className="w-3.5 h-3.5" />
+                          <ThumbsDown className="w-4 h-4" />
                         </button>
                       </div>
                     </div>

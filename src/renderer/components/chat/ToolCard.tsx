@@ -139,7 +139,7 @@ export const AntigravityEditItem: React.FC<{ tool: ToolExecutionRecord }> = ({ t
   const { added, removed, isCreate } = getEditDiffStats(tool);
 
   return (
-    <div className="font-sans text-[13px] leading-relaxed select-none group/edit">
+    <div className="font-sans text-[13.5px] leading-relaxed select-none group/edit">
       <div 
         onClick={() => setIsExpanded(!isExpanded)}
         className="flex items-center space-x-1.5 py-0.5 cursor-pointer text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors w-fit"
@@ -151,57 +151,57 @@ export const AntigravityEditItem: React.FC<{ tool: ToolExecutionRecord }> = ({ t
         <span className="font-medium text-[var(--text-primary)] hover:underline">
           {filename}
         </span>
-        <span className="text-[#22c55e] font-mono text-[11.5px] font-medium ml-1">
+        <span className="text-[#22c55e] font-mono text-[12px] font-medium ml-1">
           +{added}
         </span>
-        <span className="text-[#ef4444] font-mono text-[11.5px] font-medium ml-0.5">
+        <span className="text-[#ef4444] font-mono text-[12px] font-medium ml-0.5">
           -{removed}
         </span>
 
         {status === 'running' && (
-          <Loader2 className="w-3 h-3 text-cyan-400 animate-spin ml-1" />
+          <Loader2 className="w-3.5 h-3.5 text-cyan-400 animate-spin ml-1" />
         )}
         {status === 'error' && (
-          <AlertCircle className="w-3.5 h-3.5 text-rose-400 ml-1" />
+          <AlertCircle className="w-4 h-4 text-rose-400 ml-1" />
         )}
         {isExpanded ? (
-          <ChevronDown className="w-3.5 h-3.5 text-[var(--text-muted)] ml-0.5" />
+          <ChevronDown className="w-4 h-4 text-[var(--text-muted)] ml-0.5" />
         ) : (
-          <ChevronRight className="w-3.5 h-3.5 text-[var(--text-muted)] ml-0.5" />
+          <ChevronRight className="w-4 h-4 text-[var(--text-muted)] ml-0.5" />
         )}
       </div>
 
       {isExpanded && (
-        <div className="mt-1 mb-2 pl-3 border-l border-[var(--border-subtle)] ml-1.5 space-y-2 font-mono text-[11px] animate-in fade-in duration-150">
-          <div className="flex items-center justify-between text-[var(--text-muted)] text-[10px] pr-2 pt-1">
+        <div className="mt-1 mb-2 pl-3 border-l border-[var(--border-subtle)] ml-1.5 space-y-2 font-mono text-[12px] animate-in fade-in duration-150">
+          <div className="flex items-center justify-between text-[var(--text-muted)] text-[11px] pr-2 pt-1">
             <span>{filePath}</span>
             <button
               type="button"
               onClick={(e) => copy(e, JSON.stringify(tool.args, null, 2), 'args')}
               className="flex items-center space-x-1 hover:text-[var(--text-primary)] px-1.5 py-0.5 rounded hover:bg-[var(--bg-surface-hover)] transition-colors"
             >
-              {copiedType === 'args' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+              {copiedType === 'args' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
               <span>{copiedType === 'args' ? 'Copied' : 'Copy'}</span>
             </button>
           </div>
 
           {args.target_content && (
             <div className="bg-[var(--bg-surface-hover)] border border-rose-950/60 rounded p-2 text-rose-300 whitespace-pre-wrap select-text">
-              <div className="text-[10px] text-rose-500 font-semibold mb-1 uppercase tracking-wider">- Original</div>
+              <div className="text-[10.5px] text-rose-500 font-semibold mb-1 uppercase tracking-wider">- Original</div>
               {args.target_content}
             </div>
           )}
 
           {args.replacement_content !== undefined && (
             <div className="bg-[var(--bg-surface-hover)] border border-emerald-950/60 rounded p-2 text-emerald-300 whitespace-pre-wrap select-text">
-              <div className="text-[10px] text-emerald-500 font-semibold mb-1 uppercase tracking-wider">+ Replacement</div>
+              <div className="text-[10.5px] text-emerald-500 font-semibold mb-1 uppercase tracking-wider">+ Replacement</div>
               {args.replacement_content}
             </div>
           )}
 
           {args.content && !args.target_content && (
             <div className="bg-[var(--bg-surface-hover)] border border-emerald-950/60 rounded p-2 text-emerald-300 whitespace-pre-wrap select-text max-h-[300px] overflow-y-auto">
-              <div className="text-[10px] text-emerald-500 font-semibold mb-1 uppercase tracking-wider">+ File Content</div>
+              <div className="text-[10.5px] text-emerald-500 font-semibold mb-1 uppercase tracking-wider">+ File Content</div>
               {args.content}
             </div>
           )}
@@ -220,21 +220,21 @@ export const AntigravityThoughtItem: React.FC<{
   const [isExpanded, setIsExpanded] = useState(false);
 
   return (
-    <div className={`font-sans text-[13px] leading-relaxed select-none ${isIndented ? 'pl-4' : ''}`}>
+    <div className={`font-sans text-[13.5px] leading-relaxed select-none ${isIndented ? 'pl-4' : ''}`}>
       <div
         onClick={() => setIsExpanded(!isExpanded)}
         className="flex items-center space-x-1 py-0.5 cursor-pointer text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors group/th w-fit"
       >
         <span>Thought for {durationSec}s</span>
         {isExpanded ? (
-          <ChevronDown className="w-3.5 h-3.5 text-[var(--text-muted)] group-hover/th:text-[var(--text-primary)]" />
+          <ChevronDown className="w-4 h-4 text-[var(--text-muted)] group-hover/th:text-[var(--text-primary)]" />
         ) : (
-          <ChevronRight className="w-3.5 h-3.5 text-[var(--text-muted)] group-hover/th:text-[var(--text-primary)]" />
+          <ChevronRight className="w-4 h-4 text-[var(--text-muted)] group-hover/th:text-[var(--text-primary)]" />
         )}
       </div>
 
       {isExpanded && (
-        <div className="mt-1 mb-2 pl-3 border-l-2 border-purple-500/40 ml-1.5 font-mono text-[11px] text-[var(--text-secondary)] bg-[var(--bg-sidebar)]/80 p-2.5 rounded-r-lg max-h-72 overflow-y-auto whitespace-pre-wrap leading-relaxed select-text animate-in fade-in duration-150">
+        <div className="mt-1 mb-2 pl-3 border-l-2 border-purple-500/40 ml-1.5 font-mono text-[12px] text-[var(--text-secondary)] bg-[var(--bg-sidebar)]/80 p-2.5 rounded-r-lg max-h-72 overflow-y-auto whitespace-pre-wrap leading-relaxed select-text animate-in fade-in duration-150">
           {content}
         </div>
       )}
@@ -341,19 +341,19 @@ export const AntigravityExploredGroup: React.FC<{
   const label = `Explored ${count} ${count === 1 ? 'file' : 'files'}`;
 
   return (
-    <div className="font-sans text-[13px] leading-relaxed select-none">
+    <div className="font-sans text-[13.5px] leading-relaxed select-none">
       <div 
         onClick={() => setIsExpanded(!isExpanded)}
         className="flex items-center space-x-1 py-0.5 cursor-pointer text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors group/explore w-fit"
       >
         <span>{label}</span>
         {isExpanded ? (
-          <ChevronDown className="w-3.5 h-3.5 text-[var(--text-muted)] group-hover/explore:text-[var(--text-primary)] transition-transform" />
+          <ChevronDown className="w-4 h-4 text-[var(--text-muted)] group-hover/explore:text-[var(--text-primary)] transition-transform" />
         ) : (
-          <ChevronRight className="w-3.5 h-3.5 text-[var(--text-muted)] group-hover/explore:text-[var(--text-primary)] transition-transform" />
+          <ChevronRight className="w-4 h-4 text-[var(--text-muted)] group-hover/explore:text-[var(--text-primary)] transition-transform" />
         )}
         {items.some((it) => it.type === 'tool' && it.tool.status === 'running') && (
-          <Loader2 className="w-3 h-3 text-cyan-400 animate-spin ml-1" />
+          <Loader2 className="w-3.5 h-3.5 text-cyan-400 animate-spin ml-1" />
         )}
       </div>
 
@@ -452,7 +452,7 @@ export const AntigravityCommandItem: React.FC<{ tool: ToolExecutionRecord }> = (
   const displayOutput = liveLogs || tool.output || '(Running in background...)';
 
   return (
-    <div className="font-sans text-[13px] leading-relaxed select-none">
+    <div className="font-sans text-[13.5px] leading-relaxed select-none">
       <div 
         onClick={() => setIsExpanded(!isExpanded)}
         className="flex items-center space-x-2 py-0.5 cursor-pointer hover:opacity-90 transition-opacity"
@@ -460,22 +460,22 @@ export const AntigravityCommandItem: React.FC<{ tool: ToolExecutionRecord }> = (
         <span className="text-[var(--text-secondary)] font-normal">
           {taskId ? 'Ran background task' : (args.is_background ? 'Ran background task' : 'Ran command')}
         </span>
-        <Terminal className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-        <span className="font-mono text-[var(--text-primary)] text-[12px] truncate max-w-[420px]">
+        <Terminal className="w-4 h-4 text-amber-400 shrink-0" />
+        <span className="font-mono text-[var(--text-primary)] text-[12.5px] truncate max-w-[460px]">
           $ {cmd}
         </span>
 
         {/* Live Running Spinner */}
         {(status === 'running' || isLiveRunning) && (
           <div className="flex items-center space-x-1 text-cyan-400 text-xs font-medium ml-1">
-            <Loader2 className="w-3 h-3 animate-spin" />
-            <span className="text-[11px]">Running...</span>
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            <span className="text-[11.5px]">Running...</span>
           </div>
         )}
 
         {/* Completed status indicators */}
         {!isLiveRunning && taskExitCode !== null && (
-          <span className={`text-[10.5px] font-mono px-1 py-0.2 rounded ${
+          <span className={`text-[11px] font-mono px-1.5 py-0.2 rounded ${
             taskExitCode === 0 ? 'text-emerald-400 bg-emerald-950/40' : 'text-rose-400 bg-rose-950/40'
           }`}>
             Exit {taskExitCode}
@@ -483,23 +483,23 @@ export const AntigravityCommandItem: React.FC<{ tool: ToolExecutionRecord }> = (
         )}
 
         {status === 'error' && !isLiveRunning && taskExitCode === null && (
-          <AlertCircle className="w-3.5 h-3.5 text-rose-400 ml-1" />
+          <AlertCircle className="w-4 h-4 text-rose-400 ml-1" />
         )}
 
         {isExpanded ? (
-          <ChevronDown className="w-3.5 h-3.5 text-[var(--text-muted)] ml-1" />
+          <ChevronDown className="w-4 h-4 text-[var(--text-muted)] ml-1" />
         ) : (
-          <ChevronRight className="w-3.5 h-3.5 text-[var(--text-muted)] ml-1" />
+          <ChevronRight className="w-4 h-4 text-[var(--text-muted)] ml-1" />
         )}
       </div>
 
       {isExpanded && (
-        <div className="mt-1 mb-2 pl-3 border-l border-[var(--border-subtle)] ml-1.5 font-mono text-[11px] animate-in fade-in duration-150">
-          <div className="flex items-center justify-between text-[var(--text-muted)] text-[10px] mb-1">
+        <div className="mt-1 mb-2 pl-3 border-l border-[var(--border-subtle)] ml-1.5 font-mono text-[12px] animate-in fade-in duration-150">
+          <div className="flex items-center justify-between text-[var(--text-muted)] text-[10.5px] mb-1">
             <div className="flex items-center space-x-2">
               <span>Terminal Output:</span>
               {taskId && (
-                <span className={`px-1.5 py-0.2 rounded text-[9.5px] uppercase font-semibold ${
+                <span className={`px-1.5 py-0.2 rounded text-[10px] uppercase font-semibold ${
                   isLiveRunning ? 'bg-cyan-950/80 text-cyan-300 border border-cyan-800/50' : 
                   taskStatus === 'completed' || taskExitCode === 0 ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-800/50' : 
                   'bg-zinc-800 text-zinc-300'
@@ -517,7 +517,7 @@ export const AntigravityCommandItem: React.FC<{ tool: ToolExecutionRecord }> = (
                   disabled={isKilling}
                   className="flex items-center space-x-1 text-rose-400 hover:text-rose-200 px-1.5 py-0.5 rounded hover:bg-rose-950/50 border border-rose-900/50 transition-colors"
                 >
-                  <AlertCircle className="w-3 h-3 text-rose-400" />
+                  <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
                   <span>{isKilling ? 'Killing...' : 'Kill Task'}</span>
                 </button>
               )}
@@ -527,7 +527,7 @@ export const AntigravityCommandItem: React.FC<{ tool: ToolExecutionRecord }> = (
                   onClick={(e) => copy(e, displayOutput, 'cmdOut')}
                   className="flex items-center space-x-1 hover:text-[var(--text-primary)] px-1.5 py-0.5 rounded hover:bg-[var(--bg-surface-hover)] transition-colors"
                 >
-                  {copiedType === 'cmdOut' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                  {copiedType === 'cmdOut' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                   <span>{copiedType === 'cmdOut' ? 'Copied' : 'Copy'}</span>
                 </button>
               )}
@@ -549,25 +549,25 @@ export const AntigravityGenericItem: React.FC<{ tool: ToolExecutionRecord }> = (
   const { toolName, args = {}, status } = tool;
 
   let title = toolName.replace(/_/g, ' ');
-  let icon = <Activity className="w-3.5 h-3.5 text-cyan-400 shrink-0" />;
+  let icon = <Activity className="w-4 h-4 text-cyan-400 shrink-0" />;
 
   if (toolName === 'resolve_merge_conflict') {
     title = `Resolved conflict ${args.path ? getBasename(args.path) : ''}`;
-    icon = <GitMerge className="w-3.5 h-3.5 text-amber-400 shrink-0" />;
+    icon = <GitMerge className="w-4 h-4 text-amber-400 shrink-0" />;
   } else if (toolName.startsWith('jules_')) {
     if (toolName === 'jules_create_task') title = `Delegated task to Jules`;
     else if (toolName === 'jules_sync_and_merge') title = `Synced Jules task`;
     else if (toolName === 'jules_get_status') title = `Checked Jules status`;
     else if (toolName === 'jules_reply_question') title = `Replied to Jules`;
     else if (toolName === 'jules_inspect_diff') title = `Inspected PR diff`;
-    icon = <Sparkles className="w-3.5 h-3.5 text-sky-400 shrink-0" />;
+    icon = <Sparkles className="w-4 h-4 text-sky-400 shrink-0" />;
   } else if (toolName === 'manage_task') {
     title = `${args.action ? args.action.charAt(0).toUpperCase() + args.action.slice(1) : 'Manage'} task ${args.task_id || ''}`;
-    icon = <Activity className="w-3.5 h-3.5 text-cyan-400 shrink-0" />;
+    icon = <Activity className="w-4 h-4 text-cyan-400 shrink-0" />;
   }
 
   return (
-    <div className="font-sans text-[13px] leading-relaxed select-none">
+    <div className="font-sans text-[13.5px] leading-relaxed select-none">
       <div 
         onClick={() => setIsExpanded(!isExpanded)}
         className="flex items-center space-x-2 py-0.5 cursor-pointer hover:opacity-90 transition-opacity"
@@ -575,15 +575,15 @@ export const AntigravityGenericItem: React.FC<{ tool: ToolExecutionRecord }> = (
         {icon}
         <span className="font-medium text-[var(--text-primary)]">{title}</span>
         {status === 'running' && (
-          <Loader2 className="w-3 h-3 text-cyan-400 animate-spin ml-1" />
+          <Loader2 className="w-3.5 h-3.5 text-cyan-400 animate-spin ml-1" />
         )}
         {status === 'error' && (
-          <AlertCircle className="w-3.5 h-3.5 text-rose-400 ml-1" />
+          <AlertCircle className="w-4 h-4 text-rose-400 ml-1" />
         )}
         {isExpanded ? (
-          <ChevronDown className="w-3.5 h-3.5 text-[var(--text-muted)] ml-1" />
+          <ChevronDown className="w-4 h-4 text-[var(--text-muted)] ml-1" />
         ) : (
-          <ChevronRight className="w-3.5 h-3.5 text-[var(--text-muted)] ml-1" />
+          <ChevronRight className="w-4 h-4 text-[var(--text-muted)] ml-1" />
         )}
       </div>
 

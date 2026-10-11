@@ -318,15 +318,15 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
 
   return (
     <>
-      <aside className="w-64 bg-[var(--bg-sidebar)] border-r border-[var(--border-subtle)] flex flex-col h-full shrink-0 select-none text-[12px] text-[var(--text-secondary)]">
+      <aside className="w-72 bg-[var(--bg-sidebar)] border-r border-[var(--border-subtle)] flex flex-col h-full shrink-0 select-none text-[13px] text-[var(--text-secondary)]">
         {/* Brand Header */}
-        <div className="px-3.5 py-3 flex items-center space-x-2.5 border-b border-[var(--border-subtle)]">
+        <div className="px-4 py-3 flex items-center space-x-2.5 border-b border-[var(--border-subtle)]">
           <div className="w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center p-1 shrink-0">
             <img src="/logo-bw.png" alt="Byte" className="w-full h-full object-contain select-none" />
           </div>
           <div className="flex items-center space-x-1.5 font-semibold text-sm text-[var(--text-primary)]">
             <span>Byte</span>
-            <span className="text-[10px] font-mono px-1 py-0.2 rounded bg-white/10 text-neutral-300 font-normal">AI</span>
+            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/10 text-neutral-300 font-normal">AI</span>
           </div>
         </div>
 
@@ -334,7 +334,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
         <div className="p-3 pb-2">
           <button
             onClick={onCreateSession}
-            className="w-full flex items-center space-x-2 py-2 px-3.5 bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-primary)] rounded-xl border border-[var(--border-card)] transition-all text-xs font-medium shadow-sm cursor-pointer"
+            className="w-full flex items-center space-x-2.5 py-2.5 px-3.5 bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-primary)] rounded-xl border border-[var(--border-card)] transition-all text-[13px] font-medium shadow-sm cursor-pointer"
           >
             <Plus className="w-4 h-4 text-[var(--text-secondary)]" />
             <span>New Conversation</span>
@@ -343,25 +343,25 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
 
         {/* Navigation section: Conversation History & Scheduled Tasks */}
         <div className="px-2 py-1 space-y-0.5">
-          <div className="flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] transition-colors cursor-pointer">
-            <History className="w-4 h-4 text-[var(--text-secondary)]" />
+          <div className="flex items-center space-x-2.5 px-3 py-2 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] transition-colors cursor-pointer text-[13px]">
+            <History className="w-4.5 h-4.5 text-[var(--text-secondary)]" />
             <span>Conversation History</span>
           </div>
-          <div className="flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] transition-colors cursor-pointer">
-            <Clock className="w-4 h-4 text-[var(--text-secondary)]" />
+          <div className="flex items-center space-x-2.5 px-3 py-2 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] transition-colors cursor-pointer text-[13px]">
+            <Clock className="w-4.5 h-4.5 text-[var(--text-secondary)]" />
             <span>Scheduled Tasks</span>
           </div>
         </div>
 
         {/* Projects Section Header */}
-        <div className="px-3 pt-3 pb-1 flex items-center justify-between text-[11px] font-medium text-[var(--text-muted)] relative">
+        <div className="px-3.5 pt-3.5 pb-1 flex items-center justify-between text-[12px] font-semibold text-[var(--text-muted)] relative">
           <span>Projects</span>
           <div className="flex items-center space-x-1.5 text-[var(--text-muted)]">
             <button 
-              className="p-1 hover:text-[var(--text-primary)] rounded hover:bg-[var(--bg-surface-hover)] transition-colors" 
+              className="p-1.5 hover:text-[var(--text-primary)] rounded hover:bg-[var(--bg-surface-hover)] transition-colors" 
               title="Sort / Filter"
             >
-              <SlidersHorizontal className="w-3.5 h-3.5" />
+              <SlidersHorizontal className="w-4 h-4" />
             </button>
 
             {/* FolderPlus dropdown trigger */}
@@ -428,19 +428,19 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
                 {/* Project Header Row (Screenshot 3) */}
                 <div
                   onClick={() => toggleFolder(folderName)}
-                  className="group flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)] cursor-pointer transition-colors font-medium text-xs relative"
+                  className="group flex items-center justify-between px-3 py-2 rounded-lg text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)] cursor-pointer transition-colors font-medium text-[13px] relative"
                 >
                   <div className="flex items-center space-x-2 truncate flex-1 mr-2">
                     {isExpanded ? (
-                      <FolderOpen className="w-3.5 h-3.5 text-[var(--text-secondary)] shrink-0" />
+                      <FolderOpen className="w-4 h-4 text-[var(--text-secondary)] shrink-0" />
                     ) : (
-                      <Folder className="w-3.5 h-3.5 text-[var(--text-secondary)] shrink-0" />
+                      <Folder className="w-4 h-4 text-[var(--text-secondary)] shrink-0" />
                     )}
                     <span className="truncate">{folderName}</span>
                     {isExpanded ? (
-                      <ChevronDown className="w-3 h-3 text-[var(--text-muted)] shrink-0" />
+                      <ChevronDown className="w-3.5 h-3.5 text-[var(--text-muted)] shrink-0" />
                     ) : (
-                      <ChevronRight className="w-3 h-3 text-[var(--text-muted)] shrink-0" />
+                      <ChevronRight className="w-3.5 h-3.5 text-[var(--text-muted)] shrink-0" />
                     )}
                   </div>
 
@@ -461,7 +461,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
                       }`}
                       title="Project options"
                     >
-                      <MoreVertical className="w-3.5 h-3.5" />
+                      <MoreVertical className="w-4 h-4" />
                     </button>
 
                     <button
@@ -469,7 +469,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
                         e.stopPropagation();
                         handleCreateInProject(folderName);
                       }}
-                      className="w-5 h-5 flex items-center justify-center rounded bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-card)] transition-all cursor-pointer shadow-sm"
+                      className="w-5.5 h-5.5 flex items-center justify-center rounded bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-card)] transition-all cursor-pointer shadow-sm"
                       title={`New conversation in ${folderName}`}
                     >
                       <Plus className="w-3.5 h-3.5" />
@@ -527,9 +527,9 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
 
                 {/* Sessions indented under project */}
                 {isExpanded && (
-                  <div className="pl-4 space-y-0.5 border-l border-[var(--border-subtle)] ml-4 my-1">
+                  <div className="pl-3.5 space-y-0.5 border-l border-[var(--border-subtle)] ml-4 my-1">
                     {folderSessions.length === 0 ? (
-                      <div className="px-2 py-2 text-[11px] text-[var(--text-muted)] italic">
+                      <div className="px-2 py-2 text-[12px] text-[var(--text-muted)] italic">
                         No conversations yet
                       </div>
                     ) : (
@@ -575,45 +575,45 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
                             <div
                               key={s.id}
                               onClick={() => onSelectSession(s.id)}
-                              className={`group relative flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs cursor-pointer transition-all overflow-hidden ${itemStyle}`}
+                              className={`group relative flex items-center justify-between px-3 py-2 rounded-lg text-[13px] cursor-pointer transition-all overflow-hidden ${itemStyle}`}
                             >
-                              <span className="truncate flex-1 mr-2 text-[11.5px]">
+                              <span className="truncate flex-1 mr-2 text-[12.5px] leading-snug">
                                 {s.title || 'Conversation'}
                               </span>
 
                               <div className="flex items-center space-x-1.5 shrink-0">
                                 {isAgentRunning ? (
-                                  <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-cyan-950/80 border border-cyan-700/60 text-[9px] font-semibold text-cyan-300">
+                                  <div className="flex items-center space-x-1 px-2 py-0.5 rounded-full bg-cyan-950/80 border border-cyan-700/60 text-[10px] font-semibold text-cyan-300">
                                     <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping" />
                                     <span>Running</span>
                                   </div>
                                 ) : isWaitingJules ? (
-                                  <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-purple-950/80 border border-purple-700/60 text-[9px] font-semibold text-purple-300">
+                                  <div className="flex items-center space-x-1 px-2 py-0.5 rounded-full bg-purple-950/80 border border-purple-700/60 text-[10px] font-semibold text-purple-300">
                                     <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />
                                     <span>Jules</span>
                                   </div>
                                 ) : isFeedback ? (
-                                  <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-amber-950/80 border border-amber-700/60 text-[9px] font-semibold text-amber-300">
+                                  <div className="flex items-center space-x-1 px-2 py-0.5 rounded-full bg-amber-950/80 border border-amber-700/60 text-[10px] font-semibold text-amber-300">
                                     <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-bounce" />
                                     <span>Needs Input</span>
                                   </div>
                                 ) : isPaused ? (
-                                  <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-amber-950/70 border border-amber-600/50 text-[9px] font-semibold text-amber-300">
+                                  <div className="flex items-center space-x-1 px-2 py-0.5 rounded-full bg-amber-950/70 border border-amber-600/50 text-[10px] font-semibold text-amber-300">
                                     <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
                                     <span>Paused</span>
                                   </div>
                                 ) : isCompleted ? (
-                                  <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-emerald-950/60 border border-emerald-600/40 text-[9px] font-semibold text-emerald-300">
+                                  <div className="flex items-center space-x-1 px-2 py-0.5 rounded-full bg-emerald-950/60 border border-emerald-600/40 text-[10px] font-semibold text-emerald-300">
                                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                                     <span>Done</span>
                                   </div>
                                 ) : isFailed ? (
-                                  <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-rose-950/70 border border-rose-600/50 text-[9px] font-semibold text-rose-300">
+                                  <div className="flex items-center space-x-1 px-2 py-0.5 rounded-full bg-rose-950/70 border border-rose-600/50 text-[10px] font-semibold text-rose-300">
                                     <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
                                     <span>Failed</span>
                                   </div>
                                 ) : (
-                                  <span className="text-[10px] text-[var(--text-muted)] group-hover:hidden">
+                                  <span className="text-[11px] text-[var(--text-muted)] group-hover:hidden">
                                     {timeStr}
                                   </span>
                                 )}
@@ -626,7 +626,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
                                   className="hidden group-hover:block text-[var(--text-muted)] hover:text-red-400 p-0.5 rounded transition-colors"
                                   title="Delete Conversation"
                                 >
-                                  <Trash2 className="w-3 h-3" />
+                                  <Trash2 className="w-3.5 h-3.5" />
                                 </button>
                               </div>
 
@@ -661,7 +661,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
                               e.stopPropagation();
                               toggleShowAll(folderName);
                             }}
-                            className="w-full text-left px-2.5 py-1.5 text-[11.5px] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)] rounded-lg transition-colors cursor-pointer"
+                            className="w-full text-left px-3 py-2 text-[12px] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)] rounded-lg transition-colors cursor-pointer font-medium"
                           >
                             {isShowAll ? 'Show less' : `See all (${folderSessions.length})`}
                           </button>
@@ -676,12 +676,12 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
         </div>
 
         {/* Pinned Bottom: Settings */}
-        <div className="p-2 border-t border-[var(--border-subtle)]">
+        <div className="p-2.5 border-t border-[var(--border-subtle)]">
           <button
             onClick={onOpenSettings}
-            className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] transition-colors cursor-pointer text-xs"
+            className="w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] transition-colors cursor-pointer text-[13px] font-medium"
           >
-            <SettingsIcon className="w-4 h-4 text-[var(--text-secondary)]" />
+            <SettingsIcon className="w-4.5 h-4.5 text-[var(--text-secondary)]" />
             <span>Settings</span>
           </button>
         </div>

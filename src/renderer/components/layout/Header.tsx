@@ -67,24 +67,24 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header className="bg-[var(--bg-sidebar)] border-b border-[var(--border-subtle)] select-none shrink-0 z-30">
       {/* Top Application Menu Bar (Antigravity | File | View | Window) */}
-      <div className="h-6 flex items-center justify-between px-3 text-[11px] text-[var(--text-secondary)] border-b border-[var(--border-subtle)]">
+      <div className="h-7 flex items-center justify-between px-3.5 text-[12px] text-[var(--text-secondary)] border-b border-[var(--border-subtle)]">
         <div className="flex items-center space-x-4">
           <span className="font-semibold text-[var(--text-primary)] tracking-wide">Byte</span>
           <button 
             onClick={onSelectWorkspace} 
-            className="hover:text-[var(--text-primary)] transition-colors"
+            className="hover:text-[var(--text-primary)] transition-colors cursor-pointer"
           >
             File
           </button>
           <button 
             onClick={onToggleSidebar} 
-            className="hover:text-[var(--text-primary)] transition-colors"
+            className="hover:text-[var(--text-primary)] transition-colors cursor-pointer"
           >
             View
           </button>
           <button 
             onClick={onToggleJulesPanel} 
-            className="hover:text-[var(--text-primary)] transition-colors"
+            className="hover:text-[var(--text-primary)] transition-colors cursor-pointer"
           >
             Window
           </button>
@@ -92,7 +92,7 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Git indicator subtle pill in title bar */}
         {gitRepo && (
-          <div className="flex items-center space-x-1.5 text-[10px] text-[var(--text-muted)]">
+          <div className="flex items-center space-x-1.5 text-[11px] text-[var(--text-muted)]">
             <span>repo:</span>
             <span className="text-[var(--text-secondary)] font-mono">{gitRepo.replace('sources/github/', '')}</span>
             {gitBranch && <span>({gitBranch})</span>}
@@ -101,7 +101,7 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Main Toolbar Row */}
-      <div className="h-11 flex items-center justify-between px-3">
+      <div className="h-12 flex items-center justify-between px-3.5">
         {/* Left: Antigravity Logo + Sidebar Toggle + History Arrows */}
         <div className="flex items-center space-x-2">
           {/* Byte B&W App Logo */}
@@ -112,21 +112,21 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Sidebar Toggle Icon */}
           <button
             onClick={onToggleSidebar}
-            className={`p-1.5 rounded hover:bg-[var(--bg-surface-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors ${
+            className={`p-1.5 rounded hover:bg-[var(--bg-surface-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer ${
               !isSidebarOpen ? 'text-[var(--text-muted)]' : ''
             }`}
             title="Toggle Sidebar"
           >
-            <PanelLeft className="w-4 h-4" />
+            <PanelLeft className="w-4.5 h-4.5" />
           </button>
 
           {/* Navigation Arrows (Back / Forward) */}
           <div className="flex items-center space-x-0.5 text-[var(--text-muted)]">
-            <button className="p-1 rounded hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] transition-colors" title="Back">
-              <ChevronLeft className="w-4 h-4" />
+            <button className="p-1 rounded hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] transition-colors cursor-pointer" title="Back">
+              <ChevronLeft className="w-4.5 h-4.5" />
             </button>
-            <button className="p-1 rounded hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] transition-colors" title="Forward">
-              <ChevronRight className="w-4 h-4" />
+            <button className="p-1 rounded hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] transition-colors cursor-pointer" title="Forward">
+              <ChevronRight className="w-4.5 h-4.5" />
             </button>
           </div>
         </div>
@@ -136,24 +136,24 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="flex items-center bg-[var(--bg-sidebar)] rounded-full p-0.5 border border-[var(--border-card)]">
             <button
               onClick={() => onToggleMode('standard')}
-              className={`flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium transition-all ${
+              className={`flex items-center space-x-1.5 px-3 py-1 rounded-full text-[12px] font-medium transition-all cursor-pointer ${
                 settings.mode === 'standard'
                   ? 'bg-[var(--bg-surface-hover)] text-[var(--text-primary)] shadow-sm'
                   : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
               }`}
             >
-              <Bot className="w-3 h-3 text-emerald-400" />
+              <Bot className="w-3.5 h-3.5 text-emerald-400" />
               <span>Standard</span>
             </button>
             <button
               onClick={() => onToggleMode('jules')}
-              className={`flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium transition-all ${
+              className={`flex items-center space-x-1.5 px-3 py-1 rounded-full text-[12px] font-medium transition-all cursor-pointer ${
                 settings.mode === 'jules'
                   ? 'bg-[var(--bg-surface-hover)] text-[var(--text-primary)] shadow-sm'
                   : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
               }`}
             >
-              <Sparkles className="w-3 h-3 text-sky-200" />
+              <Sparkles className="w-3.5 h-3.5 text-sky-200" />
               <span>Jules Lead</span>
             </button>
           </div>
@@ -316,21 +316,21 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Antigravity Blue Pill: Jules Mission Control */}
           <button
             onClick={onToggleJulesPanel}
-            className={`flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-medium transition-all ${
+            className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
               isJulesPanelOpen
                 ? 'bg-[var(--bg-surface-hover)] text-[var(--text-primary)] shadow hover:bg-[var(--bg-surface-hover)]'
                 : 'bg-[var(--bg-surface-hover)] text-[#70a6ff] hover:bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)]'
             }`}
           >
             <span>Jules Panel</span>
-            <span className="text-[11px]">→</span>
+            <span className="text-[12px]">→</span>
           </button>
 
           {/* Three Dots Menu */}
           <div className="relative">
             <button
               onClick={() => setIsMenuOpen(!isMenuOpen)}
-              className="p-1.5 rounded hover:bg-[var(--bg-surface-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+              className="p-1.5 rounded hover:bg-[var(--bg-surface-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
               title="More options"
             >
               <MoreVertical className="w-4 h-4" />
@@ -366,10 +366,10 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Open IDE Button (styled exactly like Antigravity's "Open IDE" with blue triangle icon) */}
           <button
             onClick={onOpenSettings}
-            className="flex items-center space-x-1.5 px-2.5 py-1 rounded-md text-xs font-medium text-[var(--text-primary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] transition-colors"
+            className="flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] transition-colors cursor-pointer shadow-xs"
             title="Configure Environment & IDE"
           >
-            <Play className="w-3.5 h-3.5 text-[#1a73e8] fill-[#1a73e8]" />
+            <Play className="w-4 h-4 text-[#1a73e8] fill-[#1a73e8]" />
             <span>Open IDE</span>
           </button>
         </div>

@@ -438,7 +438,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        className={`w-full ${isCenteredLayout ? 'max-w-2xl' : 'max-w-3xl'} bg-[var(--bg-surface-hover)] border ${isDraggingOver ? 'border-[var(--border-subtle)] bg-[var(--bg-surface-hover)]' : 'border-[var(--border-card)]'} rounded-2xl p-3 shadow-2xl transition-all focus-within:border-[var(--border-subtle)] relative`}
+        className={`w-full ${isCenteredLayout ? 'max-w-2xl lg:max-w-3xl' : 'max-w-3xl lg:max-w-4xl'} bg-[var(--bg-surface-hover)] border ${isDraggingOver ? 'border-[var(--border-subtle)] bg-[var(--bg-surface-hover)]' : 'border-[var(--border-card)]'} rounded-2xl p-3.5 shadow-2xl transition-all focus-within:border-[var(--border-subtle)] relative`}
       >
         {taskState === 'paused' && (
           <div className="mb-2.5 px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between text-xs text-amber-200 animate-in fade-in duration-150">
@@ -575,11 +575,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             placeholder={attachments.length > 0 ? "Add instructions or press Enter to analyze attachments..." : "Ask anything, @ to mention, / for actions"}
             disabled={disabled || isStreaming}
             rows={isCenteredLayout ? 2 : 1}
-            className="w-full bg-transparent text-[var(--text-primary)] placeholder-[#6c707a] text-[13px] resize-none focus:outline-none p-1 font-sans leading-relaxed min-h-[44px]"
+            className="w-full bg-transparent text-[var(--text-primary)] placeholder-[#6c707a] text-[14.5px] resize-none focus:outline-none px-1.5 py-1 font-sans leading-relaxed min-h-[48px]"
           />
 
           {/* Bottom Card Controls Row */}
-          <div className="flex items-center justify-between pt-2 mt-1 border-t border-[var(--border-subtle)]/60">
+          <div className="flex items-center justify-between pt-2.5 mt-1 border-t border-[var(--border-subtle)]/60">
             {/* Left Tools: + attachment & Model Selector Pill */}
             <div className="flex items-center space-x-2 relative">
               {/* Context Attachment Button (+) with Popover Menu */}
@@ -587,14 +587,14 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsAttachMenuOpen(!isAttachMenuOpen)}
-                  className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors cursor-pointer ${
+                  className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors cursor-pointer ${
                     isAttachMenuOpen || attachments.length > 0
                       ? 'text-[#38bdf8] bg-[var(--bg-surface-hover)]/10 border border-[var(--border-subtle)]/30'
                       : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)]'
                   }`}
                   title="Attach files, images, or code"
                 >
-                  <Plus className="w-4 h-4" />
+                  <Plus className="w-4.5 h-4.5" />
                 </button>
 
                 {/* Attachment Type Menu Popover */}
@@ -642,11 +642,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
-                  className="flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[11.5px] font-medium text-[var(--text-primary)] hover:text-[var(--text-primary)] bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] transition-colors cursor-pointer"
+                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-[12.5px] font-medium text-[var(--text-primary)] hover:text-[var(--text-primary)] bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] transition-colors cursor-pointer"
                 >
                   <span>{activeModelDisplay}</span>
-                  <ShieldCheck className="w-3.5 h-3.5 text-[#fbbf24]" />
-                  <ChevronDown className="w-3 h-3 text-[var(--text-muted)]" />
+                  <ShieldCheck className="w-4 h-4 text-[#fbbf24]" />
+                  <ChevronDown className="w-3.5 h-3.5 text-[var(--text-muted)]" />
                 </button>
 
                 {isModelDropdownOpen && (
@@ -654,7 +654,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                     className="absolute bottom-9 left-0 w-64 bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-2xl shadow-2xl py-1 text-xs text-[var(--text-primary)] z-50 max-h-64 overflow-y-auto"
                     onMouseLeave={() => setIsModelDropdownOpen(false)}
                   >
-                    <div className="px-3 py-1.5 text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider border-b border-[var(--border-subtle)]">
+                    <div className="px-3 py-1.5 text-[10.5px] font-semibold text-[var(--text-muted)] uppercase tracking-wider border-b border-[var(--border-subtle)]">
                       Available Models
                     </div>
 
@@ -677,18 +677,18 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                             }`}
                           >
                             <div className="flex flex-col min-w-0 pr-2">
-                              <span className="font-medium text-[12px] truncate flex items-center space-x-1.5">
+                              <span className="font-medium text-[12.5px] truncate flex items-center space-x-1.5">
                                 <span>{friendlyName}</span>
                                 {isAuto && <span className="text-[10px] text-[#fbbf24] font-normal">(Smart)</span>}
                               </span>
-                              <span className="text-[10px] text-[var(--text-muted)] font-mono truncate">{m}</span>
+                              <span className="text-[10.5px] text-[var(--text-muted)] font-mono truncate">{m}</span>
                             </div>
 
                             <div className="shrink-0 flex items-center space-x-1">
                               {isAuto ? (
-                                <ShieldCheck className="w-3.5 h-3.5 text-[#fbbf24]" />
+                                <ShieldCheck className="w-4 h-4 text-[#fbbf24]" />
                               ) : isSelected ? (
-                                <Check className="w-3.5 h-3.5 text-[#70a6ff]" />
+                                <Check className="w-4 h-4 text-[#70a6ff]" />
                               ) : null}
                             </div>
                           </button>
@@ -703,7 +703,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               <button
                 type="button"
                 onClick={onToggleAutonomousMode}
-                className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[11.5px] font-medium border transition-all cursor-pointer ${
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-[12.5px] font-medium border transition-all cursor-pointer ${
                   isAutonomousMode
                     ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 shadow-sm shadow-amber-500/10'
                     : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-[var(--bg-surface-hover)] border-[var(--border-subtle)]'
@@ -714,9 +714,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                     : 'Turn ON Autonomous Mode: AI will work autonomously until the task is complete without waiting for user input.'
                 }
               >
-                <Zap className={`w-3.5 h-3.5 ${isAutonomousMode ? 'text-amber-400 fill-amber-400' : 'text-[var(--text-muted)]'}`} />
+                <Zap className={`w-4 h-4 ${isAutonomousMode ? 'text-amber-400 fill-amber-400' : 'text-[var(--text-muted)]'}`} />
                 <span>Autonomous</span>
-                <span className={`text-[9.5px] font-mono px-1 py-0.2 rounded font-semibold ${isAutonomousMode ? 'bg-amber-500/25 text-amber-200' : 'bg-black/20 text-[var(--text-muted)]'}`}>
+                <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded font-semibold ${isAutonomousMode ? 'bg-amber-500/25 text-amber-200' : 'bg-black/20 text-[var(--text-muted)]'}`}>
                   {isAutonomousMode ? 'ON' : 'OFF'}
                 </span>
               </button>
@@ -727,7 +727,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   <button
                     type="button"
                     onClick={() => setIsDutyDropdownOpen(!isDutyDropdownOpen)}
-                    className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[11.5px] font-medium border transition-colors cursor-pointer ${
+                    className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-[12.5px] font-medium border transition-colors cursor-pointer ${
                       activeShift && activeShift.status === 'active'
                         ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 shadow-sm'
                         : isDutyShiftEnabled
@@ -736,7 +736,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                     }`}
                     title="Continuous Long-Running Duty Shift (Jules Lead Mode)"
                   >
-                    <Moon className={`w-3.5 h-3.5 ${activeShift ? 'text-amber-400' : isDutyShiftEnabled ? 'text-indigo-400' : 'text-[var(--text-muted)]'}`} />
+                    <Moon className={`w-4 h-4 ${activeShift ? 'text-amber-400' : isDutyShiftEnabled ? 'text-indigo-400' : 'text-[var(--text-muted)]'}`} />
                     <span>
                       {activeShift && activeShift.status === 'active'
                         ? `Duty: ${remainingTimeDisplay || 'Active'}`
@@ -744,7 +744,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                         ? `Duty (${dutyHours}h)`
                         : 'Duty Shift'}
                     </span>
-                    <ChevronDown className="w-3 h-3 text-[var(--text-muted)]" />
+                    <ChevronDown className="w-3.5 h-3.5 text-[var(--text-muted)]" />
                   </button>
 
                   {isDutyDropdownOpen && (
@@ -853,7 +853,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               <button
                 type="button"
                 onClick={toggleListening}
-                className={`w-7 h-7 rounded-full flex items-center justify-center transition-all cursor-pointer ${
+                className={`w-8 h-8 rounded-full flex items-center justify-center transition-all cursor-pointer ${
                   isListening
                     ? 'bg-red-500/20 text-red-400 ring-2 ring-red-500/40 animate-pulse'
                     : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)]'
@@ -861,9 +861,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 title={isListening ? 'Stop listening (Voice dictation active)' : 'Voice dictation (click to speak)'}
               >
                 {isListening ? (
-                  <MicOff className="w-4 h-4 text-red-400" />
+                  <MicOff className="w-4.5 h-4.5 text-red-400" />
                 ) : (
-                  <Mic className="w-4 h-4" />
+                  <Mic className="w-4.5 h-4.5" />
                 )}
               </button>
 
@@ -871,23 +871,23 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 <button
                   type="button"
                   onClick={onCancel}
-                  className="w-7 h-7 rounded-full flex items-center justify-center bg-red-600 hover:bg-red-500 text-[var(--text-primary)] transition-colors cursor-pointer shadow"
+                  className="w-8 h-8 rounded-full flex items-center justify-center bg-red-600 hover:bg-red-500 text-white transition-colors cursor-pointer shadow-md active:scale-95"
                   title="Stop generating"
                 >
-                  <Square className="w-3 h-3 fill-current" />
+                  <Square className="w-3.5 h-3.5 fill-current" />
                 </button>
               ) : (
                 <button
                   type="submit"
                   disabled={!canSubmit}
-                  className={`w-7 h-7 rounded-full flex items-center justify-center transition-all cursor-pointer ${
+                  className={`w-8 h-8 rounded-full flex items-center justify-center transition-all cursor-pointer ${
                     canSubmit
-                      ? 'bg-[var(--bg-surface-hover)] text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)] shadow-md'
-                      : 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)] cursor-not-allowed'
+                      ? 'bg-[#1a73e8] hover:bg-[#1557b0] text-white shadow-md active:scale-95'
+                      : 'bg-[var(--bg-surface)] text-[var(--text-muted)] cursor-not-allowed opacity-60'
                   }`}
                   title="Send message"
                 >
-                  <ArrowRight className="w-3.5 h-3.5 stroke-[2.5]" />
+                  <ArrowRight className="w-4 h-4 stroke-[2.5]" />
                 </button>
               )}
             </div>
