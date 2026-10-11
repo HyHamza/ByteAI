@@ -408,7 +408,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       {isCenteredLayout && (
         <div className="flex flex-col items-center mb-6">
           <div className="relative mb-3 flex items-center justify-center">
-            <div className="w-16 h-16 rounded-2xl bg-white/[0.04] border border-white/10 p-2.5 flex items-center justify-center shadow-lg backdrop-blur-xs group">
+            <div className="w-24 h-24 rounded-2xl bg-white/[0.04] border border-white/10 p-2.5 flex items-center justify-center shadow-xl backdrop-blur-xs group">
               <img
                 src="/logo-bw.png"
                 alt="Byte"
@@ -416,7 +416,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               />
             </div>
           </div>
-          <h1 className="text-xl font-semibold tracking-tight text-[var(--text-primary)] mb-1">
+          <h1 className="text-2xl font-bold tracking-tight text-[var(--text-primary)] mb-1">
             Byte AI
           </h1>
           <p className="text-xs text-[var(--text-secondary)] mb-4">

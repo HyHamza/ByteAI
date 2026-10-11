@@ -105,8 +105,8 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Left: Antigravity Logo + Sidebar Toggle + History Arrows */}
         <div className="flex items-center space-x-2">
           {/* Byte B&W App Logo */}
-          <div className="w-7 h-7 flex items-center justify-center mr-1 cursor-default" title="Byte AI">
-            <img src="/logo-bw.png" alt="Byte" className="w-5 h-5 object-contain select-none" />
+          <div className="w-8 h-8 flex items-center justify-center mr-1 cursor-default" title="Byte AI">
+            <img src="/logo-bw.png" alt="Byte" className="w-7 h-7 object-contain select-none" />
           </div>
 
           {/* Sidebar Toggle Icon */}
