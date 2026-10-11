@@ -34,10 +34,13 @@ function syncPowerSaveBlocker(enabled: boolean) {
 
 function getAppIcon(): string | undefined {
   const candidates = [
+    path.join(__dirname, '../../build/icon.ico'),
     path.join(__dirname, '../../resources/icon.ico'),
+    path.join(__dirname, '../../dist/icon.png'),
     path.join(__dirname, '../../resources/icon.png'),
     path.join(__dirname, '../../public/icon.png'),
     path.join(__dirname, '../../logo.png'),
+    path.join(process.cwd(), 'build/icon.ico'),
     path.join(process.cwd(), 'resources/icon.ico'),
     path.join(process.cwd(), 'resources/icon.png'),
     path.join(process.cwd(), 'logo.png'),
@@ -116,7 +119,12 @@ function createWindow() {
   if (process.env.VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../../index.html'));
+    const distHtml = path.join(__dirname, '../../dist/index.html');
+    if (fs.existsSync(distHtml)) {
+      mainWindow.loadFile(distHtml);
+    } else {
+      mainWindow.loadFile(path.join(__dirname, '../../index.html'));
+    }
   }
 }
 
