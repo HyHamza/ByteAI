@@ -232,6 +232,7 @@ export interface ElectronAPI {
 
   // Native Clipboard API
   copyImageToClipboard?: (payload: { imageUrl?: string; filePath?: string }) => Promise<boolean>;
+  copyTextToClipboard?: (text: string) => Promise<boolean>;
 }
 
 export interface DutyShiftPhase {

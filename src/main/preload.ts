@@ -138,6 +138,7 @@ const api: ElectronAPI = {
 
   // Native Clipboard API
   copyImageToClipboard: (payload: { imageUrl?: string; filePath?: string }) => ipcRenderer.invoke('clipboard:copy-image', payload),
+  copyTextToClipboard: (text: string) => ipcRenderer.invoke('clipboard:copy-text', { text }),
 };
 
 contextBridge.exposeInMainWorld('electronAPI', api);

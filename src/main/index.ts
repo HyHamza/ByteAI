@@ -442,7 +442,7 @@ function setupIpcHandlers() {
     return AutonomousWatchdog.getInstance().toggleAutonomousMode(sessionId);
   });
 
-  // ── Native OS Clipboard Image Copy
+  // ── Native OS Clipboard Image & Text Copy
   ipcMain.handle('clipboard:copy-image', async (_, { imageUrl, filePath }: { imageUrl?: string; filePath?: string }) => {
     try {
       if (imageUrl && imageUrl.startsWith('data:image')) {
@@ -466,6 +466,19 @@ function setupIpcHandlers() {
       return false;
     } catch (err) {
       console.error('[clipboard:copy-image] Error:', err);
+      return false;
+    }
+  });
+
+  ipcMain.handle('clipboard:copy-text', async (_, { text }: { text: string }) => {
+    try {
+      if (typeof text === 'string') {
+        clipboard.writeText(text);
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error('[clipboard:copy-text] Error:', err);
       return false;
     }
   });

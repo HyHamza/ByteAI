@@ -22,6 +22,7 @@ import {
   Zap
 } from 'lucide-react';
 import type { ChatMessage, ToolExecutionRecord, AppMode, AttachmentFile } from '@/shared/types';
+import { api } from '@/renderer/api';
 import { ToolCard, AntigravityToolStream, AntigravityTrajectoryFlow, TrajectoryItem } from './ToolCard';
 import { ImagePreviewModal } from '../common/ImagePreviewModal';
 
@@ -325,24 +326,59 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
     });
   };
 
-  const copyToClipboard = (text: string, id: string) => {
-    navigator.clipboard.writeText(text);
+  const copyText = async (text: string): Promise<boolean> => {
+    try {
+      if (api.copyTextToClipboard) {
+        const ok = await api.copyTextToClipboard(text);
+        if (ok) return true;
+      }
+    } catch (_) {}
+
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch (_) {}
+
+    try {
+      const el = document.createElement('textarea');
+      el.value = text;
+      el.setAttribute('readonly', '');
+      el.style.position = 'fixed';
+      el.style.left = '-9999px';
+      el.style.top = '-9999px';
+      el.style.opacity = '0';
+      document.body.appendChild(el);
+      el.focus();
+      el.select();
+      const success = document.execCommand('copy');
+      document.body.removeChild(el);
+      return success;
+    } catch (_) {
+      return false;
+    }
+  };
+
+  const copyToClipboard = async (text: string, id: string) => {
+    await copyText(text);
     setCopiedCodeId(id);
     setTimeout(() => setCopiedCodeId(null), 2000);
   };
 
-  const handleCopyFullChat = () => {
+  const handleCopyFullChat = async () => {
     if (messages.length === 0) return;
     const fullText = messages
+      .filter((m) => !m.isSystemNotification)
       .map((m) => {
         const roleName = m.role === 'user' ? 'USER' : 'BYTE';
-        const time = new Date(m.timestamp).toLocaleTimeString();
-        let section = `### ${roleName} [${time}]\n${m.content || ''}`;
+        const time = new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        let section = `### ${roleName} [${time}]\n\n${m.content || ''}`;
         if (m.toolCalls && m.toolCalls.length > 0) {
           const toolCallsFormatted = m.toolCalls
             .map((tc) => {
               const argStr = tc.args ? JSON.stringify(tc.args, null, 2) : '{}';
-              const outStr = tc.output || '(no output)';
+              const outStr = tc.output ? (tc.output.length > 600 ? tc.output.slice(0, 600) + '...' : tc.output) : '(no output)';
               return `\n> **Tool Call:** \`${tc.toolName}\` [Status: ${tc.status}]\n> **Args:**\n\`\`\`json\n${argStr}\n\`\`\`\n> **Output:**\n\`\`\`\n${outStr}\n\`\`\``;
             })
             .join('\n');
@@ -352,9 +388,11 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
       })
       .join('\n\n---\n\n');
 
-    navigator.clipboard.writeText(fullText);
-    setCopiedFullChat(true);
-    setTimeout(() => setCopiedFullChat(false), 2000);
+    const ok = await copyText(fullText);
+    if (ok) {
+      setCopiedFullChat(true);
+      setTimeout(() => setCopiedFullChat(false), 2000);
+    }
   };
 
   return (

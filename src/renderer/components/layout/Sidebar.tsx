@@ -1,8 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
   Plus, 
-  History, 
-  Clock, 
   Folder, 
   FolderOpen,
   ChevronDown, 
@@ -339,18 +337,6 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
             <Plus className="w-4 h-4 text-[var(--text-secondary)]" />
             <span>New Conversation</span>
           </button>
-        </div>
-
-        {/* Navigation section: Conversation History & Scheduled Tasks */}
-        <div className="px-2 py-1 space-y-0.5">
-          <div className="flex items-center space-x-2.5 px-3 py-2 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] transition-colors cursor-pointer text-[13px]">
-            <History className="w-4.5 h-4.5 text-[var(--text-secondary)]" />
-            <span>Conversation History</span>
-          </div>
-          <div className="flex items-center space-x-2.5 px-3 py-2 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] transition-colors cursor-pointer text-[13px]">
-            <Clock className="w-4.5 h-4.5 text-[var(--text-secondary)]" />
-            <span>Scheduled Tasks</span>
-          </div>
         </div>
 
         {/* Projects Section Header */}

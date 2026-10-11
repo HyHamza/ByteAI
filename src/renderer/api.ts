@@ -195,6 +195,15 @@ const mockAPI: ElectronAPI = {
     return false;
   },
   onAutonomousModeUpdated: () => () => {},
+  copyTextToClipboard: async (text: string) => {
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch (_) {}
+    return false;
+  },
 };
 
 export const api: ElectronAPI =
