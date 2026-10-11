@@ -319,12 +319,18 @@ Formulate Phase ${active.phasesCompleted.length + 1} specification to continue t
     // Auto-finalize and merge all accumulated commits when leaving the shift!
     const lastPhase = shift.phasesCompleted[shift.phasesCompleted.length - 1];
     const julesId = shift.currentJulesSessionId || lastPhase?.sessionId;
+    let mergeOutcome = 'No Jules tasks recorded to merge.';
+    let isMergeSuccessful = false;
+
     if (julesId) {
       try {
         const { syncAndMergeJulesSession } = await import('../git/merger');
         const chat = store.getSession(shift.sessionId);
-        await syncAndMergeJulesSession(julesId, chat?.workspacePath || undefined);
+        const result = await syncAndMergeJulesSession(julesId, chat?.workspacePath || undefined);
+        mergeOutcome = result.message;
+        isMergeSuccessful = result.success;
       } catch (err: any) {
+        mergeOutcome = `Merge error: ${err?.message || err}`;
         console.warn(`[DutyManager] Final shift merge error:`, err?.message || err);
       }
     }
@@ -333,19 +339,20 @@ Formulate Phase ${active.phasesCompleted.length + 1} specification to continue t
       .map((p, idx) => `${idx + 1}. **${p.title}**${p.prUrl ? ` ([PR](${p.prUrl}))` : ''}`)
       .join('\n');
 
-    const handoverPrompt = `[DUTY SHIFT COMPLETED — ${shift.totalHours} HOURS COMPLETED & ALL COMMITS MERGED]
+    const handoverPrompt = `[DUTY SHIFT CONCLUDED — ${shift.totalHours} HOURS COMPLETED]
 Original Duty Mission: "${shift.missionPrompt}"
 
-All Completed Phases in This Shift:
+Completed Phases in This Shift:
 ${phasesLog || '(No completed PRs recorded)'}
 
-AUTONOMOUS LEAD DIRECTIVE FOR BYTE:
-Your scheduled duty hours have concluded and all commits have been merged into the local workspace and remote repository!
-Generate a comprehensive, beautifully structured **Senior Engineer Shift Handover Report** for the user summarizing:
-1. Executive Summary of work accomplished across the entire duty shift.
-2. All commits and features/bug fixes deployed.
-3. Key architectural decisions and enhancements.
-4. Next recommended steps for the user.`;
+Local Merge Status:
+${mergeOutcome}
+
+CRITICAL DIRECTIVE FOR SHIFT HANDOVER REPORT:
+1. TRUTHFUL REPORTING ONLY: You MUST report the actual, empirical status of the workspace based on the merge status above.
+2. ${isMergeSuccessful ? 'Changes were successfully merged locally. Summarize the verified changes.' : 'CRITICAL ENFORCEMENT: Local merge was NOT successful or zero code changes were merged. You are STRICTLY FORBIDDEN from claiming changes are merged, that files were fixed, or that the mission is 100% complete. State the exact merge status honestly.'}
+3. ZERO TEST FABRICATION: Do NOT invent or claim test metrics (e.g., claiming "75 unit tests passed") unless actual test commands were executed and verified in terminal outputs.
+4. Provide an honest, transparent Senior Lead Engineer Shift Handover Report reflecting the true state of the repository.`;
 
     AgentOrchestrator.getInstance().runAutonomousTurn(shift.sessionId, handoverPrompt, undefined, true).catch((err) => {
       console.error('[DutyManager] Error triggering handover report:', err);

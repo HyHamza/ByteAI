@@ -811,6 +811,9 @@ export async function executeToolCall(
           return `Error: No Jules session specified or found in active chat to finalize and merge.`;
         }
         const result = await syncAndMergeJulesSession(targetId, workspaceDir);
+        if (!result.success) {
+          return `CRITICAL_ERROR: ${result.message}\nENFORCEMENT NOTICE: Zero code changes were merged or committed locally. You are strictly forbidden from reporting to the user that changes are merged, completed, or that tests passed. Report this merge failure honestly.`;
+        }
         return result.message;
       }
 

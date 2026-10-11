@@ -51,6 +51,39 @@ export async function syncAndMergeJulesSession(
     }
   }
 
+  // Fallback: If not found on session.outputs, query activity artifacts from Google Cloud
+  if (!gitPatch && !prNumber && !headBranch) {
+    try {
+      const activities = await client.listActivities(sessionId);
+      if (Array.isArray(activities)) {
+        // Iterate backwards from latest activity
+        for (let i = activities.length - 1; i >= 0; i--) {
+          const act = activities[i];
+          if (Array.isArray(act.artifacts)) {
+            for (const art of act.artifacts) {
+              if (art.changeSet?.gitPatch?.unidiffPatch && !gitPatch) {
+                gitPatch = art.changeSet.gitPatch;
+              }
+              if (art.pullRequest && !prNumber && !headBranch) {
+                prUrl = art.pullRequest.url || prUrl;
+                prNumber = art.pullRequest.number || prNumber;
+                headBranch = art.pullRequest.headBranch || art.pullRequest.branch || art.pullRequest.headRef || headBranch;
+              }
+            }
+          }
+          if (act.pullRequest && !prNumber && !headBranch) {
+            prUrl = act.pullRequest.url || prUrl;
+            prNumber = act.pullRequest.number || prNumber;
+            headBranch = act.pullRequest.headBranch || act.pullRequest.branch || act.pullRequest.headRef || headBranch;
+          }
+          if (gitPatch) break;
+        }
+      }
+    } catch (actErr: any) {
+      console.warn(`[merger] Error inspecting activity artifacts for session ${sessionId}:`, actErr?.message);
+    }
+  }
+
   if (!prNumber && prUrl) {
     const match = prUrl.match(/\/pull\/(\d+)/);
     if (match) prNumber = parseInt(match[1], 10);
@@ -245,13 +278,17 @@ export async function syncAndMergeJulesSession(
         }
 
         let latestCommit = '';
+        let modifiedFilesList = '';
         try {
           latestCommit = runGit('git rev-parse --short HEAD');
+          const files = runGit(`git diff-tree --no-commit-id --name-only -r ${latestCommit}`);
+          const stat = runGit(`git diff --stat HEAD~1..HEAD`);
+          modifiedFilesList = `\n[VERIFIED COMMITTED FILES]:\n${files}\n[GIT DIFF STAT]:\n${stat}`;
         } catch (_) {}
 
         return {
           success: true,
-          message: `Successfully applied Jules patch for "${session.title || sessionId}", committed locally as ${latestCommit}, ${pushMessage}! Both local workspace and GitHub are fully synchronized.`,
+          message: `Successfully applied Jules patch for "${session.title || sessionId}" (committed locally as ${latestCommit}), ${pushMessage}!${modifiedFilesList}`,
           branch: currentBranch,
           commitHash: latestCommit,
         };
@@ -264,7 +301,7 @@ export async function syncAndMergeJulesSession(
         }
         return {
           success: false,
-          message: `Failed to apply Jules git patch cleanly to local repository: ${applyError}`,
+          message: `MERGE_FAILED: Failed to apply Jules git patch cleanly to local repository: ${applyError}. ZERO files were modified or committed locally.`,
         };
       }
       console.warn(`Patch application did not succeed (${applyError}), falling back to remote PR/branch merge...`);
@@ -345,13 +382,17 @@ export async function syncAndMergeJulesSession(
         }
 
         let latestCommit = '';
+        let modifiedFilesList = '';
         try {
           latestCommit = runGit('git rev-parse --short HEAD');
+          const files = runGit(`git diff-tree --no-commit-id --name-only -r ${latestCommit}`);
+          const stat = runGit(`git diff --stat HEAD~1..HEAD`);
+          modifiedFilesList = `\n[VERIFIED COMMITTED FILES]:\n${files}\n[GIT DIFF STAT]:\n${stat}`;
         } catch (_) {}
 
         return {
           success: true,
-          message: `Successfully pulled and merged Jules changes (${prUrl || `PR #${prNumber}`}) into local '${currentBranch}' ${pushMessage}! Both local and remote repositories are now fully synchronized (HEAD at ${latestCommit}).`,
+          message: `Successfully pulled and merged Jules changes (${prUrl || `PR #${prNumber}`}) into local '${currentBranch}' ${pushMessage}! Both local and remote repositories are now fully synchronized (HEAD at ${latestCommit}).${modifiedFilesList}`,
           branch: currentBranch,
           prNumber,
           commitHash: latestCommit,
@@ -365,12 +406,12 @@ export async function syncAndMergeJulesSession(
 
     return {
       success: false,
-      message: `Could not find a Git patch, PR ref, or remote head branch in Jules session ${sessionId} outputs to merge.`,
+      message: `MERGE_FAILED: Could not find any Git patch, PR ref, or remote branch in Jules session ${sessionId} (checked both session outputs and activity artifacts). ZERO files were modified or committed locally.`,
     };
   } catch (err: any) {
     return {
       success: false,
-      message: `Error syncing and merging Jules changes: ${err.message || String(err)}`,
+      message: `MERGE_FAILED: Error syncing and merging Jules changes: ${err.message || String(err)}. ZERO files were modified or committed locally.`,
     };
   }
 }
