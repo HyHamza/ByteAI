@@ -292,6 +292,10 @@ export class JulesPoller {
       });
     } else if (!chatSession.julesSessionId) {
       chatSession.julesSessionId = s.id;
+      chatSession.taskState = 'awaiting_feedback';
+      store.saveSession(chatSession);
+    } else {
+      chatSession.taskState = 'awaiting_feedback';
       store.saveSession(chatSession);
     }
 

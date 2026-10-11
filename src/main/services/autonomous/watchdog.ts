@@ -81,8 +81,16 @@ export class AutonomousWatchdog {
       // Only monitor sessions where Autonomous Mode is enabled
       if (!session.autonomousMode) continue;
 
-      // Skip if task has been explicitly completed
-      if (session.taskState === 'completed') continue;
+      // Skip if task has been completed, paused, cancelled, failed, or is idle
+      if (
+        session.taskState === 'completed' ||
+        session.taskState === 'paused' ||
+        session.taskState === 'cancelled' ||
+        session.taskState === 'failed' ||
+        session.taskState === 'idle'
+      ) {
+        continue;
+      }
 
       const sessionId = session.id;
 
@@ -139,30 +147,50 @@ export class AutonomousWatchdog {
         this.lastNudgeMap.set(sessionId, now);
         this.lastActivityMap.set(sessionId, now);
 
-        console.log(`[AutonomousWatchdog] Inactivity (> 2m) detected on autonomous session ${sessionId}. Waking up Byte...`);
+        console.log(`[AutonomousWatchdog] Inactivity (> 2m) detected on autonomous session ${sessionId} (taskState: ${session.taskState || 'unspecified'}). Waking up Byte...`);
 
         const isJulesMode = session.mode === 'jules';
 
-        const prompt = `[AUTONOMOUS MODE INACTIVITY WATCHDOG: TASK NOT COMPLETED]
+        // Case A: The agent is waiting for user feedback, but the user has been away for > 2 minutes
+        if (session.taskState === 'awaiting_feedback') {
+          const prompt = `[AUTONOMOUS MODE: USER UNAVAILABLE (> 2 MINUTES) - MAKE EXECUTIVE DECISION]
+Task State: awaiting_feedback
 Autonomous Mode is ACTIVE for this task.
+System Notice: You previously requested user feedback or presented options, but the user is currently away (> 2 minutes).
+
+CRITICAL DIRECTIVE FOR SENIOR LEAD ENGINEER:
+In Autonomous Mode, you have full ownership. You must NOT remain blocked or idle waiting indefinitely for user responses.
+1. Review the question, proposal, or architectural choices you previously presented.
+2. Make the optimal, production-grade engineering decision yourself.
+3. Call 'set_task_state' with state: 'in_progress', summary: "<Your chosen decision>".
+4. Proceed immediately with executing the implementation or next steps!`;
+
+          orchestrator.runAutonomousTurn(sessionId, prompt, undefined, true).catch(console.error);
+          continue;
+        }
+
+        // Case B: General inactivity on an in_progress task
+        const prompt = `[AUTONOMOUS MODE INACTIVITY WATCHDOG: TASK NOT COMPLETED]
+Autonomous Mode is ACTIVE for this task (Current state: ${session.taskState || 'in_progress'}).
 System Alert: Both Byte and Jules have been inactive for over 2 minutes without completing the user's task.
 
-CRITICAL DIRECTIVE:
-In Autonomous Mode, the user is away and expects you to drive this task to 100% completion autonomously.
-The user is NOT available for next instructions, answers, or step-by-step approvals.
-Think carefully as a Senior Lead Software Engineer, make the technical decisions yourself, resolve any ambiguities, and continue working.
+CRITICAL DIRECTIVES:
+1. IF ALL REQUESTED WORK IS 100% COMPLETE AND VERIFIED:
+   You MUST call 'set_task_state' with state: 'completed' NOW! This permanently confirms completion and stops watchdog alerts.
+2. IF WORK REMAINS:
+   The user is away in Autonomous Mode and expects you to drive the task forward. Make the necessary technical decisions yourself and invoke your tools to continue!
 
 Active Mode: ${isJulesMode ? 'Jules Lead Mode' : 'Standard Mode'}
 
 ${isJulesMode ? `Jules Mode Instructions:
-${isJulesAwaitingFeedback ? `- CRITICAL: Jules is PAUSED waiting for your feedback in Google Cloud on session (${julesSessionId})! You must inspect its changes and immediately call 'jules_reply_question' with your approval/direction.` : `- Check the status of your Jules task (${julesSessionId || 'none'}).
-- If completed, inspect diffs and call 'jules_finalize_and_merge' to merge changes into the local workspace.
-- If more work is required, call 'jules_continue_session' or 'jules_create_task' with the next specification.`}` : `Standard Mode Instructions:
-- Review the user's objective and inspect the codebase.
-- If you stopped because of an error or ambiguity, investigate the code, make the necessary modifications using 'replace_file_content' or 'write_file', and verify with 'run_terminal_command'.
-- Do not stop to ask questions. Make sound architectural decisions and implement them.`}
+${isJulesAwaitingFeedback ? `- CRITICAL: Jules is PAUSED waiting for your feedback in Google Cloud on session (${julesSessionId})! Inspect its proposal and immediately call 'jules_reply_question' with your approval/direction.` : `- If Jules finished work, inspect and call 'jules_finalize_and_merge' to merge changes into the local workspace.
+- If more work is required, call 'jules_continue_session' or 'jules_create_task' with the next specification.
+- If all work is verified and complete, call 'set_task_state' with state: 'completed'.`}` : `Standard Mode Instructions:
+- Implement any remaining code using 'replace_file_content' or 'write_file'.
+- Test and verify using 'run_terminal_command'.
+- When complete, call 'set_task_state' with state: 'completed'.`}
 
-Execute your tools NOW to continue making progress!`;
+Execute your tools NOW to continue!`;
 
         orchestrator.runAutonomousTurn(sessionId, prompt, undefined, true).catch(console.error);
       }

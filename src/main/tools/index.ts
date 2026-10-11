@@ -1,7 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import { exec } from 'child_process';
-import type { AppMode } from '../../shared/types';
+import { BrowserWindow } from 'electron';
+import type { AppMode, TaskState } from '../../shared/types';
 import type { LLMToolDefinition } from '../services/llm/client';
 import { JulesClient } from '../services/jules/client';
 import { JulesPoller } from '../services/jules/poller';
@@ -10,6 +11,7 @@ import { detectGitRepo } from '../services/git/detector';
 import { syncAndMergeJulesSession } from '../services/git/merger';
 import { TaskManager } from '../services/task/manager';
 import { DutyManager } from '../services/duty/manager';
+import { AutonomousWatchdog } from '../services/autonomous/watchdog';
 
 // ─── Standard Tool Definitions (Antigravity Mode) ──────────────────────────────
 export const STANDARD_TOOL_DEFS: LLMToolDefinition[] = [
@@ -312,6 +314,28 @@ export const STANDARD_TOOL_DEFS: LLMToolDefinition[] = [
         properties: {
           shift_id: { type: 'string', description: 'Optional ID of the duty shift to stop' },
         },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'set_task_state',
+      description: 'Update the progress/completion state of the current chat task. Call this tool to keep the system and user informed of where the task stands. In Autonomous Mode, setting state to "completed" permanently stops the inactivity watchdog from nudging you. Setting state to "awaiting_feedback" informs the system you are waiting for user direction (if the user is away in Autonomous Mode, the system will wake you up after 2 minutes to make the decision yourself).',
+      parameters: {
+        type: 'object',
+        properties: {
+          state: {
+            type: 'string',
+            enum: ['in_progress', 'waiting_jules', 'awaiting_feedback', 'completed', 'failed'],
+            description: 'The new task state: "in_progress" (actively working), "waiting_jules" (waiting for cloud Jules worker), "awaiting_feedback" (waiting for user answer/decision), "completed" (task is 100% finished and verified), "failed" (task could not be completed).',
+          },
+          summary: {
+            type: 'string',
+            description: 'A brief 1-line explanation of the state update (e.g. "Completed all sync investigations and merged report", "Waiting for user input on database credentials")',
+          },
+        },
+        required: ['state'],
       },
     },
   },
@@ -704,8 +728,14 @@ export async function executeToolCall(
         // Ensure this chat session references this target Jules session
         if (sessionId) {
           try {
-            store.updateSession(sessionId, { julesSessionId: targetJulesId });
+            store.updateSession(sessionId, { julesSessionId: targetJulesId, taskState: 'waiting_jules' });
             DutyManager.getInstance().recordTaskDispatched(sessionId, targetJulesId);
+            const windows = BrowserWindow.getAllWindows();
+            for (const win of windows) {
+              if (!win.isDestroyed()) {
+                win.webContents.send('sessions:updated', store.getSessionSummaries());
+              }
+            }
           } catch (_) {}
         }
 
@@ -749,8 +779,14 @@ export async function executeToolCall(
         // Automatically associate Jules Session ID with this Chat Session
         if (sessionId) {
           try {
-            store.updateSession(sessionId, { julesSessionId: res.sessionId });
+            store.updateSession(sessionId, { julesSessionId: res.sessionId, taskState: 'waiting_jules' });
             DutyManager.getInstance().recordTaskDispatched(sessionId, res.sessionId);
+            const windows = BrowserWindow.getAllWindows();
+            for (const win of windows) {
+              if (!win.isDestroyed()) {
+                win.webContents.send('sessions:updated', store.getSessionSummaries());
+              }
+            }
           } catch (_) {}
         }
 
@@ -799,6 +835,15 @@ export async function executeToolCall(
         const result = await syncAndMergeJulesSession(targetId, workspaceDir);
         if (!result.success) {
           return `CRITICAL_ERROR: ${result.message}\nENFORCEMENT NOTICE: Zero code changes were merged or committed locally. You are strictly forbidden from reporting to the user that changes are merged, completed, or that tests passed. Report this merge failure honestly.`;
+        }
+        if (sessionId) {
+          store.updateSession(sessionId, { taskState: 'completed' });
+          const windows = BrowserWindow.getAllWindows();
+          for (const win of windows) {
+            if (!win.isDestroyed()) {
+              win.webContents.send('sessions:updated', store.getSessionSummaries());
+            }
+          }
         }
         return result.message;
       }
@@ -853,6 +898,23 @@ ${recent || '(No activity recorded yet)'}`;
         if (!active) return 'No active duty shift found to stop.';
         dutyManager.stopShift(active.id);
         return `Duty Shift ${active.id} stopped successfully.`;
+      }
+
+      case 'set_task_state': {
+        const store = DataStore.getInstance();
+        const targetState = args.state as TaskState;
+        if (sessionId) {
+          store.updateSession(sessionId, { taskState: targetState });
+          AutonomousWatchdog.getInstance().recordActivity(sessionId);
+          // Broadcast session update to all windows
+          const windows = BrowserWindow.getAllWindows();
+          for (const win of windows) {
+            if (!win.isDestroyed()) {
+              win.webContents.send('sessions:updated', store.getSessionSummaries());
+            }
+          }
+        }
+        return `Task state updated to "${targetState}"${args.summary ? `: ${args.summary}` : ''}.`;
       }
 
       default:

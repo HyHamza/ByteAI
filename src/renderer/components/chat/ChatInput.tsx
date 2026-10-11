@@ -20,7 +20,7 @@ import {
   Clock,
   Zap
 } from 'lucide-react';
-import type { AppMode, AttachmentFile } from '@/shared/types';
+import type { AppMode, AttachmentFile, TaskState } from '@/shared/types';
 import { api } from '../../api';
 import { useVoiceDictation } from '../../hooks/useVoiceDictation';
 import { useDutyShift } from '../../hooks/useDutyShift';
@@ -43,6 +43,8 @@ interface ChatInputProps {
   sessionId?: string;
   isAutonomousMode?: boolean;
   onToggleAutonomousMode?: () => void;
+  taskState?: TaskState;
+  onUpdateTaskState?: (state: TaskState) => void;
 }
 
 function formatModelDisplayName(modelId: string): string {
@@ -93,6 +95,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   sessionId,
   isAutonomousMode = false,
   onToggleAutonomousMode,
+  taskState,
+  onUpdateTaskState,
 }) => {
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<AttachmentFile[]>([]);
@@ -164,6 +168,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     });
 
     onSendMessage(submittedText, processedAttachments);
+    if (taskState === 'paused' || taskState === 'completed') {
+      onUpdateTaskState?.('in_progress');
+    }
     setText('');
     setAttachments([]);
     setIsDutyShiftEnabled(false);
@@ -416,6 +423,24 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         onDrop={handleDrop}
         className={`w-full ${isCenteredLayout ? 'max-w-2xl' : 'max-w-3xl'} bg-[var(--bg-surface-hover)] border ${isDraggingOver ? 'border-[var(--border-subtle)] bg-[var(--bg-surface-hover)]' : 'border-[var(--border-card)]'} rounded-2xl p-3 shadow-2xl transition-all focus-within:border-[var(--border-subtle)] relative`}
       >
+        {taskState === 'paused' && (
+          <div className="mb-2.5 px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between text-xs text-amber-200 animate-in fade-in duration-150">
+            <div className="flex items-center space-x-2">
+              <span className="w-2 h-2 rounded-full bg-amber-400" />
+              <span><strong>Task is Paused.</strong> Autonomous supervision and background turns are on hold.</span>
+            </div>
+            {onUpdateTaskState && (
+              <button
+                type="button"
+                onClick={() => onUpdateTaskState('in_progress')}
+                className="px-2.5 py-1 rounded-md bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-500/40 text-[11px] font-medium transition-colors cursor-pointer"
+              >
+                Resume Task
+              </button>
+            )}
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="flex flex-col">
           {/* Attachment Preview Chips */}
           {attachments.length > 0 && (

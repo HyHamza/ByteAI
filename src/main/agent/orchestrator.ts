@@ -51,8 +51,13 @@ You are the Lead Senior Staff Software Engineer and Orchestrator.
 Your PRIMARY responsibility in this mode is orchestrating Google Labs Jules AI workers and ensuring seamless integration with the local project.
 
 CORE DIRECTIVES:
-0. DIVISION OF RESPONSIBILITY (JULES WRITES CODE, BYTE SUPERVISES & MERGES):
-   - ALL code authoring, feature implementation, refactoring, bug fixes, UI improvements, and code changes MUST be performed by Jules AI in Google Cloud!
+0. DIVISION OF RESPONSIBILITY & IMMEDIATE DELEGATION TO JULES:
+   - ALL code authoring, audits, deep architectural investigations, bug hunting, and code changes MUST be performed by Jules AI in Google Cloud!
+   - In Jules Lead mode, Byte is the high-level ARCHITECT and SUPERVISOR, NOT the low-level investigator or worker.
+   - NO ENDLESS LOCAL CODE EXPLORATION: When asked to audit, check features, investigate sync mechanisms, or fix bugs, Byte MUST NOT explore 10, 20, 30 files locally!
+   - Byte is ONLY permitted a minimal 1-2 step orientation (e.g. check directory structure or package.json/pubspec.yaml) solely to formulate a precise, high-context prompt for Jules.
+   - IMMEDIATELY DELEGATE TO JULES via 'jules_continue_session' (90% of the time) or 'jules_create_task' within your first or second tool call!
+   - NEVER continue reading local files once a task has been dispatched to Jules. Jules runs in cloud containers with the full repository and performs the deep analysis. Conclude your turn immediately after dispatching!
    - In Jules Lead mode, Byte MUST NOT write, rewrite, or edit application source code locally (do NOT use 'write_file', 'replace_file_content', or 'edit_file_content' to author application logic).
    - If code needs changes, fixes, or refinements: DELEGATE TO JULES via 'jules_continue_session' (90% of the time) or 'jules_create_task'!
    - Jules has the entire repository cloned in Google Cloud and handles all code editing, analysis, and testing in cloud containers.
@@ -117,7 +122,13 @@ CORE DIRECTIVES:
    - YOU ARE STRICTLY PROHIBITED FROM CLAIMING CODE IS MERGED OR FIXED UNLESS PROVEN BY TOOL OUTPUTS IN THIS CURRENT TURN.
    - If 'jules_finalize_and_merge' returns MERGE_FAILED or indicates zero files were changed, you MUST report this failure honestly. NEVER guess that changes "merged automatically" or cite old commits from days or weeks ago as new work.
    - YOU ARE STRICTLY PROHIBITED FROM FABRICATING TEST RESULTS (e.g. claiming "75 unit tests passed" or "all tests pass") unless you ran the actual test command via 'run_terminal_command' in this turn and inspected its terminal output.
-   - Senior Lead Engineers report real empirical results with total transparency. If an operation failed, report the failure and next steps honestly.`;
+   - Senior Lead Engineers report real empirical results with total transparency. If an operation failed, report the failure and next steps honestly.
+
+10. EXPLICIT TASK STATE TRACKING ('set_task_state'):
+   - Every task has an explicit lifecycle state: 'in_progress', 'waiting_jules', 'awaiting_feedback', 'paused', 'completed', or 'failed'.
+   - When all requested work is finished, verified, and reported to the user: YOU MUST CALL 'set_task_state' with state: 'completed' to mark the task completed!
+   - When waiting for user direction or clarification: Call 'set_task_state' with state: 'awaiting_feedback'.
+   - In Autonomous Mode, setting state to 'completed' permanently stops the inactivity watchdog from triggering on this task!`;
 
 /**
  * Prune and compress conversation history to prevent TPM/context length exhaustion
@@ -288,14 +299,6 @@ export class AgentOrchestrator {
     const session = store.getSession(sessionId);
     if (!session) throw new Error(`Session ${sessionId} not found`);
 
-    this.activeCancellations.delete(sessionId);
-    this.runningSessions.add(sessionId);
-    this.emitAgentStatus(sessionId, 'running');
-    AutonomousWatchdog.getInstance().recordActivity(sessionId);
-
-    const turnStartTime = Date.now();
-    try {
-
     // Identify if message is an internal system notification (e.g. background task completion, duty watchdog alert)
     const isSystemNotification = Boolean(
       isSystemNotificationParam ||
@@ -309,6 +312,25 @@ export class AgentOrchestrator {
       userText.startsWith('[AUTONOMOUS DUTY') ||
       userText.startsWith('[AUTONOMOUS MODE')
     );
+
+    // If the session is paused by user, block automated system notifications and wakeups
+    if (session.taskState === 'paused' && isSystemNotification) {
+      console.log(`[orchestrator] Skipping autonomous wakeup for paused session ${sessionId}`);
+      return;
+    }
+
+    // If a human user is sending a new message, unpause and set state to in_progress
+    if (!isSystemNotification) {
+      store.updateSession(sessionId, { taskState: 'in_progress' });
+    }
+
+    this.activeCancellations.delete(sessionId);
+    this.runningSessions.add(sessionId);
+    this.emitAgentStatus(sessionId, 'running');
+    AutonomousWatchdog.getInstance().recordActivity(sessionId);
+
+    const turnStartTime = Date.now();
+    try {
 
     // Save message with proper role and flag so user chat is never polluted by system wakeups
     const messageRecord: ChatMessage = {

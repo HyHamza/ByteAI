@@ -75,6 +75,11 @@ function getSessionTaskState(
   state: TaskState;
   julesSession?: JulesSessionSummary;
 } {
+  // Respect user-specified or explicit task states (paused, completed, failed, cancelled)
+  if (s.taskState === 'paused' || s.taskState === 'completed' || s.taskState === 'failed' || s.taskState === 'cancelled') {
+    return { state: s.taskState };
+  }
+
   // O(1) Fast lookup by explicit Jules session ID
   if (s.julesSessionId) {
     const matched = julesMap.get(s.julesSessionId);
@@ -102,6 +107,10 @@ function getSessionTaskState(
 
   if (runningAgentSessionIds.has(s.id)) {
     return { state: 'running_agent' };
+  }
+
+  if (s.taskState) {
+    return { state: s.taskState };
   }
 
   return { state: 'idle' };
@@ -521,6 +530,9 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
                           const isAgentRunning = taskInfo.state === 'running_agent';
                           const isWaitingJules = taskInfo.state === 'waiting_jules';
                           const isFeedback = taskInfo.state === 'awaiting_feedback';
+                          const isPaused = taskInfo.state === 'paused';
+                          const isCompleted = taskInfo.state === 'completed';
+                          const isFailed = taskInfo.state === 'failed';
 
                           let itemStyle = 'text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] border border-transparent';
                           if (isActive) {
@@ -538,6 +550,14 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
                             itemStyle = isActive
                               ? 'bg-[var(--bg-surface-hover)] text-[var(--text-primary)] font-medium border border-amber-500/50 shadow-sm shadow-amber-950/30'
                               : 'bg-[var(--bg-surface-hover)] text-amber-200 hover:bg-[var(--bg-surface-hover)] border border-amber-600/40';
+                          } else if (isPaused) {
+                            itemStyle = isActive
+                              ? 'bg-[var(--bg-surface-hover)] text-[var(--text-primary)] font-medium border border-amber-500/40 shadow-sm'
+                              : 'bg-[var(--bg-surface-hover)] text-amber-300/80 hover:bg-[var(--bg-surface-hover)] border border-amber-600/30';
+                          } else if (isCompleted) {
+                            itemStyle = isActive
+                              ? 'bg-[var(--bg-surface-hover)] text-[var(--text-primary)] font-medium border border-emerald-500/40 shadow-sm'
+                              : 'text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] border border-transparent';
                           }
 
                           return (
@@ -565,6 +585,21 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
                                   <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-amber-950/80 border border-amber-700/60 text-[9px] font-semibold text-amber-300">
                                     <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-bounce" />
                                     <span>Needs Input</span>
+                                  </div>
+                                ) : isPaused ? (
+                                  <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-amber-950/70 border border-amber-600/50 text-[9px] font-semibold text-amber-300">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                                    <span>Paused</span>
+                                  </div>
+                                ) : isCompleted ? (
+                                  <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-emerald-950/60 border border-emerald-600/40 text-[9px] font-semibold text-emerald-300">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                                    <span>Done</span>
+                                  </div>
+                                ) : isFailed ? (
+                                  <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-rose-950/70 border border-rose-600/50 text-[9px] font-semibold text-rose-300">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
+                                    <span>Failed</span>
                                   </div>
                                 ) : (
                                   <span className="text-[10px] text-[var(--text-muted)] group-hover:hidden">

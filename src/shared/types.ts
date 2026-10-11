@@ -70,7 +70,16 @@ export interface ToolExecutionRecord {
   thinking?: string;
 }
 
-export type TaskState = 'idle' | 'running_agent' | 'waiting_jules' | 'awaiting_feedback' | 'completed';
+export type TaskState =
+  | 'idle'
+  | 'in_progress'
+  | 'running_agent'
+  | 'waiting_jules'
+  | 'awaiting_feedback'
+  | 'paused'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
 
 export interface ChatSession {
   id: string;

@@ -7,7 +7,7 @@ import { ChatStream } from './components/chat/ChatStream';
 import { ChatInput } from './components/chat/ChatInput';
 import { SettingsModal } from './components/settings/SettingsModal';
 import { api } from './api';
-import type { AppSettings, ChatSession, ChatMessage, AppMode, StreamTokenPayload, ToolCallPayload, ToolExecutionRecord, JulesSessionSummary, ProjectInfo, AttachmentFile } from '@/shared/types';
+import type { AppSettings, ChatSession, ChatMessage, AppMode, TaskState, StreamTokenPayload, ToolCallPayload, ToolExecutionRecord, JulesSessionSummary, ProjectInfo, AttachmentFile } from '@/shared/types';
 
 const DEFAULT_SETTINGS: AppSettings = {
   mode: 'standard',
@@ -427,6 +427,18 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleUpdateTaskState = async (state: TaskState) => {
+    if (!activeSessionId) return;
+    try {
+      await api.updateSession(activeSessionId, { taskState: state });
+      setSessions((prev) =>
+        prev.map((s) => (s.id === activeSessionId ? { ...s, taskState: state } : s))
+      );
+    } catch (err) {
+      console.error('Failed to update task state:', err);
+    }
+  };
+
   const handleChangeModel = async (model: string, isAuto: boolean) => {
     setSettings((prev) => ({ ...prev, selectedModel: model, isAutoModel: isAuto }));
     await api.saveSettings({ selectedModel: model, isAutoModel: isAuto });
@@ -640,6 +652,8 @@ export const App: React.FC = () => {
         onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
         isAutonomousMode={Boolean(activeSession?.autonomousMode)}
         onToggleAutonomousMode={handleToggleAutonomousMode}
+        activeSession={activeSession}
+        onUpdateTaskState={handleUpdateTaskState}
       />
 
       <div className="flex flex-1 overflow-hidden">
@@ -797,6 +811,8 @@ export const App: React.FC = () => {
                 sessionId={activeSessionId || activeSession?.id}
                 isAutonomousMode={Boolean(activeSession?.autonomousMode)}
                 onToggleAutonomousMode={handleToggleAutonomousMode}
+                taskState={activeSession?.taskState}
+                onUpdateTaskState={handleUpdateTaskState}
               />
             </div>
           ) : (
@@ -829,6 +845,8 @@ export const App: React.FC = () => {
                 sessionId={activeSessionId || activeSession?.id}
                 isAutonomousMode={Boolean(activeSession?.autonomousMode)}
                 onToggleAutonomousMode={handleToggleAutonomousMode}
+                taskState={activeSession?.taskState}
+                onUpdateTaskState={handleUpdateTaskState}
               />
             </>
           )}
