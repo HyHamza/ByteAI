@@ -217,7 +217,7 @@ export const STANDARD_TOOL_DEFS: LLMToolDefinition[] = [
     type: 'function',
     function: {
       name: 'jules_continue_session',
-      description: 'Continue working in the SAME existing Jules session (STRONGLY RECOMMENDED 90% OF THE TIME). Dispatches subsequent phases, follow-up instructions, edge-case fixes, or testing into the existing Jules session without creating a new session. Preserves the cloud container environment, git branch, and all previously committed changes. Merge all commits together later when leaving this session.',
+      description: 'Continue working in the SAME existing Jules session (STRONGLY RECOMMENDED 90% OF THE TIME). In Google Labs Jules, sessions NEVER expire or close: even after a session reports state COMPLETED, sending a follow-up via this tool wakes Jules right back up into IN_PROGRESS to execute the next phase in the exact same container, branch, and PR. Use this whenever dispatching subsequent phases, feedback, missing features, edge-case fixes, or tests. Do NOT start a new session!',
       parameters: {
         type: 'object',
         properties: {
@@ -662,45 +662,31 @@ export async function executeToolCall(
           return `Error: No active or prior Jules session found to continue. 90% of the time you should continue in an existing session, but since none exists yet, please use 'jules_create_task' to start the initial session.`;
         }
 
-        // Check if session is already completed or closed in Google Cloud
-        let sessionData: any = null;
-        try {
-          sessionData = await client.getSession(targetJulesId);
-        } catch (_) {}
-
-        if (sessionData && (sessionData.state === 'COMPLETED' || sessionData.state === 'CANCELLED' || sessionData.state === 'FAILED')) {
-          // Jules session is already completed and cannot accept messages.
-          // Seamlessly start the next phase via createSession on the same repo and branch!
-          const branch = sessionData.sourceContext?.githubRepoContext?.startingBranch || 'main';
-          const repo = sessionData.sourceContext?.source;
-          const res = await client.createSession({
-            prompt: args.prompt,
-            title: `Phase in ${targetJulesId.slice(0, 8)}: ${args.prompt.slice(0, 40)}`,
-            repo,
-            branch,
-          });
-          targetJulesId = res.sessionId;
-          if (sessionId) {
-            try {
-              store.updateSession(sessionId, { julesSessionId: targetJulesId });
-              DutyManager.getInstance().recordTaskDispatched(sessionId, targetJulesId);
-            } catch (_) {}
-          }
-          JulesPoller.getInstance().trackSession(targetJulesId);
-          return `Previous Jules session was completed in Google Cloud. Automatically created next phase task ${targetJulesId} on ${repo || 'repo'} (${branch}). Jules is executing. Conclude turn immediately.`;
-        }
-
+        // Jules sessions in Google Cloud can always receive follow-up messages via sendFollowup,
+        // even when their state was COMPLETED! Sending a message transitions it back to IN_PROGRESS.
         try {
           await client.sendFollowup(targetJulesId, args.prompt);
         } catch (err: any) {
-          // If 404 or entity not found, Google Cloud session is closed or expired. Auto-create next phase!
+          // If 404 or entity not found, Google Cloud session is closed or expired. Only then fallback to createSession!
           if (err.message && (err.message.includes('404') || err.message.includes('NOT_FOUND') || err.message.includes('not found'))) {
             const gitInfo = detectGitRepo(workspaceDir);
+            let branch = gitInfo.branch;
+            let repo = gitInfo.repo;
+            try {
+              const sessionData = await client.getSession(targetJulesId);
+              if (sessionData?.sourceContext?.githubRepoContext?.startingBranch) {
+                branch = sessionData.sourceContext.githubRepoContext.startingBranch;
+              }
+              if (sessionData?.sourceContext?.source) {
+                repo = sessionData.sourceContext.source;
+              }
+            } catch (_) {}
+
             const res = await client.createSession({
               prompt: args.prompt,
               title: `Follow-up: ${args.prompt.slice(0, 40)}`,
-              repo: gitInfo.repo,
-              branch: gitInfo.branch,
+              repo,
+              branch,
             });
             targetJulesId = res.sessionId;
             if (sessionId) {
@@ -710,7 +696,7 @@ export async function executeToolCall(
               } catch (_) {}
             }
             JulesPoller.getInstance().trackSession(targetJulesId);
-            return `Previous Jules session could not accept follow-up messages (${err.message}). Automatically started new phase task ${targetJulesId}. Jules is executing. Conclude turn immediately.`;
+            return `Previous Jules session was not found in Google Cloud (${err.message}). Automatically started new task ${targetJulesId} on ${repo || 'repo'} (${branch}). Jules is executing. Conclude turn immediately.`;
           }
           throw err;
         }

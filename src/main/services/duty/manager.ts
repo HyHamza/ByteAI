@@ -132,9 +132,9 @@ export class DutyManager {
         const nextActionDirective = isAwaitingFeedback
           ? `CRITICAL ALERT: Jules is currently PAUSED in Google Cloud in state 'AWAITING_USER_FEEDBACK' on session (${julesId})! Jules cannot continue working until you reply! You MUST review Jules' progress/questions and call 'jules_reply_question' with session_id: "${julesId}" and your instructions, or call 'jules_continue_session' if directing the next phase. DO NOT return conversational text without calling a tool!`
           : isSessionCompleted
-          ? `The previous Jules session (${julesId}) has finished. Completed sessions cannot accept messages in Google Cloud. You MUST call 'jules_create_task' to start Phase ${nextPhaseNumber} for your mission, or call 'jules_finalize_and_merge' to merge changes.`
+          ? `The previous Jules session (${julesId}) completed its recent phase. In Google Labs Jules, sessions CAN and SHOULD receive follow-up messages via 'jules_continue_session' to resume work on Phase ${nextPhaseNumber} within the same branch and container. You MUST call 'jules_continue_session' to continue your mission, or call 'jules_finalize_and_merge' if you are leaving the session to finalize.`
           : julesId
-          ? `Call 'jules_continue_session' with the next technical instructions (or 'jules_create_task' if starting Phase ${nextPhaseNumber}).`
+          ? `Call 'jules_continue_session' with the next technical instructions (or 'jules_finalize_and_merge' if all work is complete).`
           : `Call 'jules_create_task' to start Phase 1.`;
 
         const watchdogPrompt = `[DUTY SHIFT WATCHDOG ALERT: INACTIVITY DETECTED (> 2 MINUTES)]
@@ -294,8 +294,8 @@ ${phasesLog}
 AUTONOMOUS LEAD DIRECTIVE FOR BYTE:
 Your duty hours are NOT completed (${remainingDisplay} remaining).
 Do NOT stop! You are on active duty.
-Previous phase (${title || julesSessionId.slice(0, 8)}) was successfully completed and merged into the repository!
-Formulate Phase ${active.phasesCompleted.length + 1} specification to continue the overarching mission ("${active.missionPrompt}") and call 'jules_create_task' NOW!`;
+Previous phase (${title || julesSessionId.slice(0, 8)}) was successfully completed in Google Cloud!
+Formulate Phase ${active.phasesCompleted.length + 1} specification to continue the overarching mission ("${active.missionPrompt}") and call 'jules_continue_session' NOW (reusing this session accumulates all commits cleanly; all work will be merged together when leaving the session or completing the shift)!`;
 
       // Trigger next autonomous turn on the chat session
       AgentOrchestrator.getInstance().runAutonomousTurn(active.sessionId, nextPrompt, undefined, true).catch((err) => {
