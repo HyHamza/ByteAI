@@ -32,8 +32,29 @@ function syncPowerSaveBlocker(enabled: boolean) {
   }
 }
 
+function getAppIcon(): string | undefined {
+  const candidates = [
+    path.join(__dirname, '../../resources/icon.ico'),
+    path.join(__dirname, '../../resources/icon.png'),
+    path.join(__dirname, '../../public/icon.png'),
+    path.join(__dirname, '../../logo.png'),
+    path.join(process.cwd(), 'resources/icon.ico'),
+    path.join(process.cwd(), 'resources/icon.png'),
+    path.join(process.cwd(), 'logo.png'),
+  ];
+  for (const p of candidates) {
+    if (fs.existsSync(p)) return p;
+  }
+  return undefined;
+}
+
 function createWindow() {
   const preloadPath = path.join(__dirname, '../preload/preload.js');
+  const appIcon = getAppIcon();
+
+  if (process.platform === 'win32') {
+    app.setAppUserModelId('com.byte.ai');
+  }
 
   mainWindow = new BrowserWindow({
     width: 1360,
@@ -42,6 +63,7 @@ function createWindow() {
     minHeight: 700,
     backgroundColor: '#131314',
     title: 'Byte',
+    icon: appIcon,
     autoHideMenuBar: true,
     show: false,
     webPreferences: {

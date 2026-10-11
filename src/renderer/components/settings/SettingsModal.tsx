@@ -175,7 +175,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* Left Navigation Sidebar */}
           <div className="w-56 bg-[var(--bg-sidebar)] border-r border-[var(--border-subtle)] flex flex-col justify-between py-4 select-none">
             <div className="flex flex-col space-y-4 px-2 overflow-y-auto">
-              
+              {/* Brand Header */}
+              <div className="px-3 pb-3 pt-1 border-b border-[var(--border-subtle)] flex items-center space-x-2.5">
+                <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center p-1 shrink-0">
+                  <img src="/logo-bw.png" alt="Byte" className="w-full h-full object-contain select-none" />
+                </div>
+                <div>
+                  <div className="font-semibold text-xs text-[var(--text-primary)] leading-tight">Byte AI</div>
+                  <div className="text-[10px] text-[var(--text-muted)] font-mono">v1.0.0</div>
+                </div>
+              </div>
+
               {/* Settings Section */}
               <div>
                 <div className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider px-3 mb-1.5">

@@ -8,3 +8,9 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
     <App />
   </React.StrictMode>
 );
+
+// Cleanly retire the initial static pre-splash once React boots
+const preSplash = document.getElementById('app-pre-splash');
+if (preSplash) {
+  preSplash.remove();
+}

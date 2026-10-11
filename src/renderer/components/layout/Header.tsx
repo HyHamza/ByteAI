@@ -104,11 +104,9 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="h-11 flex items-center justify-between px-3">
         {/* Left: Antigravity Logo + Sidebar Toggle + History Arrows */}
         <div className="flex items-center space-x-2">
-          {/* Antigravity Stylized Delta/A Logo */}
-          <div className="w-7 h-7 flex items-center justify-center text-[var(--text-primary)] mr-1 cursor-default">
-            <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
-              <path d="M12 2.5L2 20.5h4.2l1.9-3.6h7.8l1.9 3.6H22L12 2.5zm0 5.4l2.8 5.4H9.2L12 7.9z" />
-            </svg>
+          {/* Byte B&W App Logo */}
+          <div className="w-7 h-7 flex items-center justify-center mr-1 cursor-default" title="Byte AI">
+            <img src="/logo-bw.png" alt="Byte" className="w-5 h-5 object-contain select-none" />
           </div>
 
           {/* Sidebar Toggle Icon */}

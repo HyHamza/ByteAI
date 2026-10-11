@@ -404,16 +404,33 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         onChange={handleNativeFileInputChange}
       />
 
-      {/* If Centered Layout: Top Workspace Chip */}
+      {/* If Centered Layout: Top Brand Hero + Workspace Chip */}
       {isCenteredLayout && (
-        <button
-          onClick={onSelectWorkspace}
-          className="flex items-center space-x-1.5 px-3 py-1.5 mb-5 rounded-full text-xs font-medium text-[var(--text-primary)] hover:text-[var(--text-primary)] bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] border border-[var(--border-card)] transition-colors cursor-pointer"
-        >
-          <Folder className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
-          <span>{workspaceName || 'Select Workspace'}</span>
-          <ChevronDown className="w-3 h-3 text-[var(--text-muted)]" />
-        </button>
+        <div className="flex flex-col items-center mb-6">
+          <div className="relative mb-3 flex items-center justify-center">
+            <div className="w-16 h-16 rounded-2xl bg-white/[0.04] border border-white/10 p-2.5 flex items-center justify-center shadow-lg backdrop-blur-xs group">
+              <img
+                src="/logo-bw.png"
+                alt="Byte"
+                className="w-full h-full object-contain filter drop-shadow-sm select-none transition-transform duration-300 group-hover:scale-105"
+              />
+            </div>
+          </div>
+          <h1 className="text-xl font-semibold tracking-tight text-[var(--text-primary)] mb-1">
+            Byte AI
+          </h1>
+          <p className="text-xs text-[var(--text-secondary)] mb-4">
+            Autonomous Lead Engineer & Pairing Partner
+          </p>
+          <button
+            onClick={onSelectWorkspace}
+            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-[var(--text-primary)] hover:text-[var(--text-primary)] bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] border border-[var(--border-card)] transition-colors cursor-pointer"
+          >
+            <Folder className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
+            <span>{workspaceName || 'Select Workspace'}</span>
+            <ChevronDown className="w-3 h-3 text-[var(--text-muted)]" />
+          </button>
+        </div>
       )}
 
       {/* Floating Prompt Card (The Antigravity input box) */}

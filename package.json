@@ -20,6 +20,18 @@
     "url": "https://github.com/HyHamza/SeniorEngineer/issues"
   },
   "homepage": "https://github.com/HyHamza/SeniorEngineer#readme",
+  "build": {
+    "appId": "com.byte.ai",
+    "productName": "Byte",
+    "win": {
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico"
+    }
+  },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
     "@testing-library/dom": "^10.4.2",

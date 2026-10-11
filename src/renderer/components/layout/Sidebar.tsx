@@ -319,6 +319,17 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
   return (
     <>
       <aside className="w-64 bg-[var(--bg-sidebar)] border-r border-[var(--border-subtle)] flex flex-col h-full shrink-0 select-none text-[12px] text-[var(--text-secondary)]">
+        {/* Brand Header */}
+        <div className="px-3.5 py-3 flex items-center space-x-2.5 border-b border-[var(--border-subtle)]">
+          <div className="w-6 h-6 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center p-0.5 shrink-0">
+            <img src="/logo-bw.png" alt="Byte" className="w-full h-full object-contain select-none" />
+          </div>
+          <div className="flex items-center space-x-1.5 font-semibold text-xs text-[var(--text-primary)]">
+            <span>Byte</span>
+            <span className="text-[10px] font-mono px-1 py-0.2 rounded bg-white/10 text-neutral-300 font-normal">AI</span>
+          </div>
+        </div>
+
         {/* Top Action: + New Conversation */}
         <div className="p-3 pb-2">
           <button

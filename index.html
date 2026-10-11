@@ -4,8 +4,95 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Byte</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="shortcut icon" href="/favicon.ico" />
+    <style>
+      /* Ultra-fast native splash screen before React script execution */
+      #app-pre-splash {
+        position: fixed;
+        inset: 0;
+        background-color: #131314;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 99998;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        color: #e3e3e3;
+        user-select: none;
+      }
+      .pre-splash-box {
+        position: relative;
+        width: 100px;
+        height: 100px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .pre-splash-glow {
+        position: absolute;
+        inset: -12px;
+        background: radial-gradient(circle, rgba(236, 72, 153, 0.28) 0%, rgba(139, 92, 246, 0.16) 50%, transparent 70%);
+        border-radius: 50%;
+        filter: blur(14px);
+        animation: pre-pulse 2s ease-in-out infinite alternate;
+      }
+      .pre-splash-img {
+        position: relative;
+        width: 84px;
+        height: 84px;
+        object-fit: contain;
+      }
+      .pre-splash-title {
+        margin-top: 16px;
+        font-size: 20px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        color: #ffffff;
+      }
+      .pre-splash-sub {
+        margin-top: 4px;
+        font-size: 11.5px;
+        color: #8e8e93;
+        letter-spacing: 0.02em;
+      }
+      .pre-splash-bar {
+        margin-top: 22px;
+        width: 130px;
+        height: 3px;
+        background: rgba(255, 255, 255, 0.08);
+        border-radius: 999px;
+        overflow: hidden;
+      }
+      .pre-splash-bar-inner {
+        height: 100%;
+        width: 45%;
+        background: linear-gradient(90deg, #ec4899, #8b5cf6, #38bdf8);
+        border-radius: 999px;
+        animation: pre-slide 1.4s ease-in-out infinite alternate;
+      }
+      @keyframes pre-pulse {
+        0% { transform: scale(0.92); opacity: 0.55; }
+        100% { transform: scale(1.15); opacity: 0.95; }
+      }
+      @keyframes pre-slide {
+        0% { transform: translateX(-10%); }
+        100% { transform: translateX(140%); }
+      }
+    </style>
   </head>
   <body class="bg-[var(--bg-canvas)] text-[var(--text-primary)] antialiased select-none overflow-hidden h-screen w-screen">
+    <div id="app-pre-splash">
+      <div class="pre-splash-box">
+        <div class="pre-splash-glow"></div>
+        <img src="/logo.png" alt="Byte" class="pre-splash-img" />
+      </div>
+      <div class="pre-splash-title">Byte</div>
+      <div class="pre-splash-sub">Autonomous Lead Engineer</div>
+      <div class="pre-splash-bar">
+        <div class="pre-splash-bar-inner"></div>
+      </div>
+    </div>
     <div id="root" class="h-full w-full"></div>
     <script type="module" src="/src/renderer/main.tsx"></script>
   </body>

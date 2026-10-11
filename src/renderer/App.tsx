@@ -6,6 +6,7 @@ import { JulesPanel } from './components/layout/JulesPanel';
 import { ChatStream } from './components/chat/ChatStream';
 import { ChatInput } from './components/chat/ChatInput';
 import { SettingsModal } from './components/settings/SettingsModal';
+import { SplashScreen } from './components/common/SplashScreen';
 import { api } from './api';
 import type { AppSettings, ChatSession, ChatMessage, AppMode, TaskState, StreamTokenPayload, ToolCallPayload, ToolExecutionRecord, JulesSessionSummary, ProjectInfo, AttachmentFile } from '@/shared/types';
 
@@ -54,8 +55,10 @@ export const App: React.FC = () => {
   const [retryStatus, setRetryStatus] = useState<{ attempt: number; maxRetries: number; delayMs: number; reason: string } | null>(null);
   const [liveResolvedModel, setLiveResolvedModel] = useState<string | null>(null);
 
-  // Load initial settings, workspace & sessions concurrently
-  
+  // Startup splash screen state
+  const [isAppReady, setIsAppReady] = useState(false);
+  const [splashStatusText, setSplashStatusText] = useState('Starting Byte AI...');
+
   // Update body class based on theme
   useEffect(() => {
     if (settings.theme === 'whiteTheme') {
@@ -70,6 +73,7 @@ export const App: React.FC = () => {
 
     const init = async () => {
       try {
+        setSplashStatusText('Connecting workspace & tools...');
         const [s, ws, sessList] = await Promise.all([
           api.getSettings().catch(() => DEFAULT_SETTINGS),
           api.getWorkspaceInfo().catch(() => null),
@@ -85,6 +89,7 @@ export const App: React.FC = () => {
           if (ws.gitBranch) setGitBranch(ws.gitBranch);
         }
 
+        setSplashStatusText('Loading chat sessions & memory...');
         if (sessList && sessList.length > 0) {
           const firstId = sessList[0].id;
           setActiveSessionId(firstId);
@@ -119,8 +124,12 @@ export const App: React.FC = () => {
         api.getProjects?.().then((projs) => {
           if (isMounted && projs) setProjects(projs);
         }).catch(() => {});
+
+        setSplashStatusText('Ready');
+        if (isMounted) setIsAppReady(true);
       } catch (err) {
         console.error('Initialization error:', err);
+        if (isMounted) setIsAppReady(true);
       }
     };
 
@@ -878,6 +887,9 @@ export const App: React.FC = () => {
         onDeleteProject={handleDeleteProject}
         onAddProject={() => handleAddProject()}
       />
+
+      {/* Startup Splash Screen */}
+      <SplashScreen isReady={isAppReady} statusText={splashStatusText} />
     </div>
   );
 };
