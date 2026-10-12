@@ -218,12 +218,12 @@ export class FreeLLMEngine {
     try {
       const isValid = await provider.validateKey(realKey);
       const newStatus = isValid ? 'healthy' : 'invalid';
-      db.prepare('UPDATE api_keys SET status = ?, last_checked_at = datetime("now") WHERE id = ?').run(newStatus, id);
+      db.prepare("UPDATE api_keys SET status = ?, last_checked_at = datetime('now') WHERE id = ?").run(newStatus, id);
       return { success: isValid, status: newStatus };
     } catch (err: any) {
       const is429 = err?.status === 429 || /429|rate limit/i.test(err?.message || '');
       const newStatus = is429 ? 'rate_limited' : 'error';
-      db.prepare('UPDATE api_keys SET status = ?, last_checked_at = datetime("now") WHERE id = ?').run(newStatus, id);
+      db.prepare("UPDATE api_keys SET status = ?, last_checked_at = datetime('now') WHERE id = ?").run(newStatus, id);
       return { success: false, status: newStatus, error: err?.message };
     }
   }
