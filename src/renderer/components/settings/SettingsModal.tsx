@@ -19,7 +19,8 @@ import {
   ExternalLink,
   Trash2,
   Plus,
-  Zap
+  Zap,
+  Power
 } from 'lucide-react';
 import type { AppSettings, ProjectInfo } from '@/shared/types';
 import { api } from '../../api';
@@ -568,6 +569,87 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             <span
                               className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
                                 form.preventSleep ? 'translate-x-4' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Background Running & System Startup */}
+                    <div>
+                      <h4 className="text-xs font-semibold text-[var(--text-primary)] mb-2 flex items-center space-x-1.5">
+                        <Power className="w-3.5 h-3.5 text-[#38bdf8]" />
+                        <span>Background & Startup</span>
+                      </h4>
+                      <div className="bg-[var(--bg-surface)] border border-[var(--border-card)] rounded-xl p-3.5 space-y-3">
+                        {/* Run in Background / Minimize to Tray */}
+                        <div className="flex items-center justify-between">
+                          <div className="pr-4">
+                            <div className="flex items-center space-x-2">
+                              <span className="text-xs font-medium text-[var(--text-primary)]">Run in Background</span>
+                              {form.runInBackground !== false ? (
+                                <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-medium">
+                                  Tray Active
+                                </span>
+                              ) : (
+                                <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-[var(--bg-surface-hover)] text-[var(--text-muted)] border border-[var(--border-subtle)] font-medium">
+                                  Disabled
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-[var(--text-secondary)] mt-0.5">
+                              Keep Byte running quietly in the system tray when closed. Ongoing tasks, background supervisors, and Jules polling continue without interruption.
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={form.runInBackground !== false}
+                            onClick={() => setForm({ ...form, runInBackground: form.runInBackground === false ? true : false })}
+                            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                              form.runInBackground !== false ? 'bg-emerald-500' : 'bg-[var(--border-card)]'
+                            }`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                                form.runInBackground !== false ? 'translate-x-4' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                        </div>
+
+                        {/* Start on Startup */}
+                        <div className="pt-2 border-t border-[var(--border-subtle)] flex items-center justify-between">
+                          <div className="pr-4">
+                            <div className="flex items-center space-x-2">
+                              <span className="text-xs font-medium text-[var(--text-primary)]">Start on System Startup</span>
+                              {form.openAtLogin ? (
+                                <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 font-medium">
+                                  Auto-Start ON
+                                </span>
+                              ) : (
+                                <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-[var(--bg-surface-hover)] text-[var(--text-muted)] border border-[var(--border-subtle)] font-medium">
+                                  Disabled
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-[var(--text-secondary)] mt-0.5">
+                              Automatically launch Byte in the background when your computer boots up so your AI pairing partner is always ready.
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={Boolean(form.openAtLogin)}
+                            onClick={() => setForm({ ...form, openAtLogin: !form.openAtLogin })}
+                            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                              form.openAtLogin ? 'bg-cyan-500' : 'bg-[var(--border-card)]'
+                            }`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                                form.openAtLogin ? 'translate-x-4' : 'translate-x-0'
                               }`}
                             />
                           </button>

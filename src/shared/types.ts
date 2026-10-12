@@ -32,6 +32,8 @@ export interface AppSettings {
   userEmail?: string;
   preventSleep?: boolean;
   defaultAutonomousMode?: boolean;
+  runInBackground?: boolean;
+  openAtLogin?: boolean;
 }
 
 export interface AttachmentFile {

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, Menu, MenuItem, shell, powerSaveBlocker, clipboard, nativeImage } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, Menu, MenuItem, shell, powerSaveBlocker, clipboard, nativeImage, Tray } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { DataStore } from './services/db/store';
@@ -12,10 +12,26 @@ import { TaskManager } from './services/task/manager';
 import { GroqSpeechTranscriber } from './services/speech/groq';
 import { DutyManager } from './services/duty/manager';
 import { AutonomousWatchdog } from './services/autonomous/watchdog';
-import type { AppMode, ChatSession, AttachmentFile } from '../shared/types';
+import type { AppMode, ChatSession, AttachmentFile, AppSettings } from '../shared/types';
 
 let mainWindow: BrowserWindow | null = null;
 let powerSaveBlockerId: number | null = null;
+let tray: Tray | null = null;
+let isQuitting = false;
+
+// Enforce single-instance lock for background-running app
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      if (!mainWindow.isVisible()) mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+}
 
 function syncPowerSaveBlocker(enabled: boolean) {
   if (enabled) {
@@ -29,6 +45,113 @@ function syncPowerSaveBlocker(enabled: boolean) {
       console.log(`[PowerSaveBlocker] Device sleep prevention disabled (ID: ${powerSaveBlockerId})`);
     }
     powerSaveBlockerId = null;
+  }
+}
+
+function syncOpenAtLogin(enabled: boolean) {
+  try {
+    app.setLoginItemSettings({
+      openAtLogin: enabled,
+      openAsHidden: true,
+      path: process.execPath,
+      args: ['--hidden'],
+    });
+    console.log(`[Startup] Auto-start on boot: ${enabled}`);
+  } catch (err) {
+    console.error('[Startup] Failed to configure openAtLogin:', err);
+  }
+}
+
+function updateTrayContextMenu() {
+  if (!tray) return;
+  const store = DataStore.getInstance();
+  const settings = store.getSettings();
+  const runInBackground = settings.runInBackground !== false;
+
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: 'Open Byte',
+      click: () => {
+        if (!mainWindow) {
+          createWindow();
+        } else {
+          mainWindow.show();
+          if (mainWindow.isMinimized()) mainWindow.restore();
+          mainWindow.focus();
+        }
+      },
+    },
+    {
+      label: 'New Task',
+      click: () => {
+        if (!mainWindow) {
+          createWindow();
+        } else {
+          mainWindow.show();
+          if (mainWindow.isMinimized()) mainWindow.restore();
+          mainWindow.focus();
+        }
+        mainWindow?.webContents.send('navigation:new-chat');
+      },
+    },
+    { type: 'separator' },
+    {
+      label: `Background Running: ${runInBackground ? 'Active' : 'Disabled'}`,
+      enabled: false,
+    },
+    {
+      label: `Start on Startup: ${settings.openAtLogin ? 'Active' : 'Disabled'}`,
+      enabled: false,
+    },
+    { type: 'separator' },
+    {
+      label: 'Quit Byte',
+      click: () => {
+        isQuitting = true;
+        app.quit();
+      },
+    },
+  ]);
+  tray.setContextMenu(contextMenu);
+}
+
+function setupTray() {
+  if (tray) return;
+  const iconPath = getAppIcon();
+  if (!iconPath) return;
+
+  try {
+    tray = new Tray(iconPath);
+    tray.setToolTip('Byte AI - Autonomous Lead Engineer');
+    updateTrayContextMenu();
+
+    tray.on('click', () => {
+      if (!mainWindow) {
+        createWindow();
+      } else if (mainWindow.isVisible()) {
+        if (mainWindow.isMinimized()) {
+          mainWindow.restore();
+          mainWindow.focus();
+        } else {
+          mainWindow.focus();
+        }
+      } else {
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    });
+
+    tray.on('double-click', () => {
+      if (!mainWindow) {
+        createWindow();
+      } else {
+        mainWindow.show();
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.focus();
+      }
+    });
+  } catch (err) {
+    console.error('[Tray] Failed to initialize tray:', err);
   }
 }
 
@@ -112,8 +235,20 @@ function createWindow() {
 
   mainWindow.setMenuBarVisibility(false);
 
+  mainWindow.on('close', (event) => {
+    const settings = DataStore.getInstance().getSettings();
+    const runInBackground = settings.runInBackground !== false;
+    if (!isQuitting && runInBackground) {
+      event.preventDefault();
+      mainWindow?.hide();
+    }
+  });
+
   mainWindow.once('ready-to-show', () => {
-    mainWindow?.show();
+    const isHidden = process.argv.includes('--hidden');
+    if (!isHidden) {
+      mainWindow?.show();
+    }
   });
 
   if (process.env.VITE_DEV_SERVER_URL) {
@@ -129,23 +264,38 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  app.on('before-quit', () => {
+    isQuitting = true;
+  });
+
   Menu.setApplicationMenu(null);
   setupIpcHandlers();
   createWindow();
+  setupTray();
   JulesPoller.getInstance().startPolling(10000);
   AutonomousWatchdog.getInstance();
 
-  // Initialize prevent sleep blocker based on persisted user preference
+  // Initialize prevent sleep blocker and auto-start on boot based on persisted user preference
   const initialSettings = DataStore.getInstance().getSettings();
   syncPowerSaveBlocker(Boolean(initialSettings.preventSleep));
+  syncOpenAtLogin(Boolean(initialSettings.openAtLogin));
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow();
+    } else {
+      mainWindow?.show();
+      mainWindow?.focus();
+    }
   });
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+  const settings = DataStore.getInstance().getSettings();
+  const runInBackground = settings.runInBackground !== false;
+  if (!runInBackground && process.platform !== 'darwin') {
+    app.quit();
+  }
 });
 
 function setupIpcHandlers() {
@@ -164,6 +314,10 @@ function setupIpcHandlers() {
     if (partial.preventSleep !== undefined) {
       syncPowerSaveBlocker(Boolean(partial.preventSleep));
     }
+    if (partial.openAtLogin !== undefined) {
+      syncOpenAtLogin(Boolean(partial.openAtLogin));
+    }
+    updateTrayContextMenu();
     return true;
   });
 

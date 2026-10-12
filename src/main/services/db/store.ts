@@ -31,6 +31,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   userName: 'Hamza',
   userEmail: 'talkdrove@gmail.com',
   preventSleep: false,
+  runInBackground: true,
+  openAtLogin: false,
 };
 
 const GREETINGS = new Set([
