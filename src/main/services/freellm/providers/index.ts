@@ -109,9 +109,10 @@ register(new OpenAICompatProvider({
 // `reasoning_content`) — handled by normalizeChoices.
 register(new OpenAICompatProvider({
   platform: 'ollama',
-  name: 'Ollama Cloud',
-  baseUrl: 'https://ollama.com/v1',
+  name: 'Ollama',
+  baseUrl: 'http://localhost:11434/v1',
   timeoutMs: 120000,
+  keyless: true,
 }));
 
 // Kilo AI Gateway — OpenAI-compatible aggregator. Kilo documents anonymous
@@ -155,6 +156,7 @@ register(new OpenAICompatProvider({
   platform: 'llm7',
   name: 'LLM7',
   baseUrl: 'https://api.llm7.io/v1',
+  keyless: true,
 }));
 
 // OpenCode Zen — OpenAI-compatible gateway (https://opencode.ai/zen/v1), same

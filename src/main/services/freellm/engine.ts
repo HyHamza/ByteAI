@@ -66,10 +66,36 @@ export class FreeLLMEngine {
   public init() {
     if (this.initialized) return;
     initDb();
+    this.seedKeylessProviders();
     startHealthChecker();
     startCatalogSync();
     this.initialized = true;
     console.log('[FreeLLMEngine] Engine initialized with all 22+ providers and smart routing.');
+  }
+
+  private seedKeylessProviders() {
+    try {
+      const db = getDb();
+      const keylessSeeds = [
+        { platform: 'kilo', label: 'Kilo Gateway (Keyless)' },
+        { platform: 'pollinations', label: 'Pollinations AI (Keyless)' },
+        { platform: 'ovh', label: 'OVHcloud AI Endpoints (Keyless)' },
+        { platform: 'llm7', label: 'LLM7 Labs (Keyless)' },
+      ];
+
+      for (const item of keylessSeeds) {
+        const existing = db.prepare('SELECT id FROM api_keys WHERE platform = ? LIMIT 1').get(item.platform) as any;
+        if (!existing) {
+          const { encrypted, iv, authTag } = encrypt('no-key');
+          db.prepare(`
+            INSERT INTO api_keys (platform, encrypted_key, iv, auth_tag, label, status, enabled)
+            VALUES (?, ?, ?, ?, ?, 'unknown', 1)
+          `).run(item.platform, encrypted, iv, authTag, item.label);
+        }
+      }
+    } catch (err) {
+      console.warn('[FreeLLMEngine] Keyless provider seeding notice:', err);
+    }
   }
 
   // ─── API Key Management ───────────────────────────────────────────────────
@@ -108,12 +134,26 @@ export class FreeLLMEngine {
     const baseUrl = data.baseUrl?.trim() || null;
 
     // Check for keyless platforms
-    const isKeyless = ['kilo', 'pollinations', 'ovh'].includes(platform);
+    const provider = resolveProvider(platform as Platform, baseUrl);
+    const isKeyless = ['kilo', 'pollinations', 'ovh', 'llm7', 'ollama'].includes(platform) || provider?.keyless === true;
     if (!isKeyless && !key) {
       throw new Error(`API Key is required for provider: ${platform}`);
     }
 
-    const { encrypted, iv, authTag } = encrypt(key || 'keyless-sentinel');
+    const keyToStore = isKeyless ? (key || 'no-key') : key;
+
+    // A keyless provider needs only one sentinel row — re-enable an existing one
+    // instead of piling up duplicates each time the user clicks "Add".
+    if (isKeyless) {
+      const existing = db.prepare('SELECT id FROM api_keys WHERE platform = ? LIMIT 1').get(platform) as { id: number } | undefined;
+      if (existing) {
+        db.prepare("UPDATE api_keys SET enabled = 1, status = 'unknown', label = ?, base_url = ? WHERE id = ?").run(label, baseUrl, existing.id);
+        void this.testKey(existing.id);
+        return { success: true, id: existing.id };
+      }
+    }
+
+    const { encrypted, iv, authTag } = encrypt(keyToStore);
 
     const res = db.prepare(`
       INSERT INTO api_keys (platform, encrypted_key, iv, auth_tag, label, base_url, status, enabled)
