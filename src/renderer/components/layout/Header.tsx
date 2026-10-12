@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import type { AppMode, AppSettings, ChatSession, TaskState } from '@/shared/types';
 import { useDutyShift } from '../../hooks/useDutyShift';
+import { byteLogoBw } from '../../assets';
 
 interface HeaderProps {
   settings: AppSettings;
@@ -106,7 +107,7 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="flex items-center space-x-2">
           {/* Byte B&W App Logo */}
           <div className="w-8 h-8 flex items-center justify-center mr-1 cursor-default" title="Byte AI">
-            <img src="/logo-bw.png" alt="Byte" className="w-7 h-7 object-contain select-none" />
+            <img src={byteLogoBw} alt="Byte" className="w-7 h-7 object-contain select-none" />
           </div>
 
           {/* Sidebar Toggle Icon */}

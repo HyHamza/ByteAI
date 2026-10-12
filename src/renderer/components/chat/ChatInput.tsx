@@ -23,6 +23,7 @@ import {
 import type { AppMode, AttachmentFile, TaskState } from '@/shared/types';
 import { api } from '../../api';
 import { useVoiceDictation } from '../../hooks/useVoiceDictation';
+import { byteLogoBw } from '../../assets';
 import { useDutyShift } from '../../hooks/useDutyShift';
 import { ImagePreviewModal } from '../common/ImagePreviewModal';
 
@@ -410,7 +411,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           <div className="relative mb-3 flex items-center justify-center">
             <div className="w-24 h-24 rounded-2xl bg-white/[0.04] border border-white/10 p-2.5 flex items-center justify-center shadow-xl backdrop-blur-xs group">
               <img
-                src="/logo-bw.png"
+                src={byteLogoBw}
                 alt="Byte"
                 className="w-full h-full object-contain filter drop-shadow-sm select-none transition-transform duration-300 group-hover:scale-105"
               />

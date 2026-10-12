@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import type { ChatSession, JulesSessionSummary, TaskState, ProjectInfo } from '@/shared/types';
 import { api } from '@/renderer/api';
+import { byteLogoBw } from '../../assets';
 
 export type GroupByOption = 'project' | 'workspace' | 'status' | 'none';
 export type SortByOption = 'last_updated' | 'last_prompt' | 'alphabetical' | 'date_added';
@@ -608,7 +609,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
         {/* Brand Header */}
         <div className="px-4 py-3 flex items-center space-x-2.5 border-b border-[var(--border-subtle)]">
           <div className="w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center p-1 shrink-0">
-            <img src="/logo-bw.png" alt="Byte" className="w-full h-full object-contain select-none" />
+            <img src={byteLogoBw} alt="Byte" className="w-full h-full object-contain select-none" />
           </div>
           <div className="flex items-center space-x-1.5 font-semibold text-sm text-[var(--text-primary)]">
             <span>Byte</span>

@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import type { AppSettings, ProjectInfo } from '@/shared/types';
 import { api } from '../../api';
+import { byteLogoBw } from '../../assets';
 
 interface SettingsModalProps {
   settings: AppSettings;
@@ -178,7 +179,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               {/* Brand Header */}
               <div className="px-3 pb-3 pt-1 border-b border-[var(--border-subtle)] flex items-center space-x-2.5">
                 <div className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center p-1 shrink-0">
-                  <img src="/logo-bw.png" alt="Byte" className="w-full h-full object-contain select-none" />
+                  <img src={byteLogoBw} alt="Byte" className="w-full h-full object-contain select-none" />
                 </div>
                 <div>
                   <div className="font-semibold text-sm text-[var(--text-primary)] leading-tight">Byte AI</div>

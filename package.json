@@ -33,7 +33,9 @@
       "dist/**/*",
       "dist-electron/**/*",
       "build/**/*",
-      "resources/**/*"
+      "resources/**/*",
+      "logo.png",
+      "logo-bw.png"
     ],
     "win": {
       "icon": "build/icon.ico",

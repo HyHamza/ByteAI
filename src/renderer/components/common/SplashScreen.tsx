@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { byteLogoColor } from '../../assets';
 
 interface SplashScreenProps {
   isReady: boolean;
@@ -55,7 +56,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
           {/* Logo container */}
           <div className="relative w-28 h-28 rounded-3xl bg-[#1a1a1c]/80 border border-white/10 shadow-2xl flex items-center justify-center backdrop-blur-md overflow-hidden p-3.5 group">
             <img
-              src="/logo.png"
+              src={byteLogoColor}
               alt="Byte Logo"
               className="w-full h-full object-contain filter drop-shadow-[0_4px_12px_rgba(236,72,153,0.3)] transition-transform duration-700 ease-in-out group-hover:scale-105"
             />
