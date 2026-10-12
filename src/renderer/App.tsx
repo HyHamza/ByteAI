@@ -6,6 +6,7 @@ import { JulesPanel } from './components/layout/JulesPanel';
 import { ChatStream } from './components/chat/ChatStream';
 import { ChatInput } from './components/chat/ChatInput';
 import { SettingsModal } from './components/settings/SettingsModal';
+import { FreeLLMHubModal } from './components/freellm/FreeLLMHubModal';
 import { SplashScreen } from './components/common/SplashScreen';
 import { api } from './api';
 import type { AppSettings, ChatSession, ChatMessage, AppMode, TaskState, StreamTokenPayload, ToolCallPayload, ToolExecutionRecord, JulesSessionSummary, ProjectInfo, AttachmentFile } from '@/shared/types';
@@ -46,6 +47,7 @@ export const App: React.FC = () => {
   const [isJulesPanelOpen, setIsJulesPanelOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isFreeLLMHubOpen, setIsFreeLLMHubOpen] = useState(false);
 
   // Streaming state
   const [isStreaming, setIsStreaming] = useState(false);
@@ -696,6 +698,7 @@ export const App: React.FC = () => {
         onToggleAutonomousMode={handleToggleAutonomousMode}
         activeSession={activeSession}
         onUpdateTaskState={handleUpdateTaskState}
+        onOpenFreeLLMHub={() => setIsFreeLLMHubOpen(true)}
       />
 
       <div className="flex flex-1 overflow-hidden">
@@ -919,6 +922,12 @@ export const App: React.FC = () => {
         }}
         onDeleteProject={handleDeleteProject}
         onAddProject={() => handleAddProject()}
+        onOpenFreeLLMHub={() => setIsFreeLLMHubOpen(true)}
+      />
+
+      <FreeLLMHubModal
+        isOpen={isFreeLLMHubOpen}
+        onClose={() => setIsFreeLLMHubOpen(false)}
       />
 
       {/* Startup Splash Screen */}

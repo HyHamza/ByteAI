@@ -37,6 +37,7 @@ interface SettingsModalProps {
   onSelectProject?: (path: string) => void;
   onDeleteProject?: (path: string) => void;
   onAddProject?: () => void;
+  onOpenFreeLLMHub?: () => void;
 }
 
 type SettingsTab = 'general' | 'models' | 'voice' | 'jules' | 'appearance' | `project_${string}`;
@@ -52,6 +53,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onSelectProject,
   onDeleteProject,
   onAddProject,
+  onOpenFreeLLMHub,
 }) => {
   const [form, setForm] = useState<AppSettings>({ ...settings });
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
@@ -662,6 +664,31 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 {/* ─── TAB: MODELS & API ─── */}
                 {activeTab === 'models' && (
                   <div className="space-y-4">
+                    {/* Free LLM In-Process Engine Card */}
+                    <div className="bg-gradient-to-r from-blue-950/40 via-indigo-950/30 to-transparent border border-blue-500/30 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md shadow-blue-500/5">
+                      <div>
+                        <div className="flex items-center space-x-2">
+                          <span className="text-xs font-bold text-white tracking-wide">Free LLM Engine & Hub</span>
+                          <span className="px-1.5 py-0.2 rounded text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-medium">
+                            Natively Integrated
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-[var(--text-secondary)] mt-1 max-w-lg">
+                          Built-in zero-latency LLM engine with 22+ providers (Google Gemini, Groq, Cerebras, NVIDIA NIM, Mistral, Ollama, keyless gateways) and automatic 429 failover.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onClose();
+                          onOpenFreeLLMHub?.();
+                        }}
+                        className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-md shadow-blue-500/20 transition-all cursor-pointer whitespace-nowrap self-start sm:self-auto"
+                      >
+                        Open Free LLM Hub →
+                      </button>
+                    </div>
+
                     <div className="bg-[var(--bg-surface)] border border-[var(--border-card)] rounded-xl p-4 space-y-4">
                       <div>
                         <label className="block text-xs font-medium text-[var(--text-primary)] mb-1">API Base URL</label>

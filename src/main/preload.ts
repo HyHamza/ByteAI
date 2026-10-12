@@ -139,6 +139,28 @@ const api: ElectronAPI = {
   // Native Clipboard API
   copyImageToClipboard: (payload: { imageUrl?: string; filePath?: string }) => ipcRenderer.invoke('clipboard:copy-image', payload),
   copyTextToClipboard: (text: string) => ipcRenderer.invoke('clipboard:copy-text', { text }),
+
+  // Free LLM In-Process Engine API
+  freellm: {
+    listKeys: () => ipcRenderer.invoke('freellm:keys:list'),
+    addKey: (data) => ipcRenderer.invoke('freellm:keys:add', data),
+    updateKey: (id, data) => ipcRenderer.invoke('freellm:keys:update', { id, data }),
+    deleteKey: (id) => ipcRenderer.invoke('freellm:keys:delete', { id }),
+    testKey: (id) => ipcRenderer.invoke('freellm:keys:test', { id }),
+    getAnalyticsSummary: () => ipcRenderer.invoke('freellm:analytics:summary'),
+    getPlatformStats: () => ipcRenderer.invoke('freellm:analytics:platforms'),
+    getTimeline: (days) => ipcRenderer.invoke('freellm:analytics:timeline', { days }),
+    getRequestLogs: (limit, offset) => ipcRenderer.invoke('freellm:analytics:logs', { limit, offset }),
+    getModelListing: () => ipcRenderer.invoke('freellm:models:list'),
+    getFallbackChain: () => ipcRenderer.invoke('freellm:fallback:list'),
+    updateFallbackPriority: (modelDbId, priority, enabled) => ipcRenderer.invoke('freellm:fallback:update', { modelDbId, priority, enabled }),
+    getRoutingStrategy: () => ipcRenderer.invoke('freellm:strategy:get'),
+    setRoutingStrategy: (strategy) => ipcRenderer.invoke('freellm:strategy:set', { strategy }),
+    getModelUnification: () => ipcRenderer.invoke('freellm:unify:get'),
+    setModelUnification: (enabled) => ipcRenderer.invoke('freellm:unify:set', { enabled }),
+    chatPlayground: (prompt, model, temperature) => ipcRenderer.invoke('freellm:playground:run', { prompt, model, temperature }),
+    generateImage: (prompt, options) => ipcRenderer.invoke('freellm:media:generate-image', { prompt, options }),
+  },
 };
 
 contextBridge.exposeInMainWorld('electronAPI', api);

@@ -12,6 +12,7 @@ import { TaskManager } from './services/task/manager';
 import { GroqSpeechTranscriber } from './services/speech/groq';
 import { DutyManager } from './services/duty/manager';
 import { AutonomousWatchdog } from './services/autonomous/watchdog';
+import { FreeLLMEngine } from './services/freellm/engine';
 import type { AppMode, ChatSession, AttachmentFile, AppSettings } from '../shared/types';
 
 let mainWindow: BrowserWindow | null = null;
@@ -269,6 +270,7 @@ app.whenReady().then(() => {
   });
 
   Menu.setApplicationMenu(null);
+  FreeLLMEngine.getInstance().init();
   setupIpcHandlers();
   createWindow();
   setupTray();
@@ -643,6 +645,93 @@ function setupIpcHandlers() {
       console.error('[clipboard:copy-text] Error:', err);
       return false;
     }
+  });
+
+  // ── Free LLM Engine In-Process IPC Handlers
+  ipcMain.handle('freellm:keys:list', async () => {
+    return FreeLLMEngine.getInstance().listKeys();
+  });
+
+  ipcMain.handle('freellm:keys:add', async (_, data) => {
+    return FreeLLMEngine.getInstance().addKey(data);
+  });
+
+  ipcMain.handle('freellm:keys:update', async (_, { id, data }) => {
+    return FreeLLMEngine.getInstance().updateKey(id, data);
+  });
+
+  ipcMain.handle('freellm:keys:delete', async (_, { id }) => {
+    return FreeLLMEngine.getInstance().deleteKey(id);
+  });
+
+  ipcMain.handle('freellm:keys:test', async (_, { id }) => {
+    return FreeLLMEngine.getInstance().testKey(id);
+  });
+
+  ipcMain.handle('freellm:analytics:summary', async () => {
+    return FreeLLMEngine.getInstance().getAnalyticsSummary();
+  });
+
+  ipcMain.handle('freellm:analytics:platforms', async () => {
+    return FreeLLMEngine.getInstance().getPlatformStats();
+  });
+
+  ipcMain.handle('freellm:analytics:timeline', async (_, { days }) => {
+    return FreeLLMEngine.getInstance().getTimeline(days);
+  });
+
+  ipcMain.handle('freellm:analytics:logs', async (_, { limit, offset }) => {
+    return FreeLLMEngine.getInstance().getRequestLogs(limit, offset);
+  });
+
+  ipcMain.handle('freellm:models:list', async () => {
+    return FreeLLMEngine.getInstance().getModelListing();
+  });
+
+  ipcMain.handle('freellm:fallback:list', async () => {
+    return FreeLLMEngine.getInstance().getFallbackChain();
+  });
+
+  ipcMain.handle('freellm:fallback:update', async (_, { modelDbId, priority, enabled }) => {
+    return FreeLLMEngine.getInstance().updateFallbackPriority(modelDbId, priority, enabled);
+  });
+
+  ipcMain.handle('freellm:strategy:get', async () => {
+    return FreeLLMEngine.getInstance().getRoutingStrategy();
+  });
+
+  ipcMain.handle('freellm:strategy:set', async (_, { strategy }) => {
+    FreeLLMEngine.getInstance().setRoutingStrategy(strategy);
+    return true;
+  });
+
+  ipcMain.handle('freellm:unify:get', async () => {
+    return FreeLLMEngine.getInstance().getModelUnification();
+  });
+
+  ipcMain.handle('freellm:unify:set', async (_, { enabled }) => {
+    FreeLLMEngine.getInstance().setModelUnification(enabled);
+    return true;
+  });
+
+  ipcMain.handle('freellm:playground:run', async (_, { prompt, model, temperature }) => {
+    const startTime = Date.now();
+    const resp = await FreeLLMEngine.getInstance().chatCompletion({
+      model: model || 'auto',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: temperature ?? 0.7,
+      stream: false,
+    });
+    return {
+      content: resp.choices?.[0]?.message?.content || '',
+      reasoning: (resp.choices?.[0]?.message as any)?.reasoning_content || undefined,
+      routedVia: resp._routed_via,
+      latencyMs: Date.now() - startTime,
+    };
+  });
+
+  ipcMain.handle('freellm:media:generate-image', async (_, { prompt, options }) => {
+    return FreeLLMEngine.getInstance().generateImage(prompt, options);
   });
 }
 

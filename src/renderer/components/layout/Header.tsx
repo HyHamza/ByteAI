@@ -40,6 +40,7 @@ interface HeaderProps {
   onToggleAutonomousMode?: () => void;
   activeSession?: ChatSession;
   onUpdateTaskState?: (state: TaskState) => void;
+  onOpenFreeLLMHub?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -60,6 +61,7 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleAutonomousMode,
   activeSession,
   onUpdateTaskState,
+  onOpenFreeLLMHub,
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isTaskStateMenuOpen, setIsTaskStateMenuOpen] = useState(false);
@@ -314,6 +316,16 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           )}
 
+          {/* Free LLM Hub Button */}
+          <button
+            onClick={onOpenFreeLLMHub}
+            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-gradient-to-r from-blue-900/40 to-indigo-900/40 text-blue-300 hover:text-white hover:from-blue-800/50 hover:to-indigo-800/50 border border-blue-500/30 transition-all cursor-pointer shadow-xs shadow-blue-500/10"
+            title="Open Free LLM Engine & Hub (22+ Providers, Auto-Routing, Analytics)"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-blue-400" />
+            <span>Free LLM Hub</span>
+          </button>
+
           {/* Antigravity Blue Pill: Jules Mission Control */}
           <button
             onClick={onToggleJulesPanel}
@@ -339,15 +351,25 @@ export const Header: React.FC<HeaderProps> = ({
 
             {isMenuOpen && (
               <div 
-                className="absolute right-0 mt-1 w-44 bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-lg shadow-xl py-1 text-xs text-[var(--text-primary)] z-50"
+                className="absolute right-0 mt-1 w-48 bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-lg shadow-xl py-1 text-xs text-[var(--text-primary)] z-50"
                 onMouseLeave={() => setIsMenuOpen(false)}
               >
                 <button
                   onClick={() => {
                     setIsMenuOpen(false);
+                    onOpenFreeLLMHub?.();
+                  }}
+                  className="w-full text-left px-3 py-1.5 hover:bg-[var(--bg-surface)] text-blue-300 flex items-center space-x-2 transition-colors cursor-pointer"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-blue-400" />
+                  <span>Free LLM Hub</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setIsMenuOpen(false);
                     onSelectWorkspace();
                   }}
-                  className="w-full text-left px-3 py-1.5 hover:bg-[var(--bg-surface-hover)] transition-colors"
+                  className="w-full text-left px-3 py-1.5 hover:bg-[var(--bg-surface)] transition-colors"
                 >
                   Change Workspace...
                 </button>
@@ -356,7 +378,7 @@ export const Header: React.FC<HeaderProps> = ({
                     setIsMenuOpen(false);
                     onOpenSettings();
                   }}
-                  className="w-full text-left px-3 py-1.5 hover:bg-[var(--bg-surface-hover)] transition-colors"
+                  className="w-full text-left px-3 py-1.5 hover:bg-[var(--bg-surface)] transition-colors"
                 >
                   Settings & Keys
                 </button>

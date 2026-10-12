@@ -204,6 +204,33 @@ const mockAPI: ElectronAPI = {
     } catch (_) {}
     return false;
   },
+  freellm: {
+    listKeys: async () => [],
+    addKey: async () => ({ success: true, id: 1 }),
+    updateKey: async () => ({ success: true }),
+    deleteKey: async () => ({ success: true }),
+    testKey: async () => ({ success: true, status: 'healthy' }),
+    getAnalyticsSummary: async () => ({
+      totalRequests: 0,
+      successRate: 100,
+      totalInputTokens: 0,
+      totalOutputTokens: 0,
+      avgLatencyMs: 0,
+      estimatedCostSavings: 0,
+    }),
+    getPlatformStats: async () => [],
+    getTimeline: async () => [],
+    getRequestLogs: async () => [],
+    getModelListing: async () => [],
+    getFallbackChain: async () => [],
+    updateFallbackPriority: async () => true,
+    getRoutingStrategy: async () => 'balanced',
+    setRoutingStrategy: async () => {},
+    getModelUnification: async () => true,
+    setModelUnification: async () => {},
+    chatPlayground: async () => ({ content: 'Playground test response', latencyMs: 250 }),
+    generateImage: async () => ({ url: '' }),
+  },
 };
 
 export const api: ElectronAPI =

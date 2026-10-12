@@ -14,6 +14,7 @@ release/
 .env.local
 .env.*.local
 .jules_key
+freellmapi/
 
 # Logs
 npm-debug.log*

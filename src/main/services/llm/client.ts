@@ -1,6 +1,7 @@
 import https from 'https';
 import http from 'http';
 import { DataStore } from '../db/store';
+import { FreeLLMEngine } from '../freellm/engine';
 
 export interface LLMMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
@@ -59,6 +60,21 @@ export class LLMClient {
   public async fetchAvailableModels(): Promise<string[]> {
     const { baseUrl, apiKey } = this.getNormalizedConfig();
     const defaults = ['auto', 'gpt-4o', 'gpt-4o-mini', 'claude-3-5-sonnet', 'gemini-2.5-pro', 'gemini-2.5-flash'];
+    
+    // In-process FreeLLM catalog
+    try {
+      const listing = FreeLLMEngine.getInstance().getModelListing();
+      if (listing && listing.length > 0) {
+        const freeModels = listing.map((m) => m.id);
+        const shouldUseFreeLLM = !apiKey || apiKey.startsWith('freellm') || baseUrl.includes('freellm') || !apiKey.startsWith('sk-');
+        if (shouldUseFreeLLM) {
+          return Array.from(new Set(['auto', ...freeModels]));
+        }
+      }
+    } catch (e) {
+      // Fallback
+    }
+
     if (!apiKey) {
       return defaults;
     }
@@ -331,7 +347,7 @@ export class LLMClient {
     throw new Error(`LLM Request failed after ${MAX_RETRIES} attempts.`);
   }
 
-  private chatStreamOnce(
+  private async chatStreamOnce(
     messages: LLMMessage[],
     tools: LLMToolDefinition[] | undefined,
     callbacks: LLMStreamCallbacks,
@@ -339,6 +355,51 @@ export class LLMClient {
   ): Promise<{ content: string; reasoning?: string; toolCalls: any[]; model: string }> {
     const { baseUrl, apiKey, modelToUse } = this.getNormalizedConfig();
     const effectiveModel = overrideModel || modelToUse;
+
+    // Use native in-process FreeLLMEngine if:
+    // 1) apiKey is empty
+    // 2) apiKey starts with 'freellm'
+    // 3) baseUrl is configured for freellm or localhost
+    // 4) apiKey is not a direct third-party key (e.g. sk-...)
+    const shouldUseFreeLLM = !apiKey || apiKey.startsWith('freellm') || baseUrl.includes('freellm') || baseUrl.includes('localhost:3000') || !apiKey.startsWith('sk-');
+
+    if (shouldUseFreeLLM) {
+      try {
+        const response = await FreeLLMEngine.getInstance().chatCompletion(
+          {
+            model: effectiveModel,
+            messages: messages as any,
+            tools: tools as any,
+            tool_choice: tools && tools.length > 0 ? 'auto' : undefined,
+            temperature: 0.2,
+            stream: true,
+          },
+          {
+            onToken: (tok) => callbacks.onToken(tok),
+            onReasoning: (reasoning) => callbacks.onReasoning?.(reasoning),
+            onToolCallDelta: (tc) => callbacks.onToolCallDelta?.(tc),
+            onModelResolved: (model) => callbacks.onModelResolved?.(model),
+            onRetry: (attempt, maxRetries, delayMs, reason) => callbacks.onRetry?.(attempt, maxRetries, delayMs, reason),
+          }
+        );
+
+        const choice = response.choices?.[0];
+        const content = choice?.message?.content || '';
+        const reasoning = (choice?.message as any)?.reasoning_content || undefined;
+        const toolCalls = choice?.message?.tool_calls || [];
+        const resolvedModel = response._routed_via?.model || response.model || effectiveModel;
+
+        return {
+          content,
+          reasoning,
+          toolCalls,
+          model: resolvedModel,
+        };
+      } catch (err: any) {
+        throw err;
+      }
+    }
+
     const url = `${baseUrl}/chat/completions`;
 
     const payload: any = {

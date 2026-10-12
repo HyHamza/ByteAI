@@ -235,6 +235,28 @@ export interface ElectronAPI {
   // Native Clipboard API
   copyImageToClipboard?: (payload: { imageUrl?: string; filePath?: string }) => Promise<boolean>;
   copyTextToClipboard?: (text: string) => Promise<boolean>;
+
+  // Free LLM In-Process Engine API
+  freellm: {
+    listKeys: () => Promise<any[]>;
+    addKey: (data: { platform: string; key?: string; label?: string; baseUrl?: string }) => Promise<{ success: boolean; id: number }>;
+    updateKey: (id: number, data: { enabled?: boolean; label?: string; baseUrl?: string }) => Promise<{ success: boolean }>;
+    deleteKey: (id: number) => Promise<{ success: boolean }>;
+    testKey: (id: number) => Promise<{ success: boolean; status: string; error?: string }>;
+    getAnalyticsSummary: () => Promise<any>;
+    getPlatformStats: () => Promise<any[]>;
+    getTimeline: (days?: number) => Promise<any[]>;
+    getRequestLogs: (limit?: number, offset?: number) => Promise<any[]>;
+    getModelListing: () => Promise<any[]>;
+    getFallbackChain: () => Promise<any[]>;
+    updateFallbackPriority: (modelDbId: number, priority: number, enabled: boolean) => Promise<boolean>;
+    getRoutingStrategy: () => Promise<string>;
+    setRoutingStrategy: (strategy: string) => Promise<void>;
+    getModelUnification: () => Promise<boolean>;
+    setModelUnification: (enabled: boolean) => Promise<void>;
+    chatPlayground: (prompt: string, model: string, temperature?: number) => Promise<{ content: string; reasoning?: string; routedVia?: any; latencyMs: number }>;
+    generateImage: (prompt: string, options?: { model?: string; size?: string }) => Promise<any>;
+  };
 }
 
 export interface DutyShiftPhase {
