@@ -16,10 +16,12 @@ import { encrypt, decrypt, maskKey } from './lib/crypto';
 import { 
   routeRequest, 
   resolveRoutingChain, 
+  resolveModelGroupCandidates,
   recordRateLimitHit, 
   recordSuccess, 
   type RouteResult, 
-  type ResolvedChain 
+  type ResolvedChain,
+  type ChainRow
 } from './services/router';
 import { 
   recordRequest, 
@@ -33,8 +35,9 @@ import {
 import { startHealthChecker, checkSingleKey } from './services/health';
 import { startCatalogSync } from './services/catalog-sync';
 import { buildModelListing, type NormalizedModel } from './services/model-listing';
-import { isUnifyEnabled, setUnifyEnabled } from './services/model-groups';
-import { isRetryableError, isPaymentRequiredError, isModelAccessForbiddenError } from './lib/error-classify';
+import { isUnifyEnabled, setUnifyEnabled, getModelGroups, resolveRequestedIdToMembers } from './services/model-groups';
+import { contentToString } from './lib/content';
+import { isRetryableError, isPaymentRequiredError, isModelNotFoundError, isModelAccessForbiddenError } from './lib/error-classify';
 import { sanitizeProviderErrorMessage } from './lib/error-redaction';
 import { logRequest } from './lib/request-log';
 import { repairToolArguments, toolSchemaMap } from './lib/tool-args';
@@ -43,6 +46,12 @@ import { DEFAULT_STRATEGY, type RoutingStrategy } from './services/scoring';
 import { resolveProvider, getProvider, hasProvider } from './providers/index';
 import { runImageGeneration, runSpeech } from './services/media';
 import { runEmbeddings } from './services/embeddings';
+
+function isAutoModel(modelId: string | undefined): boolean {
+  if (!modelId) return true;
+  const lower = modelId.toLowerCase();
+  return lower === 'auto' || lower.startsWith('auto:');
+}
 
 export interface FreeLLMStreamCallbacks {
   onToken: (token: string) => void;
@@ -230,7 +239,7 @@ export class FreeLLMEngine {
         COALESCE(SUM(input_tokens), 0) as total_input_tokens,
         COALESCE(SUM(output_tokens), 0) as total_output_tokens,
         AVG(latency_ms) as avg_latency_ms
-      FROM request_logs
+      FROM requests
     `).get() as any;
 
     const totalRequests = Number(row?.total_requests || 0);
@@ -263,7 +272,7 @@ export class FreeLLMEngine {
         AVG(latency_ms) as avg_latency_ms,
         COALESCE(SUM(input_tokens), 0) as total_input_tokens,
         COALESCE(SUM(output_tokens), 0) as total_output_tokens
-      FROM request_logs
+      FROM requests
       GROUP BY platform
       ORDER BY requests DESC
     `).all() as any[];
@@ -290,7 +299,7 @@ export class FreeLLMEngine {
         COUNT(*) as requests,
         SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success_count,
         SUM(CASE WHEN status != 'success' THEN 1 ELSE 0 END) as failure_count
-      FROM request_logs
+      FROM requests
       WHERE created_at >= datetime('now', '-${days} days')
       GROUP BY hour_bucket
       ORDER BY hour_bucket ASC
@@ -308,7 +317,7 @@ export class FreeLLMEngine {
     const db = getDb();
     const rows = db.prepare(`
       SELECT id, platform, model_id, status, input_tokens, output_tokens, latency_ms, error, created_at
-      FROM request_logs
+      FROM requests
       ORDER BY id DESC
       LIMIT ? OFFSET ?
     `).all(limit, offset) as any[];
@@ -347,8 +356,8 @@ export class FreeLLMEngine {
         m.context_window, 
         m.supports_vision, 
         m.supports_tools
-      FROM fallback_chain fc
-      JOIN models m ON fc.model_id = m.id
+      FROM fallback_config fc
+      JOIN models m ON fc.model_db_id = m.id
       ORDER BY fc.priority ASC
     `).all() as any[];
   }
@@ -356,7 +365,7 @@ export class FreeLLMEngine {
   public updateFallbackPriority(modelDbId: number, priority: number, enabled: boolean): boolean {
     const db = getDb();
     db.prepare(`
-      UPDATE fallback_chain SET priority = ?, enabled = ? WHERE model_id = ?
+      UPDATE fallback_config SET priority = ?, enabled = ? WHERE model_db_id = ?
     `).run(priority, enabled ? 1 : 0, modelDbId);
     return true;
   }
@@ -389,29 +398,58 @@ export class FreeLLMEngine {
     const requestedModel = req.model || 'auto';
     const requestId = crypto.randomUUID();
     const hasTools = Boolean(req.tools && req.tools.length > 0);
-    const schemaMap = hasTools ? toolSchemaMap(req.tools) : undefined;
+    const schemaMap = hasTools && req.tools ? toolSchemaMap(req.tools) : undefined;
 
-    // Resolve candidates & fallback chain
-    const chain: ResolvedChain = resolveRoutingChain(requestedModel, req.messages, {
-      tools: req.tools,
-      toolChoice: req.tool_choice,
+    const estimatedInputTokens = (req.messages || []).reduce((sum, m) => {
+      const text = contentToString(m.content);
+      return sum + Math.ceil(text.length / 4);
+    }, 0);
+
+    const hasImage = (req.messages || []).some((m) => {
+      if (Array.isArray(m.content)) {
+        return m.content.some((b: any) => b?.type === 'image_url' || b?.type === 'image');
+      }
+      return false;
     });
 
-    if (chain.rows.length === 0) {
-      throw new Error(`No available or enabled providers found to serve model "${requestedModel}". Please add API keys in Free LLM Keys Hub.`);
+    const estimatedTotal = estimatedInputTokens + (req.max_tokens ?? 1000);
+
+    let resolvedChain: ResolvedChain | undefined;
+    let groupChain: ChainRow[] | undefined;
+    let preferredModel: number | undefined;
+
+    if (isAutoModel(requestedModel)) {
+      resolvedChain = resolveRoutingChain(requestedModel);
+    } else if (requestedModel) {
+      const db = getDb();
+      const members = isUnifyEnabled() ? resolveRequestedIdToMembers(requestedModel, getModelGroups()) : null;
+      if (members && members.length > 0) {
+        groupChain = resolveModelGroupCandidates(members);
+      } else {
+        const found = db.prepare('SELECT id FROM models WHERE model_id = ? AND enabled = 1 LIMIT 1').get(requestedModel) as { id: number } | undefined;
+        if (found) {
+          preferredModel = found.id;
+        }
+      }
     }
 
+    const MAX_RETRIES = 10;
+    const skipKeys = new Set<string>();
+    const skipModels = new Set<number>();
     let lastError: any = null;
-    const maxRetries = Math.min(chain.rows.length, 10);
 
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       let route: RouteResult | null = null;
       try {
-        route = routeRequest(req.messages, chain, {
-          tools: req.tools,
-          toolChoice: req.tool_choice,
-          requestId,
-        });
+        route = routeRequest(
+          estimatedTotal,
+          skipKeys.size > 0 ? skipKeys : undefined,
+          preferredModel,
+          hasImage,
+          hasTools,
+          skipModels.size > 0 ? skipModels : undefined,
+          groupChain ?? resolvedChain?.chain
+        );
       } catch (err: any) {
         lastError = err;
         break;
@@ -428,73 +466,92 @@ export class FreeLLMEngine {
         if (isStream) {
           let streamedContent = '';
           let streamedReasoning = '';
-          const toolCallDeltas: Map<number, ChatToolCall> = new Map();
+          const toolCallAcc = new Map<number, { id?: string; name: string; args: string }>();
 
-          const stream = route.provider.chatCompleteStream({
-            messages: req.messages,
-            model: route.modelId,
-            temperature: req.temperature,
-            max_tokens: req.max_tokens,
-            tools: req.tools,
-            tool_choice: req.tool_choice,
-          }, route.apiKey);
+          const stream = route.provider.streamChatCompletion(
+            route.apiKey,
+            req.messages,
+            route.modelId,
+            {
+              temperature: req.temperature,
+              max_tokens: req.max_tokens,
+              top_p: req.top_p,
+              tools: req.tools,
+              tool_choice: req.tool_choice,
+              parallel_tool_calls: req.parallel_tool_calls,
+            }
+          );
 
           for await (const chunk of stream) {
-            if (chunk.content) {
-              streamedContent += chunk.content;
-              callbacks?.onToken?.(chunk.content);
+            const anyChunk = chunk as Record<string, any>;
+            if (anyChunk.error && !anyChunk.choices) {
+              const msg = anyChunk.error.message ?? JSON.stringify(anyChunk.error);
+              throw new Error(`In-band provider error from ${route.displayName}: ${msg}`);
             }
-            if (chunk.reasoning_content) {
-              streamedReasoning += chunk.reasoning_content;
-              callbacks?.onReasoning?.(chunk.reasoning_content);
+
+            const choice = anyChunk.choices?.[0];
+            if (choice?.delta?.content) {
+              streamedContent += choice.delta.content;
+              callbacks?.onToken?.(choice.delta.content);
             }
-            if (chunk.tool_calls && chunk.tool_calls.length > 0) {
-              for (const tc of chunk.tool_calls) {
-                const idx = (tc as any).index ?? 0;
-                let existing = toolCallDeltas.get(idx);
-                if (!existing) {
-                  existing = {
-                    id: tc.id || `call_${Date.now()}_${idx}`,
-                    type: 'function',
-                    function: { name: tc.function?.name || '', arguments: '' },
-                  };
-                  toolCallDeltas.set(idx, existing);
-                } else if (tc.function?.name && !existing.function.name) {
-                  existing.function.name = tc.function.name;
-                }
-                if (tc.function?.arguments) {
-                  existing.function.arguments += tc.function.arguments;
-                }
+            if ((choice?.delta as any)?.reasoning_content) {
+              const reasoning = (choice?.delta as any).reasoning_content;
+              streamedReasoning += reasoning;
+              callbacks?.onReasoning?.(reasoning);
+            }
+            if (choice?.delta?.tool_calls) {
+              for (const tc of choice.delta.tool_calls) {
+                const idx = tc.index ?? 0;
+                if (!toolCallAcc.has(idx)) toolCallAcc.set(idx, { id: undefined, name: '', args: '' });
+                const acc = toolCallAcc.get(idx)!;
+                if (tc.id && !acc.id) acc.id = tc.id;
+                if (tc.function?.name) acc.name += tc.function.name;
+                if (tc.function?.arguments) acc.args += tc.function.arguments;
                 callbacks?.onToolCallDelta?.(tc);
               }
             }
           }
 
-          let finalToolCalls: ChatToolCall[] | undefined = toolCallDeltas.size > 0 
-            ? Array.from(toolCallDeltas.values()) 
+          let syntheticStreamIds = 0;
+          let finalToolCalls: ChatToolCall[] | undefined = toolCallAcc.size > 0
+            ? [...toolCallAcc.entries()]
+                .sort((a, b) => a[0] - b[0])
+                .map(([, acc]) => ({
+                  id: acc.id && acc.id.length > 0 ? acc.id : `call_stream_${++syntheticStreamIds}`,
+                  type: 'function' as const,
+                  function: {
+                    name: acc.name,
+                    arguments: schemaMap ? repairToolArguments(acc.args || '{}', schemaMap.get(acc.name)) : (acc.args || '{}'),
+                  },
+                }))
+                .filter((c) => {
+                  try { JSON.parse(c.function.arguments); return c.function.name.length > 0; } catch { return false; }
+                })
             : undefined;
 
-          // Repair tool arguments if any
-          if (finalToolCalls && schemaMap) {
-            finalToolCalls = repairToolArguments(finalToolCalls, schemaMap);
-          }
-
-          // Tool call rescue for inline markers (XML/markdown JSON)
-          if (!finalToolCalls && hasTools && req.tools) {
-            const rescued = rescueInlineToolCalls(streamedContent, req.tools);
-            if (rescued) {
-              streamedContent = rescued.cleanedContent;
-              finalToolCalls = rescued.toolCalls;
+          // Inline dialect rescue if needed
+          if ((!finalToolCalls || finalToolCalls.length === 0) && hasTools && req.tools && streamedContent) {
+            const rescue = rescueInlineToolCalls(streamedContent, new Set((req.tools || []).map((t) => t.function.name)));
+            if (rescue.detected && rescue.calls) {
+              finalToolCalls = rescue.calls.map((c, i) => ({
+                id: `call_rescued_${i + 1}`,
+                type: 'function' as const,
+                function: {
+                  name: c.name,
+                  arguments: schemaMap ? repairToolArguments(c.arguments, schemaMap.get(c.name)) : c.arguments,
+                },
+              }));
+              streamedContent = rescue.cleanText;
             }
           }
 
           const latencyMs = Date.now() - startTime;
-          const inputTokens = Math.max(1, Math.round(JSON.stringify(req.messages).length / 4));
-          const outputTokens = Math.max(1, Math.round((streamedContent.length + JSON.stringify(finalToolCalls || []).length) / 4));
+          const outputTokens = Math.max(1, Math.ceil(streamedContent.length / 4));
 
-          recordSuccess(route.modelDbId, route.keyId, latencyMs);
-          recordTokens(route.platform, route.modelId, route.keyId, inputTokens, outputTokens);
-          logRequest(route.platform, route.modelId, 'success', inputTokens, outputTokens, latencyMs, null);
+          recordRequest(route.platform, route.modelId, route.keyId);
+          recordTokens(route.platform, route.modelId, route.keyId, estimatedInputTokens + outputTokens);
+          recordSuccess(route.modelDbId);
+          logRequest(route.platform, route.modelId, route.keyId, 'success', estimatedInputTokens, outputTokens, latencyMs, null, null, requestedModel);
 
           return {
             id: `chatcmpl-${requestId}`,
@@ -506,15 +563,15 @@ export class FreeLLMEngine {
               message: {
                 role: 'assistant',
                 content: streamedContent,
-                tool_calls: finalToolCalls,
+                tool_calls: finalToolCalls && finalToolCalls.length > 0 ? finalToolCalls : undefined,
                 reasoning_content: streamedReasoning || undefined,
               },
-              finish_reason: finalToolCalls ? 'tool_calls' : 'stop',
+              finish_reason: finalToolCalls && finalToolCalls.length > 0 ? 'tool_calls' : 'stop',
             }],
             usage: {
-              prompt_tokens: inputTokens,
+              prompt_tokens: estimatedInputTokens,
               completion_tokens: outputTokens,
-              total_tokens: inputTokens + outputTokens,
+              total_tokens: estimatedInputTokens + outputTokens,
             },
             _routed_via: {
               platform: route.platform as Platform,
@@ -523,26 +580,29 @@ export class FreeLLMEngine {
           };
         } else {
           // Non-streaming completion
-          const response = await route.provider.chatComplete({
-            messages: req.messages,
-            model: route.modelId,
-            temperature: req.temperature,
-            max_tokens: req.max_tokens,
-            tools: req.tools,
-            tool_choice: req.tool_choice,
-          }, route.apiKey);
+          const response = await route.provider.chatCompletion(
+            route.apiKey,
+            req.messages,
+            route.modelId,
+            {
+              temperature: req.temperature,
+              max_tokens: req.max_tokens,
+              top_p: req.top_p,
+              tools: req.tools,
+              tool_choice: req.tool_choice,
+              parallel_tool_calls: req.parallel_tool_calls,
+            }
+          );
 
           const latencyMs = Date.now() - startTime;
-          const usage = response.usage || {
-            prompt_tokens: Math.round(JSON.stringify(req.messages).length / 4),
-            completion_tokens: Math.round(JSON.stringify(response.choices).length / 4),
-            total_tokens: 0,
-          };
-          usage.total_tokens = usage.prompt_tokens + usage.completion_tokens;
+          const promptTokens = response.usage?.prompt_tokens ?? estimatedInputTokens;
+          const completionTokens = response.usage?.completion_tokens ?? 0;
+          const totalTokens = response.usage?.total_tokens ?? (promptTokens + completionTokens);
 
-          recordSuccess(route.modelDbId, route.keyId, latencyMs);
-          recordTokens(route.platform, route.modelId, route.keyId, usage.prompt_tokens, usage.completion_tokens);
-          logRequest(route.platform, route.modelId, 'success', usage.prompt_tokens, usage.completion_tokens, latencyMs, null);
+          recordRequest(route.platform, route.modelId, route.keyId);
+          recordTokens(route.platform, route.modelId, route.keyId, totalTokens);
+          recordSuccess(route.modelDbId);
+          logRequest(route.platform, route.modelId, route.keyId, 'success', promptTokens, completionTokens, latencyMs, null, null, requestedModel);
 
           response._routed_via = {
             platform: route.platform as Platform,
@@ -552,49 +612,59 @@ export class FreeLLMEngine {
         }
       } catch (err: any) {
         const latencyMs = Date.now() - startTime;
-        const errMsg = sanitizeProviderErrorMessage(err?.message || String(err));
+        const safeError = sanitizeProviderErrorMessage(err?.message || String(err));
         lastError = err;
 
-        const is429 = err?.status === 429 || /429|rate limit|quota|exhaust/i.test(errMsg);
-        if (is429) {
+        logRequest(route.platform, route.modelId, route.keyId, 'error', estimatedInputTokens, 0, latencyMs, safeError, null, requestedModel);
+
+        if (isRetryableError(err)) {
+          if (isModelNotFoundError(err) || isModelAccessForbiddenError(err)) {
+            skipModels.add(route.modelDbId);
+          }
+          const skipId = `${route.platform}:${route.modelId}:${route.keyId}`;
+          skipKeys.add(skipId);
+          setCooldown(
+            route.platform,
+            route.modelId,
+            route.keyId,
+            isPaymentRequiredError(err)
+              ? PAYMENT_REQUIRED_COOLDOWN_MS
+              : isModelAccessForbiddenError(err)
+              ? MODEL_FORBIDDEN_COOLDOWN_MS
+              : getCooldownDurationForLimit(
+                  route.platform,
+                  route.modelId,
+                  route.keyId,
+                  { rpd: route.rpdLimit, tpd: route.tpdLimit },
+                  err.retryAfterMs
+                )
+          );
           recordRateLimitHit(route.modelDbId);
-          setCooldown(route.platform, route.modelId, route.keyId, getCooldownDurationForLimit(route.rpdLimit, route.tpdLimit));
-          learnLimitFromError(route.platform, route.modelId, route.keyId, errMsg, err?.headers || {});
-        } else if (isPaymentRequiredError(err)) {
-          setCooldown(route.platform, route.modelId, route.keyId, PAYMENT_REQUIRED_COOLDOWN_MS);
-        } else if (isModelAccessForbiddenError(err)) {
-          setCooldown(route.platform, route.modelId, route.keyId, MODEL_FORBIDDEN_COOLDOWN_MS);
-        }
-
-        logRequest(route.platform, route.modelId, 'error', 0, 0, latencyMs, errMsg);
-
-        if (attempt < maxRetries && isRetryableError(err)) {
-          callbacks?.onRetry?.(attempt, maxRetries, 500, `${route.platform} ${route.modelId} hit error (${errMsg}), cascading...`);
-          await new Promise((r) => setTimeout(r, 400));
+          learnLimitFromError(route.modelDbId, err);
+          callbacks?.onRetry?.(attempt + 1, MAX_RETRIES, 400, `${route.displayName} hit error (${safeError}), cascading...`);
+          await new Promise((r) => setTimeout(r, 300));
           continue;
         }
 
-        throw err;
+        throw new Error(`Provider error (${route.displayName}): ${safeError}`);
       }
     }
 
-    throw lastError || new Error(`All providers for model "${requestedModel}" failed after ${maxRetries} cascade attempts.`);
+    throw lastError || new Error(`No available or enabled providers found to serve model "${requestedModel}". Please check your API keys and Fallback Chain.`);
   }
 
   // ─── Free Media Studio (FLUX Image & Speech) ─────────────────────────────
 
   public async generateImage(prompt: string, options?: { model?: string; size?: string }): Promise<any> {
-    return runImageGeneration({
+    return runImageGeneration(options?.model, {
       prompt,
-      model: options?.model,
       size: options?.size,
     });
   }
 
   public async generateSpeech(text: string, options?: { model?: string; voice?: string }): Promise<any> {
-    return runSpeech({
-      text,
-      model: options?.model,
+    return runSpeech(options?.model, {
+      input: text,
       voice: options?.voice,
     });
   }
