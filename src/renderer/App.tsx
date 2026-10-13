@@ -9,7 +9,7 @@ import { SettingsModal } from './components/settings/SettingsModal';
 import { FreeLLMHubModal } from './components/freellm/FreeLLMHubModal';
 import { SplashScreen } from './components/common/SplashScreen';
 import { api } from './api';
-import type { AppSettings, ChatSession, ChatMessage, AppMode, TaskState, StreamTokenPayload, ToolCallPayload, ToolExecutionRecord, JulesSessionSummary, ProjectInfo, AttachmentFile } from '@/shared/types';
+import type { AppSettings, ChatSession, ChatMessage, AppMode, TaskState, StreamTokenPayload, ToolCallPayload, ToolExecutionRecord, JulesSessionSummary, ProjectInfo, AttachmentFile, QueuedMessage } from '@/shared/types';
 
 const DEFAULT_SETTINGS: AppSettings = {
   mode: 'standard',
@@ -56,6 +56,19 @@ export const App: React.FC = () => {
   const [streamingTools, setStreamingTools] = useState<ToolExecutionRecord[]>([]);
   const [retryStatus, setRetryStatus] = useState<{ attempt: number; maxRetries: number; delayMs: number; reason: string } | null>(null);
   const [liveResolvedModel, setLiveResolvedModel] = useState<string | null>(null);
+
+  // Queued Messages & Background Tasks state
+  const [queuedMessages, setQueuedMessages] = useState<QueuedMessage[]>(() => {
+    try {
+      const saved = localStorage.getItem('byte_queued_messages');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [runningBgTasks, setRunningBgTasks] = useState<{ taskId: string; command: string }[]>([]);
+  const isCancelledRef = useRef<boolean>(false);
+  const isStreamingPrevRef = useRef<boolean>(false);
 
   // Startup splash screen state
   const [isAppReady, setIsAppReady] = useState(false);
@@ -605,12 +618,109 @@ export const App: React.FC = () => {
     await api.sendMessage(activeSessionId, text, attachments);
   };
 
+  const handleQueueMessage = (text: string, attachments?: AttachmentFile[]) => {
+    if (!activeSessionId) return;
+    const newQueued: QueuedMessage = {
+      id: `queue_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      sessionId: activeSessionId,
+      text,
+      attachments,
+      createdAt: Date.now(),
+    };
+    setQueuedMessages((prev) => [...prev, newQueued]);
+  };
+
+  const handleRemoveQueuedMessage = (id: string) => {
+    setQueuedMessages((prev) => prev.filter((q) => q.id !== id));
+  };
+
   const handleCancelExecution = async () => {
     if (!activeSessionId) return;
+    isCancelledRef.current = true;
     await api.cancelExecution(activeSessionId);
     setIsStreaming(false);
     setStreamingTools([]);
   };
+
+  // Persist queued messages across reloads
+  useEffect(() => {
+    try {
+      localStorage.setItem('byte_queued_messages', JSON.stringify(queuedMessages));
+    } catch {}
+  }, [queuedMessages]);
+
+  // Poll active background tasks from TaskManager
+  useEffect(() => {
+    let isMounted = true;
+    const checkBgTasks = async () => {
+      try {
+        if (api.getRunningTasks) {
+          const tasks = await api.getRunningTasks(activeSessionId || undefined);
+          if (isMounted && Array.isArray(tasks)) {
+            setRunningBgTasks(tasks.map((t: any) => ({ taskId: t.taskId, command: t.command })));
+          }
+        }
+      } catch {}
+    };
+
+    checkBgTasks();
+    const interval = setInterval(checkBgTasks, 3000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [activeSessionId, isStreaming]);
+
+  // Auto-dequeue: When agent finishes execution (isStreaming turns false), auto-send next queued message
+  useEffect(() => {
+    const wasStreaming = isStreamingPrevRef.current;
+    isStreamingPrevRef.current = isStreaming;
+
+    if (wasStreaming && !isStreaming && activeSessionId) {
+      if (isCancelledRef.current) {
+        isCancelledRef.current = false;
+        return;
+      }
+
+      setQueuedMessages((prev) => {
+        const sessionQueue = prev.filter((q) => q.sessionId === activeSessionId);
+        if (sessionQueue.length > 0) {
+          const [nextMsg, ...restSessionQueue] = sessionQueue;
+          const otherSessions = prev.filter((q) => q.sessionId !== activeSessionId);
+
+          setTimeout(() => {
+            handleSendMessage(nextMsg.text, nextMsg.attachments);
+          }, 350);
+
+          return [...otherSessions, ...restSessionQueue];
+        }
+        return prev;
+      });
+    }
+  }, [isStreaming, activeSessionId]);
+
+  // Active running tasks for the active session (streaming tools + background tasks)
+  const activeTasks = useMemo(() => {
+    const tasks: { id: string; label: string }[] = [];
+    for (const t of streamingTools) {
+      if (t.status === 'running' || t.status === 'pending') {
+        const label = t.args?.command || t.args?.CommandLine || t.intent || (t.args?.path ? `${t.toolName} ${t.args.path}` : t.toolName);
+        tasks.push({ id: t.id, label });
+      }
+    }
+    for (const bt of runningBgTasks) {
+      if (!tasks.some((t) => t.id === bt.taskId)) {
+        tasks.push({ id: bt.taskId, label: bt.command });
+      }
+    }
+    return tasks;
+  }, [streamingTools, runningBgTasks]);
+
+  // Queued messages filtered for the currently active session
+  const activeSessionQueuedMessages = useMemo(() => {
+    if (!activeSessionId) return [];
+    return queuedMessages.filter((q) => q.sessionId === activeSessionId);
+  }, [queuedMessages, activeSessionId]);
 
   const handleSaveSettings = async (partial: Partial<AppSettings>) => {
     await api.saveSettings(partial);
@@ -858,6 +968,11 @@ export const App: React.FC = () => {
                 onToggleAutonomousMode={handleToggleAutonomousMode}
                 taskState={activeSession?.taskState}
                 onUpdateTaskState={handleUpdateTaskState}
+                queuedMessages={activeSessionQueuedMessages}
+                onQueueMessage={handleQueueMessage}
+                onRemoveQueuedMessage={handleRemoveQueuedMessage}
+                queuedMessageMode={settings.queuedMessages || 'queue'}
+                activeTasks={activeTasks}
               />
             </div>
           ) : (
@@ -892,6 +1007,11 @@ export const App: React.FC = () => {
                 onToggleAutonomousMode={handleToggleAutonomousMode}
                 taskState={activeSession?.taskState}
                 onUpdateTaskState={handleUpdateTaskState}
+                queuedMessages={activeSessionQueuedMessages}
+                onQueueMessage={handleQueueMessage}
+                onRemoveQueuedMessage={handleRemoveQueuedMessage}
+                queuedMessageMode={settings.queuedMessages || 'queue'}
+                activeTasks={activeTasks}
               />
             </>
           )}

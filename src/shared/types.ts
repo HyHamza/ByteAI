@@ -45,6 +45,14 @@ export interface AttachmentFile {
   dataUrl?: string; // base64 thumbnail for images or preview
 }
 
+export interface QueuedMessage {
+  id: string;
+  sessionId: string;
+  text: string;
+  attachments?: AttachmentFile[];
+  createdAt: number;
+}
+
 export interface ChatMessage {
   id: string;
   sessionId: string;
@@ -214,6 +222,7 @@ export interface ElectronAPI {
   onJulesUpdate: (callback: (update: JulesSessionSummary) => void) => () => void;
 
   // Background Tasks API
+  getRunningTasks?: (sessionId?: string) => Promise<any[]>;
   getTaskLogs?: (taskId: string) => Promise<{ status: string; exitCode: number | null; output: string; logPath: string; isRunning: boolean }>;
   killTask?: (taskId: string) => Promise<string>;
 

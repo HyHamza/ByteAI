@@ -567,6 +567,10 @@ function setupIpcHandlers() {
   });
 
   // ── Background Tasks IPC
+  ipcMain.handle('task:get-running', async (_, { sessionId }: { sessionId?: string } = {}) => {
+    return TaskManager.getInstance().getRunningTasks(sessionId);
+  });
+
   ipcMain.handle('task:get-logs', async (_, { taskId }: { taskId: string }) => {
     return TaskManager.getInstance().getTaskLogs(taskId);
   });

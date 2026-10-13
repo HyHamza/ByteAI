@@ -18,9 +18,12 @@ import {
   MicOff,
   Moon,
   Clock,
-  Zap
+  Zap,
+  Pencil,
+  Trash2,
+  Loader2
 } from 'lucide-react';
-import type { AppMode, AttachmentFile, TaskState } from '@/shared/types';
+import type { AppMode, AttachmentFile, TaskState, QueuedMessage } from '@/shared/types';
 import { api } from '../../api';
 import { useVoiceDictation } from '../../hooks/useVoiceDictation';
 import { byteLogoBw } from '../../assets';
@@ -46,6 +49,11 @@ interface ChatInputProps {
   onToggleAutonomousMode?: () => void;
   taskState?: TaskState;
   onUpdateTaskState?: (state: TaskState) => void;
+  queuedMessages?: QueuedMessage[];
+  onQueueMessage?: (text: string, attachments?: AttachmentFile[]) => void;
+  onRemoveQueuedMessage?: (id: string) => void;
+  queuedMessageMode?: 'queue' | 'immediate';
+  activeTasks?: { id: string; label: string }[];
 }
 
 function formatModelDisplayName(modelId: string): string {
@@ -98,6 +106,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   onToggleAutonomousMode,
   taskState,
   onUpdateTaskState,
+  queuedMessages = [],
+  onQueueMessage,
+  onRemoveQueuedMessage,
+  queuedMessageMode = 'queue',
+  activeTasks = [],
 }) => {
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<AttachmentFile[]>([]);
@@ -108,6 +121,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [isDutyDropdownOpen, setIsDutyDropdownOpen] = useState(false);
   const [isDutyShiftEnabled, setIsDutyShiftEnabled] = useState(false);
   const [dutyHours, setDutyHours] = useState(8);
+  const [isQueueCollapsed, setIsQueueCollapsed] = useState(false);
+  const [isTasksCollapsed, setIsTasksCollapsed] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const hiddenFileInputRef = useRef<HTMLInputElement>(null);
   const lastPasteTimeRef = useRef<number>(0);
@@ -132,26 +147,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     },
   });
 
-  const handleSubmit = (e?: React.FormEvent) => {
+  const handleSubmit = (e?: React.FormEvent, forceImmediate = false) => {
     if (e) e.preventDefault();
     if (isListening) stopListening();
-    if ((!text.trim() && attachments.length === 0) || isStreaming || disabled) return;
+    if ((!text.trim() && attachments.length === 0) || disabled) return;
 
     const submittedText = text.trim();
-    const isOvernightDetected = /work for \d+ hours|all night|overnight|\b\d+\s*hours?\s*duty\b/i.test(submittedText);
-
-    if ((isDutyShiftEnabled || isOvernightDetected) && mode === 'jules') {
-      let hoursToSet = dutyHours;
-      const match = submittedText.match(/(\d+(?:\.\d+)?)\s*hours?/i);
-      if (match) {
-        hoursToSet = parseFloat(match[1]);
-      } else if (/all night|overnight/i.test(submittedText)) {
-        hoursToSet = 8;
-      }
-      if (sessionId) {
-        startShift(sessionId, submittedText, hoursToSet);
-      }
-    }
 
     let imageCounter = 0;
     const processedAttachments = attachments.map((att) => {
@@ -168,6 +169,36 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       return att;
     });
 
+    // If AI is currently working/streaming:
+    if (isStreaming) {
+      if (forceImmediate || queuedMessageMode === 'immediate') {
+        // Send immediately to running agent!
+        onSendMessage(submittedText, processedAttachments);
+      } else {
+        // Queue the message to run when the current turn finishes!
+        onQueueMessage?.(submittedText, processedAttachments);
+      }
+      setText('');
+      setAttachments([]);
+      setIsDutyShiftEnabled(false);
+      return;
+    }
+
+    const isOvernightDetected = /work for \d+ hours|all night|overnight|\b\d+\s*hours?\s*duty\b/i.test(submittedText);
+
+    if ((isDutyShiftEnabled || isOvernightDetected) && mode === 'jules') {
+      let hoursToSet = dutyHours;
+      const match = submittedText.match(/(\d+(?:\.\d+)?)\s*hours?/i);
+      if (match) {
+        hoursToSet = parseFloat(match[1]);
+      } else if (/all night|overnight/i.test(submittedText)) {
+        hoursToSet = 8;
+      }
+      if (sessionId) {
+        startShift(sessionId, submittedText, hoursToSet);
+      }
+    }
+
     onSendMessage(submittedText, processedAttachments);
     if (taskState === 'paused' || taskState === 'completed') {
       onUpdateTaskState?.('in_progress');
@@ -183,10 +214,34 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       stopListening();
       return;
     }
-    if (e.key === 'Enter' && !e.shiftKey) {
+    // Alt + Enter: Send message immediately, bypassing the queue
+    if (e.key === 'Enter' && e.altKey && !e.shiftKey) {
       e.preventDefault();
-      handleSubmit();
+      handleSubmit(undefined, true);
+      return;
     }
+    // Enter without Shift/Alt: normal submit or queue if AI is already working
+    if (e.key === 'Enter' && !e.shiftKey && !e.altKey) {
+      e.preventDefault();
+      handleSubmit(undefined, false);
+      return;
+    }
+  };
+
+  const handleEditQueued = (item: QueuedMessage) => {
+    onRemoveQueuedMessage?.(item.id);
+    setText(item.text);
+    if (item.attachments && item.attachments.length > 0) {
+      setAttachments(item.attachments);
+    }
+    setTimeout(() => {
+      textareaRef.current?.focus();
+    }, 50);
+  };
+
+  const handleSendQueuedNow = (item: QueuedMessage) => {
+    onRemoveQueuedMessage?.(item.id);
+    onSendMessage(item.text, item.attachments);
   };
 
   const handlePickFiles = async (types: 'all' | 'images' | 'code' = 'all') => {
@@ -434,6 +489,74 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         </div>
       )}
 
+      {/* Queued Messages Panel (Screenshot 2) */}
+      {queuedMessages && queuedMessages.length > 0 && (
+        <div className={`w-full ${isCenteredLayout ? 'max-w-2xl lg:max-w-3xl' : 'max-w-3xl lg:max-w-4xl'} bg-[var(--bg-surface)] border border-[var(--border-card)] rounded-2xl p-3.5 mb-2.5 shadow-md select-none`}>
+          <div 
+            className="flex items-center justify-between cursor-pointer"
+            onClick={() => setIsQueueCollapsed(!isQueueCollapsed)}
+          >
+            <div className="flex items-center space-x-2">
+              <span className="text-xs font-semibold text-[var(--text-primary)]">Queued Messages</span>
+              <span className="px-2 py-0.5 text-[11px] font-medium bg-[var(--bg-canvas)] text-[var(--text-secondary)] rounded-full border border-[var(--border-subtle)]">
+                {queuedMessages.length}
+              </span>
+              <span className="text-[11px] text-[var(--text-secondary)]">
+                Sends after agent finishes working
+              </span>
+            </div>
+            <button
+              type="button"
+              className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors p-0.5 cursor-pointer"
+              title={isQueueCollapsed ? 'Expand queue' : 'Collapse queue'}
+            >
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isQueueCollapsed ? '-rotate-90' : ''}`} />
+            </button>
+          </div>
+
+          {!isQueueCollapsed && (
+            <div className="mt-2.5 space-y-1.5 pt-2 border-t border-[var(--border-subtle)]">
+              {queuedMessages.map((item) => (
+                <div 
+                  key={item.id} 
+                  className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-[var(--bg-surface-hover)] group transition-colors text-xs"
+                >
+                  <span className="text-[var(--text-primary)] truncate max-w-[78%] font-normal select-text">
+                    {item.text}
+                  </span>
+                  <div className="flex items-center space-x-2 shrink-0">
+                    <button
+                      type="button"
+                      title="Send immediately"
+                      onClick={() => handleSendQueuedNow(item)}
+                      className="p-1 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
+                    >
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      title="Edit message"
+                      onClick={() => handleEditQueued(item)}
+                      className="p-1 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      title="Delete from queue"
+                      onClick={() => onRemoveQueuedMessage?.(item.id)}
+                      className="p-1 text-[var(--text-secondary)] hover:text-red-400 transition-colors cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Floating Prompt Card (The Antigravity input box) */}
       <div 
         onDragOver={handleDragOver}
@@ -441,6 +564,38 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         onDrop={handleDrop}
         className={`w-full ${isCenteredLayout ? 'max-w-2xl lg:max-w-3xl' : 'max-w-3xl lg:max-w-4xl'} bg-[var(--bg-surface-hover)] border ${isDraggingOver ? 'border-[var(--border-subtle)] bg-[var(--bg-surface-hover)]' : 'border-[var(--border-card)]'} rounded-2xl p-3.5 shadow-2xl transition-all focus-within:border-[var(--border-subtle)] relative`}
       >
+        {/* Active Running Tasks (Screenshot 2) */}
+        {activeTasks && activeTasks.length > 0 && (
+          <div className="pb-2.5 mb-2.5 border-b border-[var(--border-subtle)]">
+            <div 
+              className="flex items-center justify-between cursor-pointer select-none mb-1.5"
+              onClick={() => setIsTasksCollapsed(!isTasksCollapsed)}
+            >
+              <span className="text-xs font-semibold text-[var(--text-secondary)]">
+                {activeTasks.length} task{activeTasks.length > 1 ? 's' : ''} running
+              </span>
+              <button
+                type="button"
+                className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors p-0.5 cursor-pointer"
+                title={isTasksCollapsed ? 'Expand tasks' : 'Collapse tasks'}
+              >
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isTasksCollapsed ? '-rotate-90' : ''}`} />
+              </button>
+            </div>
+
+            {!isTasksCollapsed && (
+              <div className="space-y-1.5">
+                {activeTasks.map((t, idx) => (
+                  <div key={t.id || idx} className="flex items-center space-x-2 text-xs font-mono text-[var(--text-primary)]">
+                    <Loader2 className="w-3.5 h-3.5 text-zinc-400 animate-spin shrink-0" />
+                    <span className="truncate">{t.label}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {taskState === 'paused' && (
           <div className="mb-2.5 px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between text-xs text-amber-200 animate-in fade-in duration-150">
             <div className="flex items-center space-x-2">
@@ -573,8 +728,14 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             onChange={(e) => setText(e.target.value)}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
-            placeholder={attachments.length > 0 ? "Add instructions or press Enter to analyze attachments..." : "Ask anything, @ to mention, / for actions"}
-            disabled={disabled || isStreaming}
+            placeholder={
+              attachments.length > 0
+                ? "Add instructions or press Enter to analyze attachments..."
+                : isStreaming && queuedMessageMode === 'queue'
+                ? "Ask anything... (Enter to queue, Alt+Enter to send immediately)"
+                : "Ask anything, @ to mention, / for actions"
+            }
+            disabled={disabled}
             rows={isCenteredLayout ? 2 : 1}
             className="w-full bg-transparent text-[var(--text-primary)] placeholder-[#6c707a] text-[14.5px] resize-none focus:outline-none px-1.5 py-1 font-sans leading-relaxed min-h-[48px]"
           />

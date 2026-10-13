@@ -110,6 +110,7 @@ const api: ElectronAPI = {
   },
 
   // Background Tasks
+  getRunningTasks: (sessionId?: string) => ipcRenderer.invoke('task:get-running', { sessionId }),
   getTaskLogs: (taskId: string) => ipcRenderer.invoke('task:get-logs', { taskId }),
   killTask: (taskId: string) => ipcRenderer.invoke('task:kill', { taskId }),
 
