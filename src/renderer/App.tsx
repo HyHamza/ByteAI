@@ -73,6 +73,7 @@ export const App: React.FC = () => {
   const queueDrainTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSendMessageCallRef = useRef<{ text: string; time: number }>({ text: '', time: 0 });
   const agentIdleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isCreatingSessionRef = useRef<boolean>(false);
 
   // Startup splash screen state
   const [isAppReady, setIsAppReady] = useState(false);
@@ -543,19 +544,52 @@ export const App: React.FC = () => {
     setStreamingTools([]);
   };
 
+  const normalizeWorkspacePath = (p?: string | null): string => {
+    return (p || '').replace(/[/\\]+/g, '/').toLowerCase().replace(/\/$/, '');
+  };
+
+  const isSessionEmpty = (s?: ChatSession | null): boolean => {
+    if (!s) return true;
+    if (!s.messages || s.messages.length === 0) return true;
+    return !s.messages.some((m) => m.role === 'user');
+  };
+
   const handleCreateSession = async (workspacePath?: string) => {
-    resetLiveStreamingState();
+    if (isCreatingSessionRef.current) return;
     const targetPath = workspacePath || activeSession?.workspacePath || settings.activeWorkspacePath || undefined;
-    const newSession = await api.createSession('New Task', settings.mode, targetPath);
-    setSessions((prev) => [newSession, ...prev]);
-    setActiveSessionId(newSession.id);
+    const targetNorm = normalizeWorkspacePath(targetPath);
+
+    // If active session is already an empty conversation in the target workspace, simply reuse it!
+    if (activeSession && normalizeWorkspacePath(activeSession.workspacePath) === targetNorm && isSessionEmpty(activeSession)) {
+      resetLiveStreamingState();
+      return;
+    }
+
+    // If another session in this workspace is already empty, switch to it rather than spamming new sessions!
+    const existingEmpty = sessions.find(
+      (s) => normalizeWorkspacePath(s.workspacePath) === targetNorm && isSessionEmpty(s)
+    );
+    if (existingEmpty) {
+      resetLiveStreamingState();
+      setActiveSessionId(existingEmpty.id);
+      return;
+    }
+
+    isCreatingSessionRef.current = true;
+    try {
+      resetLiveStreamingState();
+      const newSession = await api.createSession('New Conversation', settings.mode, targetPath);
+      setSessions((prev) => [newSession, ...prev]);
+      setActiveSessionId(newSession.id);
+    } finally {
+      isCreatingSessionRef.current = false;
+    }
   };
 
   const handleCreateSessionInProject = async (folderPath: string, projectName: string) => {
-    resetLiveStreamingState();
-    const newSession = await api.createSession('New Conversation', settings.mode, folderPath);
-    setSessions((prev) => [newSession, ...prev]);
-    setActiveSessionId(newSession.id);
+    if (isCreatingSessionRef.current) return;
+    const targetNorm = normalizeWorkspacePath(folderPath);
+
     setWorkspaceName(projectName);
     api.getWorkspaceInfo(folderPath).then((ws) => {
       if (ws) {
@@ -563,6 +597,32 @@ export const App: React.FC = () => {
         setGitBranch(ws.gitBranch || null);
       }
     }).catch(() => {});
+
+    // If active session is already an empty conversation in this project, simply keep it active!
+    if (activeSession && normalizeWorkspacePath(activeSession.workspacePath) === targetNorm && isSessionEmpty(activeSession)) {
+      resetLiveStreamingState();
+      return;
+    }
+
+    // If another session in this project is already empty, switch to it rather than spamming new sessions!
+    const existingEmpty = sessions.find(
+      (s) => normalizeWorkspacePath(s.workspacePath) === targetNorm && isSessionEmpty(s)
+    );
+    if (existingEmpty) {
+      resetLiveStreamingState();
+      setActiveSessionId(existingEmpty.id);
+      return;
+    }
+
+    isCreatingSessionRef.current = true;
+    try {
+      resetLiveStreamingState();
+      const newSession = await api.createSession('New Conversation', settings.mode, folderPath);
+      setSessions((prev) => [newSession, ...prev]);
+      setActiveSessionId(newSession.id);
+    } finally {
+      isCreatingSessionRef.current = false;
+    }
   };
 
   const handleAddProject = async (folderPath?: string) => {
@@ -576,9 +636,18 @@ export const App: React.FC = () => {
       setWorkspaceName(proj.name);
       if (proj.gitRepo) setGitRepo(proj.gitRepo);
       if (proj.gitBranch) setGitBranch(proj.gitBranch);
-      const newSession = await api.createSession('New Conversation', settings.mode, proj.path);
-      setSessions((prev) => [newSession, ...prev]);
-      setActiveSessionId(newSession.id);
+
+      const targetNorm = normalizeWorkspacePath(proj.path);
+      const existingEmpty = sessions.find(
+        (s) => normalizeWorkspacePath(s.workspacePath) === targetNorm && isSessionEmpty(s)
+      );
+      if (existingEmpty) {
+        setActiveSessionId(existingEmpty.id);
+      } else {
+        const newSession = await api.createSession('New Conversation', settings.mode, proj.path);
+        setSessions((prev) => [newSession, ...prev]);
+        setActiveSessionId(newSession.id);
+      }
     }
   };
 

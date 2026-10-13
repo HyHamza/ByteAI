@@ -176,6 +176,12 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
     gitBranch?: string | null;
   } | null>(null);
 
+  // Delete Conversation Confirmation Modal state
+  const [sessionToDelete, setSessionToDelete] = useState<{
+    id: string;
+    title: string;
+  } | null>(null);
+
   const newProjectMenuRef = useRef<HTMLDivElement>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const isAnyMenuOpenRef = useRef(false);
@@ -570,9 +576,9 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
           <button
             onClick={(e) => {
               e.stopPropagation();
-              onDeleteSession(s.id);
+              setSessionToDelete({ id: s.id, title: s.title || 'New Conversation' });
             }}
-            className="hidden group-hover:block text-[var(--text-muted)] hover:text-red-400 p-0.5 rounded transition-colors"
+            className="hidden group-hover:block text-[var(--text-muted)] hover:text-red-400 p-0.5 rounded transition-colors cursor-pointer"
             title="Delete Conversation"
           >
             <Trash2 className="w-3.5 h-3.5" />
@@ -1131,6 +1137,60 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
                   className="px-4 py-1.5 rounded-lg bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-primary)] font-medium transition-colors cursor-pointer text-xs"
                 >
                   Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Conversation Confirmation Modal */}
+      {sessionToDelete && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => setSessionToDelete(null)}
+        >
+          <div 
+            className="bg-[var(--bg-surface-hover)] border border-[var(--border-card)] rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden text-[var(--text-primary)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border-subtle)]">
+              <div className="flex items-center space-x-2.5 text-red-400">
+                <Trash2 className="w-4 h-4 shrink-0" />
+                <h3 className="font-semibold text-sm text-[var(--text-primary)]">Delete Conversation</h3>
+              </div>
+              <button 
+                onClick={() => setSessionToDelete(null)}
+                className="p-1 hover:text-[var(--text-primary)] rounded hover:bg-[var(--bg-surface-hover)] text-[var(--text-secondary)] transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 text-xs">
+              <p className="text-[var(--text-secondary)] leading-relaxed">
+                Are you sure you want to delete <span className="font-medium text-[var(--text-primary)]">"{sessionToDelete.title || 'New Conversation'}"</span>? This action cannot be undone.
+              </p>
+
+              <div className="pt-2 flex items-center justify-end space-x-2 border-t border-[var(--border-subtle)]">
+                <button
+                  type="button"
+                  onClick={() => setSessionToDelete(null)}
+                  className="px-3.5 py-1.5 rounded-lg bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-card)] font-medium transition-colors cursor-pointer text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const id = sessionToDelete.id;
+                    setSessionToDelete(null);
+                    onDeleteSession(id);
+                  }}
+                  className="px-3.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-medium shadow-sm transition-colors cursor-pointer text-xs flex items-center space-x-1.5"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete</span>
                 </button>
               </div>
             </div>
