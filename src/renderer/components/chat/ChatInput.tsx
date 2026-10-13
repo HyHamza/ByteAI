@@ -123,6 +123,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [dutyHours, setDutyHours] = useState(8);
   const [isQueueCollapsed, setIsQueueCollapsed] = useState(false);
   const [isTasksCollapsed, setIsTasksCollapsed] = useState(false);
+  const isSubmittingRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const hiddenFileInputRef = useRef<HTMLInputElement>(null);
   const lastPasteTimeRef = useRef<number>(0);
@@ -149,8 +150,14 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
   const handleSubmit = (e?: React.FormEvent, forceImmediate = false) => {
     if (e) e.preventDefault();
+    if (isSubmittingRef.current) return;
     if (isListening) stopListening();
     if ((!text.trim() && attachments.length === 0) || disabled) return;
+
+    isSubmittingRef.current = true;
+    setTimeout(() => {
+      isSubmittingRef.current = false;
+    }, 400);
 
     const submittedText = text.trim();
 

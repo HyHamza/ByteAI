@@ -69,6 +69,10 @@ export const App: React.FC = () => {
   const [runningBgTasks, setRunningBgTasks] = useState<{ taskId: string; command: string }[]>([]);
   const isCancelledRef = useRef<boolean>(false);
   const isStreamingPrevRef = useRef<boolean>(false);
+  const isDrainingQueueRef = useRef<boolean>(false);
+  const queueDrainTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSendMessageCallRef = useRef<{ text: string; time: number }>({ text: '', time: 0 });
+  const agentIdleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Startup splash screen state
   const [isAppReady, setIsAppReady] = useState(false);
@@ -289,6 +293,10 @@ export const App: React.FC = () => {
 
     const unsubCompleted = api.onExecutionCompleted(async (sessId: string) => {
       if (sessId === activeSessionIdRef.current) {
+        if (agentIdleTimeoutRef.current) {
+          clearTimeout(agentIdleTimeoutRef.current);
+          agentIdleTimeoutRef.current = null;
+        }
         flushStreamBuffers();
         setRetryStatus(null);
         try {
@@ -335,6 +343,23 @@ export const App: React.FC = () => {
           if (old && old.messages && old.messages.length > 0 && (!ns.messages || ns.messages.length === 0)) {
             return { ...ns, messages: old.messages };
           }
+          if (ns.messages && ns.messages.length > 1) {
+            const deduped: ChatMessage[] = [];
+            for (let i = 0; i < ns.messages.length; i++) {
+              const m = ns.messages[i];
+              const prevM = deduped[deduped.length - 1];
+              if (
+                prevM &&
+                prevM.role === m.role &&
+                prevM.content === m.content &&
+                Math.abs(prevM.timestamp - m.timestamp) < 500
+              ) {
+                continue;
+              }
+              deduped.push(m);
+            }
+            return { ...ns, messages: deduped };
+          }
           return ns;
         });
       });
@@ -349,6 +374,10 @@ export const App: React.FC = () => {
       });
       if (sessionId === activeSessionIdRef.current) {
         if (status === 'running') {
+          if (agentIdleTimeoutRef.current) {
+            clearTimeout(agentIdleTimeoutRef.current);
+            agentIdleTimeoutRef.current = null;
+          }
           flushStreamBuffers();
           setIsStreaming(true);
           setStreamingContent('');
@@ -362,13 +391,15 @@ export const App: React.FC = () => {
           }).catch(() => {});
         } else {
           flushStreamBuffers();
-          // Seamless completion: do not clear isStreaming immediately to allow onExecutionCompleted
-          // to fetch full updated messages first without any momentary flicker or disappearing content.
-          setTimeout(() => {
-            if (activeSessionIdRef.current === sessionId) {
+          if (agentIdleTimeoutRef.current) {
+            clearTimeout(agentIdleTimeoutRef.current);
+          }
+          agentIdleTimeoutRef.current = setTimeout(() => {
+            agentIdleTimeoutRef.current = null;
+            if (activeSessionIdRef.current === sessionId && !isDrainingQueueRef.current) {
               setIsStreaming(false);
             }
-          }, 600);
+          }, 400);
         }
       }
     });
@@ -606,9 +637,37 @@ export const App: React.FC = () => {
             newTitle = shortTitle.length > 36 ? shortTitle.slice(0, 36) + '...' : shortTitle;
           }
         }
+        // Suppress optimistic duplicate if last message is an identical user message within 2s
+        const lastMsg = s.messages[s.messages.length - 1];
+        if (
+          lastMsg &&
+          lastMsg.role === 'user' &&
+          lastMsg.content === text &&
+          Date.now() - lastMsg.timestamp < 2000
+        ) {
+          return s;
+        }
+
         return { ...s, title: newTitle, messages: [...s.messages, userMsg] };
       })
     );
+
+    // Guard against rapid duplicate sendMessage calls (within 1000ms)
+    const now = Date.now();
+    if (
+      lastSendMessageCallRef.current.text === text &&
+      now - lastSendMessageCallRef.current.time < 1000
+    ) {
+      console.warn('[App] Suppressed rapid duplicate sendMessage call within 1000ms:', text);
+      return;
+    }
+    lastSendMessageCallRef.current = { text, time: now };
+
+    // Clear any pending idle timeouts
+    if (agentIdleTimeoutRef.current) {
+      clearTimeout(agentIdleTimeoutRef.current);
+      agentIdleTimeoutRef.current = null;
+    }
 
     setIsStreaming(true);
     setStreamingContent('');
@@ -620,14 +679,22 @@ export const App: React.FC = () => {
 
   const handleQueueMessage = (text: string, attachments?: AttachmentFile[]) => {
     if (!activeSessionId) return;
-    const newQueued: QueuedMessage = {
-      id: `queue_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-      sessionId: activeSessionId,
-      text,
-      attachments,
-      createdAt: Date.now(),
-    };
-    setQueuedMessages((prev) => [...prev, newQueued]);
+    setQueuedMessages((prev) => {
+      // Don't add duplicate if the last message in this session's queue has identical text
+      const sessionQueue = prev.filter((q) => q.sessionId === activeSessionId);
+      const lastQ = sessionQueue[sessionQueue.length - 1];
+      if (lastQ && lastQ.text === text && Date.now() - lastQ.createdAt < 1500) {
+        return prev;
+      }
+      const newQueued: QueuedMessage = {
+        id: `queue_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        sessionId: activeSessionId,
+        text,
+        attachments,
+        createdAt: Date.now(),
+      };
+      return [...prev, newQueued];
+    });
   };
 
   const handleRemoveQueuedMessage = (id: string) => {
@@ -637,6 +704,11 @@ export const App: React.FC = () => {
   const handleCancelExecution = async () => {
     if (!activeSessionId) return;
     isCancelledRef.current = true;
+    if (queueDrainTimerRef.current) {
+      clearTimeout(queueDrainTimerRef.current);
+      queueDrainTimerRef.current = null;
+    }
+    isDrainingQueueRef.current = false;
     await api.cancelExecution(activeSessionId);
     setIsStreaming(false);
     setStreamingTools([]);
@@ -682,22 +754,25 @@ export const App: React.FC = () => {
         return;
       }
 
-      setQueuedMessages((prev) => {
-        const sessionQueue = prev.filter((q) => q.sessionId === activeSessionId);
-        if (sessionQueue.length > 0) {
-          const [nextMsg, ...restSessionQueue] = sessionQueue;
-          const otherSessions = prev.filter((q) => q.sessionId !== activeSessionId);
+      if (isDrainingQueueRef.current) return;
 
-          setTimeout(() => {
-            handleSendMessage(nextMsg.text, nextMsg.attachments);
-          }, 350);
+      const sessionQueue = queuedMessages.filter((q) => q.sessionId === activeSessionId);
+      if (sessionQueue.length === 0) return;
 
-          return [...otherSessions, ...restSessionQueue];
+      const nextMsg = sessionQueue[0];
+      // Atomically mark draining and immediately remove from queue
+      isDrainingQueueRef.current = true;
+      setQueuedMessages((prev) => prev.filter((q) => q.id !== nextMsg.id));
+
+      if (queueDrainTimerRef.current) clearTimeout(queueDrainTimerRef.current);
+      queueDrainTimerRef.current = setTimeout(() => {
+        isDrainingQueueRef.current = false;
+        if (activeSessionIdRef.current === nextMsg.sessionId) {
+          handleSendMessage(nextMsg.text, nextMsg.attachments);
         }
-        return prev;
-      });
+      }, 400);
     }
-  }, [isStreaming, activeSessionId]);
+  }, [isStreaming, activeSessionId, queuedMessages]);
 
   // Active running tasks for the active session (streaming tools + background tasks)
   const activeTasks = useMemo(() => {

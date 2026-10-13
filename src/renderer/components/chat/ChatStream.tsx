@@ -209,6 +209,16 @@ export const ChatStream: React.FC<ChatStreamProps> = ({
           activeTurn.systemMessages.push(m);
         }
       } else if (m.role === 'user') {
+        // If previous activeTurn was also a user message with identical text within 3 seconds, deduplicate
+        if (
+          activeTurn &&
+          activeTurn.userMessage &&
+          activeTurn.userMessage.content.trim() === m.content.trim() &&
+          activeTurn.assistantMessages.length === 0 &&
+          Math.abs(m.timestamp - activeTurn.userMessage.timestamp) < 3000
+        ) {
+          continue;
+        }
         if (activeTurn) {
           list.push(activeTurn);
         }
