@@ -141,6 +141,13 @@ const api: ElectronAPI = {
   copyImageToClipboard: (payload: { imageUrl?: string; filePath?: string }) => ipcRenderer.invoke('clipboard:copy-image', payload),
   copyTextToClipboard: (text: string) => ipcRenderer.invoke('clipboard:copy-text', { text }),
 
+  // Automation & PC Control API
+  automation: {
+    emergencyStop: () => ipcRenderer.invoke('automation:emergency-stop'),
+    resetEmergencyStop: () => ipcRenderer.invoke('automation:reset-emergency-stop'),
+    isStopped: () => ipcRenderer.invoke('automation:is-stopped'),
+  },
+
   // Free LLM In-Process Engine API
   freellm: {
     listKeys: () => ipcRenderer.invoke('freellm:keys:list'),

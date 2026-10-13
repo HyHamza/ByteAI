@@ -429,8 +429,10 @@ CRITICAL DIRECTIVES FOR BYTE:
 4. DEFERRED MERGING (MERGE WHEN LEAVING SESSION):
    Do not perform intermediate merges while work is actively continuing in this session.
    All accumulated commits from this session will be merged when you are LEAVING this session:
-   - If more phases/work remain: formulate the next specification and call 'jules_continue_session' NOW.
-   - If ALL work on this task is completely finished, or if you are leaving this session: call 'jules_finalize_and_merge' with session_id: "${s.id}" to merge all commits into the local workspace and remote origin, then present your final summary to the user.`;
+   - If more phases or multi-issue tasks remain (e.g. Issue 2 of N): formulate the next specification and call 'jules_continue_session' NOW. Explicitly instruct Jules: "This is Issue X of N. Do not create a final branch yet."
+   - If ALL work on this task is completely finished, or if you are leaving this session: call 'jules_finalize_and_merge' with session_id: "${s.id}" to merge all commits into the local workspace and remote origin, then present your final summary to the user.
+5. HANDLING USER FEEDBACK:
+   If the user tests this update and gives feedback that an issue persists or is not fixed, the changes WERE merged; Jules's attempt was simply incomplete or missed the true root cause. DO NOT claim the update was not merged. Inspect what Jules did, formulate precise corrective technical feedback, and call 'jules_continue_session' to continue in this session!`;
 
       AgentOrchestrator.getInstance().runAutonomousTurn(chatSession.id, summaryMsg, undefined, true).catch(console.error);
     }

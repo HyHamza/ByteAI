@@ -165,6 +165,8 @@ const mockAPI: ElectronAPI = {
   julesFinalizeAndMerge: async () => ({ success: true, message: 'Finalized and merged successfully' }),
   getRunningSessions: async () => [],
   getRunningTasks: async () => [],
+  getTaskLogs: async (taskId: string) => ({ status: 'completed', exitCode: 0, output: `Logs for ${taskId}`, logPath: '', isRunning: false }),
+  killTask: async (taskId: string) => `Task ${taskId} killed`,
   onAgentStatus: () => () => {},
   onJulesAllSessions: () => () => {},
   onJulesUpdate: () => () => {},
@@ -204,6 +206,11 @@ const mockAPI: ElectronAPI = {
       }
     } catch (_) {}
     return false;
+  },
+  automation: {
+    emergencyStop: async () => true,
+    resetEmergencyStop: async () => true,
+    isStopped: async () => false,
   },
   freellm: {
     listKeys: async () => [],

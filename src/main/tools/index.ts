@@ -12,6 +12,9 @@ import { syncAndMergeJulesSession } from '../services/git/merger';
 import { TaskManager } from '../services/task/manager';
 import { DutyManager } from '../services/duty/manager';
 import { AutonomousWatchdog } from '../services/autonomous/watchdog';
+import { DesktopAutomationService } from '../services/automation/desktop';
+import { BrowserAutomationService } from '../services/automation/browser';
+import { formatJulesPrompt } from '../services/jules/prompter';
 
 // ─── Standard Tool Definitions (Antigravity Mode) ──────────────────────────────
 export const STANDARD_TOOL_DEFS: LLMToolDefinition[] = [
@@ -219,11 +222,14 @@ export const STANDARD_TOOL_DEFS: LLMToolDefinition[] = [
     type: 'function',
     function: {
       name: 'jules_continue_session',
-      description: 'Continue working in the SAME existing Jules session (STRONGLY RECOMMENDED 90% OF THE TIME). In Google Labs Jules, sessions NEVER expire or close: even after a session reports state COMPLETED, sending a follow-up via this tool wakes Jules right back up into IN_PROGRESS to execute the next phase in the exact same container, branch, and PR. Use this whenever dispatching subsequent phases, feedback, missing features, edge-case fixes, or tests. Do NOT start a new session!',
+      description: 'Continue working in the SAME existing Jules session (STRONGLY RECOMMENDED 90% OF THE TIME). In Google Labs Jules, sessions NEVER expire or close: even after a session reports state COMPLETED, sending a follow-up via this tool wakes Jules right back up into IN_PROGRESS to execute the next phase in the exact same container, branch, and PR. Use this whenever dispatching subsequent phases, user review feedback, incomplete bug fixes, multi-issue steps, or tests. Do NOT start a new session!',
       parameters: {
         type: 'object',
         properties: {
-          prompt: { type: 'string', description: 'Next phase instructions, follow-up technical specification, or revisions for Jules' },
+          prompt: { 
+            type: 'string', 
+            description: 'Highly professional, structured Senior Engineering specification or corrective feedback for Jules. NEVER include conversational monologue or self-talk (e.g. "let me load the codebase"). If part of a multi-issue task, explicitly instruct Jules: "Do NOT create a final branch/PR yet. Keep working within this branch."' 
+          },
           session_id: { type: 'string', description: 'Optional Jules session ID. If omitted, automatically continues in the active Jules session for this chat.' },
         },
         required: ['prompt'],
@@ -251,7 +257,10 @@ export const STANDARD_TOOL_DEFS: LLMToolDefinition[] = [
       parameters: {
         type: 'object',
         properties: {
-          prompt: { type: 'string', description: 'Detailed technical specification and instructions for Jules' },
+          prompt: { 
+            type: 'string', 
+            description: 'Highly professional, structured Senior Engineering specification for Jules. Specify Jules role based on the tech stack. NEVER include conversational self-talk. If multi-issue, state: "Issue 1 of N: Do NOT create a final branch/PR yet."' 
+          },
           title: { type: 'string', description: 'Short descriptive task title' },
           repo: { type: 'string', description: 'GitHub source identifier (e.g. sources/github/Owner/Repo)' },
           branch: { type: 'string', description: 'Starting branch (default: main)' },
@@ -314,6 +323,193 @@ export const STANDARD_TOOL_DEFS: LLMToolDefinition[] = [
         properties: {
           shift_id: { type: 'string', description: 'Optional ID of the duty shift to stop' },
         },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'desktop_take_screenshot',
+      description: 'Capture a full screenshot of the primary Windows desktop or display. Returns image file path and resolution dimensions (width, height, scaleFactor). Use this to visually inspect native desktop software, GUI windows, or system state.',
+      parameters: {
+        type: 'object',
+        properties: {
+          include_base64: {
+            type: 'boolean',
+            description: 'Whether to return a data:image/png base64 URL alongside the file path (default: false)',
+          },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'desktop_mouse_action',
+      description: 'Simulate native Windows mouse actions: click, double_click, right_click, move cursor, drag, or scroll wheel.',
+      parameters: {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'string',
+            enum: ['click', 'double_click', 'right_click', 'move', 'drag', 'scroll'],
+            description: 'The mouse action to perform.',
+          },
+          x: { type: 'number', description: 'Target X coordinate on screen' },
+          y: { type: 'number', description: 'Target Y coordinate on screen' },
+          to_x: { type: 'number', description: 'Target X coordinate for drag' },
+          to_y: { type: 'number', description: 'Target Y coordinate for drag' },
+          button: {
+            type: 'string',
+            enum: ['left', 'right', 'middle', 'double'],
+            description: 'Mouse button (default: left)',
+          },
+          scroll_delta: {
+            type: 'number',
+            description: 'Wheel scroll delta (negative scrolls down, positive scrolls up; default: -120)',
+          },
+        },
+        required: ['action'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'desktop_keyboard_action',
+      description: 'Simulate native Windows keyboard input: type text strings, press special keys (Enter, Esc, Tab, Space, Backspace, Delete, Arrows), or trigger hotkey combinations (e.g. ["Control", "c"], ["Alt", "Tab"]).',
+      parameters: {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'string',
+            enum: ['type', 'key_press', 'hotkey'],
+            description: 'The keyboard action to perform.',
+          },
+          text: { type: 'string', description: 'Text string to type into the currently focused window' },
+          key: { type: 'string', description: 'Special key to press (e.g. "Enter", "Escape", "Tab", "F5")' },
+          keys: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Keys for hotkey combination (e.g. ["Control", "Shift", "i"] or ["Alt", "F4"])',
+          },
+        },
+        required: ['action'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'desktop_get_windows',
+      description: 'List all visible top-level application windows on Windows, returning window titles, handles, and process names. Use this to locate and verify running software.',
+      parameters: {
+        type: 'object',
+        properties: {},
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'desktop_focus_window',
+      description: 'Bring an application window to the foreground and activate it, matching by window title or process name query.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: {
+            type: 'string',
+            description: 'Window title substring or process name to search and focus (e.g. "Calculator", "Chrome", "My App")',
+          },
+        },
+        required: ['query'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'browser_open',
+      description: 'Open a dedicated Chromium browser test window to navigate to a web application URL (e.g. http://localhost:3000) and automatically intercept console logs, JavaScript runtime errors, and failed HTTP network requests (4xx/5xx).',
+      parameters: {
+        type: 'object',
+        properties: {
+          url: { type: 'string', description: 'Web application URL to load (e.g. http://localhost:5173)' },
+          headless: { type: 'boolean', description: 'Run test window in background (default: false)' },
+          width: { type: 'number', description: 'Viewport width (default: 1280)' },
+          height: { type: 'number', description: 'Viewport height (default: 800)' },
+        },
+        required: ['url'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'browser_get_console_errors',
+      description: 'Retrieve captured browser console errors, failed network requests (HTTP 4xx/5xx), and uncaught exceptions from the test browser session. Use this to verify zero runtime errors after fixing an issue.',
+      parameters: {
+        type: 'object',
+        properties: {
+          filter: {
+            type: 'string',
+            enum: ['errors_only', 'all'],
+            description: 'Filter logs: "errors_only" (default) or "all" (includes info/warn)',
+          },
+          clear: {
+            type: 'boolean',
+            description: 'Whether to clear the captured error buffer after reading (default: false)',
+          },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'browser_interact',
+      description: 'Interact with the active browser test page: click CSS selectors, type text into input elements, wait for elements to appear, scroll, or evaluate custom JavaScript in the page context.',
+      parameters: {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'string',
+            enum: ['click', 'type', 'wait_for_selector', 'evaluate', 'scroll'],
+            description: 'Interaction action to perform.',
+          },
+          selector: { type: 'string', description: 'CSS selector of the target element (for click, type, wait_for_selector)' },
+          text: { type: 'string', description: 'Text string to type into the selected element' },
+          script: { type: 'string', description: 'JavaScript expression to evaluate inside the page context (for evaluate)' },
+          scroll_delta: { type: 'number', description: 'Vertical scroll amount in pixels (default: 300)' },
+        },
+        required: ['action'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'browser_take_screenshot',
+      description: 'Capture a screenshot of the active browser test page. Returns file path and dimensions.',
+      parameters: {
+        type: 'object',
+        properties: {
+          include_base64: {
+            type: 'boolean',
+            description: 'Whether to include a data URL in the response (default: false)',
+          },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'browser_close',
+      description: 'Close the active test browser window and clean up memory.',
+      parameters: {
+        type: 'object',
+        properties: {},
       },
     },
   },
@@ -686,10 +882,12 @@ export async function executeToolCall(
           return `Error: No active or prior Jules session found to continue. 90% of the time you should continue in an existing session, but since none exists yet, please use 'jules_create_task' to start the initial session.`;
         }
 
+        const formattedPrompt = formatJulesPrompt(args.prompt || '', workspaceDir);
+
         // Jules sessions in Google Cloud can always receive follow-up messages via sendFollowup,
         // even when their state was COMPLETED! Sending a message transitions it back to IN_PROGRESS.
         try {
-          await client.sendFollowup(targetJulesId, args.prompt);
+          await client.sendFollowup(targetJulesId, formattedPrompt);
         } catch (err: any) {
           // If 404 or entity not found, Google Cloud session is closed or expired. Only then fallback to createSession!
           if (err.message && (err.message.includes('404') || err.message.includes('NOT_FOUND') || err.message.includes('not found'))) {
@@ -707,7 +905,7 @@ export async function executeToolCall(
             } catch (_) {}
 
             const res = await client.createSession({
-              prompt: args.prompt,
+              prompt: formattedPrompt,
               title: `Follow-up: ${args.prompt.slice(0, 40)}`,
               repo,
               branch,
@@ -769,8 +967,9 @@ export async function executeToolCall(
           }
         }
 
+        const formattedPrompt = formatJulesPrompt(args.prompt || '', workspaceDir);
         const res = await client.createSession({
-          prompt: args.prompt,
+          prompt: formattedPrompt,
           title: args.title,
           repo,
           branch,
@@ -915,6 +1114,63 @@ ${recent || '(No activity recorded yet)'}`;
           }
         }
         return `Task state updated to "${targetState}"${args.summary ? `: ${args.summary}` : ''}.`;
+      }
+
+      case 'desktop_take_screenshot': {
+        const res = await DesktopAutomationService.getInstance().takeScreenshot(args.include_base64);
+        if (res.error) return `Screenshot failed: ${res.error}`;
+        return `Desktop Screenshot captured successfully:
+File: ${res.filePath}
+Resolution: ${res.width}x${res.height} (Display Scale Factor: ${res.scaleFactor})${res.dataUrl ? `\nData URL: ${res.dataUrl.slice(0, 50)}...` : ''}`;
+      }
+
+      case 'desktop_mouse_action': {
+        return await DesktopAutomationService.getInstance().mouseAction(args);
+      }
+
+      case 'desktop_keyboard_action': {
+        return await DesktopAutomationService.getInstance().keyboardAction(args);
+      }
+
+      case 'desktop_get_windows': {
+        const list = await DesktopAutomationService.getInstance().listWindows();
+        if (list.length === 0) return 'No visible application windows found.';
+        return JSON.stringify(list, null, 2);
+      }
+
+      case 'desktop_focus_window': {
+        return await DesktopAutomationService.getInstance().focusWindow(args.query);
+      }
+
+      case 'browser_open': {
+        return await BrowserAutomationService.getInstance().openUrl(args.url, {
+          headless: args.headless,
+          width: args.width,
+          height: args.height,
+        });
+      }
+
+      case 'browser_get_console_errors': {
+        const logs = BrowserAutomationService.getInstance().getLogs({
+          filter: args.filter,
+          clear: args.clear,
+        });
+        return JSON.stringify(logs, null, 2);
+      }
+
+      case 'browser_interact': {
+        return await BrowserAutomationService.getInstance().interact(args);
+      }
+
+      case 'browser_take_screenshot': {
+        const shot = await BrowserAutomationService.getInstance().takeScreenshot(args.include_base64);
+        return `Browser Screenshot captured:
+File: ${shot.filePath}
+Dimensions: ${shot.width}x${shot.height}${shot.dataUrl ? `\nData URL: ${shot.dataUrl.slice(0, 50)}...` : ''}`;
+      }
+
+      case 'browser_close': {
+        return BrowserAutomationService.getInstance().close();
       }
 
       default:

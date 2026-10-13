@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, Menu, MenuItem, shell, powerSaveBlocker, clipboard, nativeImage, Tray } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, Menu, MenuItem, shell, powerSaveBlocker, clipboard, nativeImage, Tray, globalShortcut } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { DataStore } from './services/db/store';
@@ -13,6 +13,7 @@ import { GroqSpeechTranscriber } from './services/speech/groq';
 import { DutyManager } from './services/duty/manager';
 import { AutonomousWatchdog } from './services/autonomous/watchdog';
 import { FreeLLMEngine } from './services/freellm/engine';
+import { DesktopAutomationService, BrowserAutomationService } from './services/automation';
 import type { AppMode, ChatSession, AttachmentFile, AppSettings } from '../shared/types';
 
 let mainWindow: BrowserWindow | null = null;
@@ -282,6 +283,25 @@ app.whenReady().then(() => {
   syncPowerSaveBlocker(Boolean(initialSettings.preventSleep));
   syncOpenAtLogin(Boolean(initialSettings.openAtLogin));
 
+  // Register emergency automation kill-switch shortcut (Ctrl+Alt+Escape)
+  try {
+    globalShortcut.register('CommandOrControl+Alt+Escape', () => {
+      console.warn('[Automation] Emergency killswitch triggered via global shortcut.');
+      DesktopAutomationService.getInstance().triggerEmergencyStop();
+      BrowserAutomationService.getInstance().close();
+      mainWindow?.webContents.send('toast:show', {
+        type: 'warning',
+        message: 'Emergency Kill-Switch: PC and browser automation stopped.',
+      });
+    });
+  } catch (err) {
+    console.warn('[Automation] Failed to register global killswitch shortcut:', err);
+  }
+
+  app.on('will-quit', () => {
+    globalShortcut.unregisterAll();
+  });
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
@@ -325,6 +345,22 @@ function setupIpcHandlers() {
 
   ipcMain.handle('settings:models', async () => {
     return llmClient.fetchAvailableModels();
+  });
+
+  // ── Automation & PC Control IPC
+  ipcMain.handle('automation:emergency-stop', async () => {
+    DesktopAutomationService.getInstance().triggerEmergencyStop();
+    BrowserAutomationService.getInstance().close();
+    return true;
+  });
+
+  ipcMain.handle('automation:reset-emergency-stop', async () => {
+    DesktopAutomationService.getInstance().resetEmergencyStop();
+    return true;
+  });
+
+  ipcMain.handle('automation:is-stopped', async () => {
+    return DesktopAutomationService.getInstance().isStopped();
   });
 
   // ── Workspace & Projects IPC

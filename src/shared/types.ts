@@ -53,6 +53,18 @@ export interface QueuedMessage {
   createdAt: number;
 }
 
+export interface ActiveTaskItem {
+  id: string;
+  label: string;
+  taskId?: string;
+  command?: string;
+  cwd?: string;
+  toolName?: string;
+  output?: string;
+  status?: string;
+  startTime?: number;
+}
+
 export interface ChatMessage {
   id: string;
   sessionId: string;
@@ -244,6 +256,13 @@ export interface ElectronAPI {
   // Native Clipboard API
   copyImageToClipboard?: (payload: { imageUrl?: string; filePath?: string }) => Promise<boolean>;
   copyTextToClipboard?: (text: string) => Promise<boolean>;
+
+  // Automation & PC Control API
+  automation?: {
+    emergencyStop: () => Promise<boolean>;
+    resetEmergencyStop: () => Promise<boolean>;
+    isStopped: () => Promise<boolean>;
+  };
 
   // Free LLM In-Process Engine API
   freellm: {

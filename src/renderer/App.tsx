@@ -9,7 +9,7 @@ import { SettingsModal } from './components/settings/SettingsModal';
 import { FreeLLMHubModal } from './components/freellm/FreeLLMHubModal';
 import { SplashScreen } from './components/common/SplashScreen';
 import { api } from './api';
-import type { AppSettings, ChatSession, ChatMessage, AppMode, TaskState, StreamTokenPayload, ToolCallPayload, ToolExecutionRecord, JulesSessionSummary, ProjectInfo, AttachmentFile, QueuedMessage } from '@/shared/types';
+import type { AppSettings, ChatSession, ChatMessage, AppMode, TaskState, StreamTokenPayload, ToolCallPayload, ToolExecutionRecord, JulesSessionSummary, ProjectInfo, AttachmentFile, QueuedMessage, ActiveTaskItem } from '@/shared/types';
 
 const DEFAULT_SETTINGS: AppSettings = {
   mode: 'standard',
@@ -66,7 +66,7 @@ export const App: React.FC = () => {
       return [];
     }
   });
-  const [runningBgTasks, setRunningBgTasks] = useState<{ taskId: string; command: string }[]>([]);
+  const [runningBgTasks, setRunningBgTasks] = useState<ActiveTaskItem[]>([]);
   const isCancelledRef = useRef<boolean>(false);
   const isStreamingPrevRef = useRef<boolean>(false);
   const isDrainingQueueRef = useRef<boolean>(false);
@@ -729,7 +729,17 @@ export const App: React.FC = () => {
         if (api.getRunningTasks) {
           const tasks = await api.getRunningTasks(activeSessionId || undefined);
           if (isMounted && Array.isArray(tasks)) {
-            setRunningBgTasks(tasks.map((t: any) => ({ taskId: t.taskId, command: t.command })));
+            setRunningBgTasks(
+              tasks.map((t: any) => ({
+                id: t.taskId || t.id,
+                taskId: t.taskId || t.id,
+                label: t.command || 'Background task',
+                command: t.command,
+                cwd: t.cwd,
+                status: t.status || 'running',
+                startTime: t.startTime,
+              }))
+            );
           }
         }
       } catch {}
@@ -775,17 +785,27 @@ export const App: React.FC = () => {
   }, [isStreaming, activeSessionId, queuedMessages]);
 
   // Active running tasks for the active session (streaming tools + background tasks)
-  const activeTasks = useMemo(() => {
-    const tasks: { id: string; label: string }[] = [];
+  const activeTasks = useMemo<ActiveTaskItem[]>(() => {
+    const tasks: ActiveTaskItem[] = [];
     for (const t of streamingTools) {
       if (t.status === 'running' || t.status === 'pending') {
-        const label = t.args?.command || t.args?.CommandLine || t.intent || (t.args?.path ? `${t.toolName} ${t.args.path}` : t.toolName);
-        tasks.push({ id: t.id, label });
+        const cmd = t.args?.command || t.args?.CommandLine || '';
+        const label = cmd || t.intent || (t.args?.path ? `${t.toolName} ${t.args.path}` : t.toolName);
+        tasks.push({
+          id: t.id,
+          label,
+          command: cmd,
+          toolName: t.toolName,
+          status: t.status,
+          cwd: t.args?.cwd || t.args?.Cwd,
+          output: t.output,
+          startTime: t.startedAt,
+        });
       }
     }
     for (const bt of runningBgTasks) {
-      if (!tasks.some((t) => t.id === bt.taskId)) {
-        tasks.push({ id: bt.taskId, label: bt.command });
+      if (!tasks.some((t) => t.id === bt.taskId || t.taskId === bt.taskId)) {
+        tasks.push(bt);
       }
     }
     return tasks;

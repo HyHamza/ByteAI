@@ -21,14 +21,16 @@ import {
   Zap,
   Pencil,
   Trash2,
-  Loader2
+  Loader2,
+  Terminal
 } from 'lucide-react';
-import type { AppMode, AttachmentFile, TaskState, QueuedMessage } from '@/shared/types';
+import type { AppMode, AttachmentFile, TaskState, QueuedMessage, ActiveTaskItem } from '@/shared/types';
 import { api } from '../../api';
 import { useVoiceDictation } from '../../hooks/useVoiceDictation';
 import { byteLogoBw } from '../../assets';
 import { useDutyShift } from '../../hooks/useDutyShift';
 import { ImagePreviewModal } from '../common/ImagePreviewModal';
+import { TaskOutputModal } from '../common/TaskOutputModal';
 
 interface ChatInputProps {
   onSendMessage: (text: string, attachments?: AttachmentFile[]) => void;
@@ -53,7 +55,7 @@ interface ChatInputProps {
   onQueueMessage?: (text: string, attachments?: AttachmentFile[]) => void;
   onRemoveQueuedMessage?: (id: string) => void;
   queuedMessageMode?: 'queue' | 'immediate';
-  activeTasks?: { id: string; label: string }[];
+  activeTasks?: ActiveTaskItem[];
 }
 
 function formatModelDisplayName(modelId: string): string {
@@ -128,6 +130,15 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const hiddenFileInputRef = useRef<HTMLInputElement>(null);
   const lastPasteTimeRef = useRef<number>(0);
   const [previewModalImg, setPreviewModalImg] = useState<{ url: string; name?: string; size?: number } | null>(null);
+  const [activeTaskForModal, setActiveTaskForModal] = useState<ActiveTaskItem | null>(null);
+
+  const handleKillTask = async (taskId: string) => {
+    try {
+      if (api.killTask) {
+        await api.killTask(taskId);
+      }
+    } catch (_) {}
+  };
 
   const { activeShift, remainingTimeDisplay, startShift, stopShift } = useDutyShift(sessionId);
 
@@ -591,11 +602,24 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             </div>
 
             {!isTasksCollapsed && (
-              <div className="space-y-1.5">
+              <div className="space-y-1">
                 {activeTasks.map((t, idx) => (
-                  <div key={t.id || idx} className="flex items-center space-x-2 text-xs font-mono text-[var(--text-primary)]">
-                    <Loader2 className="w-3.5 h-3.5 text-zinc-400 animate-spin shrink-0" />
-                    <span className="truncate">{t.label}</span>
+                  <div
+                    key={t.id || idx}
+                    onClick={() => setActiveTaskForModal(t)}
+                    className="flex items-center justify-between group px-2 py-1 -mx-2 rounded-lg cursor-pointer hover:bg-zinc-800/60 text-xs font-mono text-[var(--text-primary)] transition-all select-none"
+                    title="Click to view live terminal output & logs"
+                  >
+                    <div className="flex items-center space-x-2 truncate min-w-0">
+                      <Loader2 className="w-3.5 h-3.5 text-zinc-400 group-hover:text-emerald-400 animate-spin shrink-0 transition-colors" />
+                      <span className="truncate group-hover:text-white transition-colors">{t.label}</span>
+                    </div>
+                    <div className="flex items-center space-x-1.5 opacity-0 group-hover:opacity-100 transition-opacity pl-2 shrink-0">
+                      <span className="text-[10px] text-zinc-400 group-hover:text-zinc-200 bg-zinc-800/90 border border-zinc-700/60 px-1.5 py-0.5 rounded flex items-center space-x-1 shadow-sm">
+                        <Terminal className="w-2.5 h-2.5 text-emerald-400" />
+                        <span>View Output</span>
+                      </span>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1125,6 +1149,14 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         imageUrl={previewModalImg?.url || ''}
         imageName={previewModalImg?.name}
         imageSize={previewModalImg?.size}
+      />
+
+      {/* Real-time Terminal Task Output Viewer Modal */}
+      <TaskOutputModal
+        isOpen={Boolean(activeTaskForModal)}
+        task={activeTaskForModal}
+        onClose={() => setActiveTaskForModal(null)}
+        onKillTask={handleKillTask}
       />
     </div>
   );

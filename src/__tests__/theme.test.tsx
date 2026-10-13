@@ -27,7 +27,9 @@ vi.mock('../renderer/api', () => ({
     onAgentStatus: vi.fn().mockReturnValue(() => {}),
     onJulesAllSessions: vi.fn().mockReturnValue(() => {}),
     onSessionsUpdated: vi.fn().mockReturnValue(() => {}),
-    saveSettings: vi.fn().mockResolvedValue(true)
+    saveSettings: vi.fn().mockResolvedValue(true),
+    getActiveDutyShift: vi.fn().mockResolvedValue(null),
+    onDutyShiftUpdated: vi.fn().mockReturnValue(() => {}),
   }
 }));
 
