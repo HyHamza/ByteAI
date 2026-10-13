@@ -418,10 +418,11 @@ const GLOBAL_SORT_ALIASES: Record<string, string> = {
 };
 
 function getActiveChain(db: Database): ChainRow[] {
+  let profileChain: ChainRow[] = [];
   const activeProfileSetting = db.prepare("SELECT value FROM settings WHERE key = 'active_profile_id'").get() as { value: string } | undefined;
   if (activeProfileSetting) {
     const profileId = parseInt(activeProfileSetting.value, 10);
-    const chain = db.prepare(`
+    profileChain = db.prepare(`
       SELECT pm.model_db_id, pm.priority, pm.enabled,
              m.platform, m.model_id, m.display_name, m.intelligence_rank,
              m.size_label, m.monthly_token_budget,
@@ -432,11 +433,9 @@ function getActiveChain(db: Database): ChainRow[] {
       WHERE pm.profile_id = ?
       ORDER BY pm.priority ASC
     `).all(profileId) as ChainRow[];
-    
-    if (chain.length > 0) return chain;
   }
 
-  return db.prepare(`
+  const fallbackChain = db.prepare(`
     SELECT fc.model_db_id, fc.priority, fc.enabled,
            m.platform, m.model_id, m.display_name, m.intelligence_rank,
            m.size_label, m.monthly_token_budget,
@@ -446,6 +445,28 @@ function getActiveChain(db: Database): ChainRow[] {
     JOIN models m ON m.id = fc.model_db_id AND m.enabled = 1
     ORDER BY fc.priority ASC
   `).all() as ChainRow[];
+
+  if (profileChain.length === 0) {
+    return fallbackChain;
+  }
+
+  // Merge profile chain with fallback models not present in profile chain
+  const existingModelIds = new Set(profileChain.map((m) => m.model_db_id));
+  const merged = [...profileChain];
+  let maxPriority = profileChain.reduce((max, r) => Math.max(max, r.priority || 0), 0);
+
+  for (const row of fallbackChain) {
+    if (!existingModelIds.has(row.model_db_id)) {
+      existingModelIds.add(row.model_db_id);
+      maxPriority += 10;
+      merged.push({
+        ...row,
+        priority: maxPriority,
+      });
+    }
+  }
+
+  return merged;
 }
 
 function getChainByProfileName(db: Database, name: string): ChainRow[] | null {
@@ -814,7 +835,22 @@ export function routeRequest(estimatedTokens = 1000, skipKeys?: Set<string>, pre
   const strategy = getRoutingStrategy();
   if (strategy !== 'priority') refreshStatsCache(db);
 
-  const chain = prefetchedChain ?? getActiveChain(db).filter(e => e.enabled);
+  let chain = prefetchedChain ?? getActiveChain(db).filter(e => e.enabled);
+
+  // If vision is required and the current chain lacks vision-capable models,
+  // supplement dynamically with all enabled vision models so multimodal turns never starve
+  if (requireVision && !chain.some((e) => e.supports_vision)) {
+    const visionModels = db.prepare(`
+      SELECT m.id as model_db_id, 9999 as priority, 1 as enabled,
+             m.platform, m.model_id, m.display_name, m.intelligence_rank,
+             m.size_label, m.monthly_token_budget,
+             m.rpm_limit, m.rpd_limit, m.tpm_limit, m.tpd_limit, m.supports_vision,
+             m.supports_tools, m.context_window, m.key_id
+      FROM models m
+      WHERE m.enabled = 1 AND m.supports_vision = 1
+    `).all() as ChainRow[];
+    chain = [...chain, ...visionModels];
+  }
 
   const sortedChain = orderChain(chain, strategy);
 

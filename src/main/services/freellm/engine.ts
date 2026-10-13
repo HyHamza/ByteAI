@@ -59,6 +59,27 @@ export interface FreeLLMStreamCallbacks {
   onToolCallDelta?: (toolCall: any) => void;
   onModelResolved?: (model: string, platform: string) => void;
   onRetry?: (attempt: number, maxRetries: number, delayMs: number, reason: string) => void;
+  signal?: AbortSignal;
+}
+
+function degradeMultimodalMessages(messages: any[]): any[] {
+  return messages.map((m) => {
+    if (!Array.isArray(m.content)) return m;
+    const textParts: string[] = [];
+    for (const part of m.content) {
+      if (typeof part === 'string') {
+        textParts.push(part);
+      } else if (part && part.type === 'text') {
+        textParts.push(part.text || '');
+      } else if (part && (part.type === 'image_url' || part.type === 'image')) {
+        textParts.push('[User Attached Image: Screenshot/image provided by user. Free vision routing is currently at capacity or unconfigured on active providers; continuing turn with text analysis.]');
+      }
+    }
+    return {
+      ...m,
+      content: textParts.join('\n\n'),
+    };
+  });
 }
 
 export class FreeLLMEngine {
@@ -438,21 +459,48 @@ export class FreeLLMEngine {
     const skipModels = new Set<number>();
     let lastError: any = null;
 
+    let requireVision = hasImage;
+    let workingMessages = req.messages;
+
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      if (callbacks?.signal?.aborted) {
+        throw new Error('Execution cancelled by user');
+      }
+
       let route: RouteResult | null = null;
       try {
         route = routeRequest(
           estimatedTotal,
           skipKeys.size > 0 ? skipKeys : undefined,
           preferredModel,
-          hasImage,
+          requireVision,
           hasTools,
           skipModels.size > 0 ? skipModels : undefined,
           groupChain ?? resolvedChain?.chain
         );
       } catch (err: any) {
-        lastError = err;
-        break;
+        if (requireVision) {
+          console.warn('[FreeLLMEngine] No vision model reachable for active providers. Gracefully falling back to text routing.');
+          requireVision = false;
+          workingMessages = degradeMultimodalMessages(req.messages);
+          try {
+            route = routeRequest(
+              estimatedTotal,
+              skipKeys.size > 0 ? skipKeys : undefined,
+              preferredModel,
+              false,
+              hasTools,
+              skipModels.size > 0 ? skipModels : undefined,
+              groupChain ?? resolvedChain?.chain
+            );
+          } catch (fallbackErr: any) {
+            lastError = fallbackErr;
+            break;
+          }
+        } else {
+          lastError = err;
+          break;
+        }
       }
 
       if (!route) {
@@ -470,7 +518,7 @@ export class FreeLLMEngine {
 
           const stream = route.provider.streamChatCompletion(
             route.apiKey,
-            req.messages,
+            workingMessages,
             route.modelId,
             {
               temperature: req.temperature,
@@ -479,10 +527,14 @@ export class FreeLLMEngine {
               tools: req.tools,
               tool_choice: req.tool_choice,
               parallel_tool_calls: req.parallel_tool_calls,
+              signal: callbacks?.signal,
             }
           );
 
           for await (const chunk of stream) {
+            if (callbacks?.signal?.aborted) {
+              throw new Error('Execution cancelled by user');
+            }
             const anyChunk = chunk as Record<string, any>;
             if (anyChunk.error && !anyChunk.choices) {
               const msg = anyChunk.error.message ?? JSON.stringify(anyChunk.error);
@@ -582,7 +634,7 @@ export class FreeLLMEngine {
           // Non-streaming completion
           const response = await route.provider.chatCompletion(
             route.apiKey,
-            req.messages,
+            workingMessages,
             route.modelId,
             {
               temperature: req.temperature,
@@ -591,6 +643,7 @@ export class FreeLLMEngine {
               tools: req.tools,
               tool_choice: req.tool_choice,
               parallel_tool_calls: req.parallel_tool_calls,
+              signal: callbacks?.signal,
             }
           );
 
@@ -641,8 +694,14 @@ export class FreeLLMEngine {
           );
           recordRateLimitHit(route.modelDbId);
           learnLimitFromError(route.modelDbId, err);
+          if (callbacks?.signal?.aborted) {
+            throw new Error('Execution cancelled by user');
+          }
           callbacks?.onRetry?.(attempt + 1, MAX_RETRIES, 400, `${route.displayName} hit error (${safeError}), cascading...`);
           await new Promise((r) => setTimeout(r, 300));
+          if (callbacks?.signal?.aborted) {
+            throw new Error('Execution cancelled by user');
+          }
           continue;
         }
 

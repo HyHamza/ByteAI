@@ -256,6 +256,7 @@ function pruneContextWindow(messages: LLMMessage[]): LLMMessage[] {
 export class AgentOrchestrator {
   private static instance: AgentOrchestrator;
   private activeCancellations: Set<string> = new Set();
+  private abortControllers: Map<string, AbortController> = new Map();
   private runningSessions: Set<string> = new Set();
   private pendingTurnQueues: Map<string, string[]> = new Map();
   private tokenBuffer: Map<string, { delta: string; messageId: string; timer: NodeJS.Timeout | null }> = new Map();
@@ -285,6 +286,12 @@ export class AgentOrchestrator {
 
     if (!targetSessionId) return;
 
+    // Do NOT wake up or queue for cancelled sessions
+    if (this.activeCancellations.has(targetSessionId)) {
+      console.log(`[orchestrator] Skipping wakeUpWithTaskNotification for cancelled session ${targetSessionId}`);
+      return;
+    }
+
     if (this.runningSessions.has(targetSessionId)) {
       const queue = this.pendingTurnQueues.get(targetSessionId) || [];
       queue.push(prompt);
@@ -302,6 +309,26 @@ export class AgentOrchestrator {
 
   public cancel(sessionId: string) {
     this.activeCancellations.add(sessionId);
+    this.pendingTurnQueues.delete(sessionId);
+
+    const controller = this.abortControllers.get(sessionId);
+    if (controller) {
+      try {
+        controller.abort();
+      } catch (_) {}
+      this.abortControllers.delete(sessionId);
+    }
+
+    try {
+      TaskManager.getInstance().killSessionTasks(sessionId);
+    } catch (_) {}
+
+    this.runningSessions.delete(sessionId);
+    this.flushStreamBuffers(sessionId);
+    this.emitAgentStatus(sessionId, 'idle');
+    this.emitCompleted(sessionId);
+    this.emitClearStream(sessionId);
+    this.emitSessionsUpdated();
   }
 
   private synthesizeConclusionForAsyncDispatch(stepToolRecords: ToolExecutionRecord[]): string {
@@ -383,6 +410,8 @@ export class AgentOrchestrator {
     }
 
     this.activeCancellations.delete(sessionId);
+    const abortController = new AbortController();
+    this.abortControllers.set(sessionId, abortController);
     this.runningSessions.add(sessionId);
     this.emitAgentStatus(sessionId, 'running');
     AutonomousWatchdog.getInstance().recordActivity(sessionId);
@@ -611,7 +640,7 @@ Git Repository: ${activeRepo} (${activeBranch})`;
     const llmClient = LLMClient.getInstance();
 
     while (turnCount < maxTurns) {
-      if (this.activeCancellations.has(sessionId)) {
+      if (this.activeCancellations.has(sessionId) || abortController.signal.aborted) {
         this.emitToken(sessionId, '\n\n*(Execution cancelled by user)*');
         break;
       }
@@ -636,17 +665,25 @@ Git Repository: ${activeRepo} (${activeBranch})`;
               this.emitReasoning(sessionId, chunk, assistantMsgId);
             },
             onRetry: (attempt, maxRetries, delayMs, reason) => {
-              this.emitRetry(sessionId, attempt, maxRetries, delayMs, reason);
+              if (!this.activeCancellations.has(sessionId) && !abortController.signal.aborted) {
+                this.emitRetry(sessionId, attempt, maxRetries, delayMs, reason);
+              }
             },
             onModelResolved: (resolvedModel) => {
               this.emitModelResolved(sessionId, resolvedModel, assistantMsgId);
             },
-          }
+          },
+          { signal: abortController.signal }
         );
         if (result.model) {
           this.emitModelResolved(sessionId, result.model, assistantMsgId);
         }
       } catch (err: any) {
+        if (this.activeCancellations.has(sessionId) || abortController.signal.aborted || err?.message?.includes('cancelled by user')) {
+          this.emitToken(sessionId, '\n\n*(Execution cancelled by user)*');
+          break;
+        }
+
         const errorText = `⚠️ LLM Error: ${err?.message || String(err)}\n\nPlease check your API Base URL, API Key, or Model in Settings.`;
         this.emitToken(sessionId, errorText, assistantMsgId);
 
@@ -814,6 +851,7 @@ Call 'jules_continue_session' (or 'jules_create_task' if starting a new phase) w
       }
     }
     } finally {
+      this.abortControllers.delete(sessionId);
       this.flushStreamBuffers(sessionId);
       this.runningSessions.delete(sessionId);
       this.emitAgentStatus(sessionId, 'idle');
@@ -821,16 +859,20 @@ Call 'jules_continue_session' (or 'jules_create_task' if starting a new phase) w
       this.emitCompleted(sessionId);
       this.emitSessionsUpdated();
 
-      // Check if there is a pending queued notification (e.g. from a background task that just completed)
-      const queue = this.pendingTurnQueues.get(sessionId);
-      if (queue && queue.length > 0) {
-        const nextPrompt = queue.shift()!;
-        if (queue.length === 0) {
-          this.pendingTurnQueues.delete(sessionId);
+      // Only drain pendingTurnQueues if the session was NOT cancelled!
+      if (!this.activeCancellations.has(sessionId)) {
+        const queue = this.pendingTurnQueues.get(sessionId);
+        if (queue && queue.length > 0) {
+          const nextPrompt = queue.shift()!;
+          if (queue.length === 0) {
+            this.pendingTurnQueues.delete(sessionId);
+          }
+          setTimeout(() => {
+            this.runAutonomousTurn(sessionId, nextPrompt, undefined, true).catch(console.error);
+          }, 150);
         }
-        setTimeout(() => {
-          this.runAutonomousTurn(sessionId, nextPrompt, undefined, true).catch(console.error);
-        }, 150);
+      } else {
+        this.pendingTurnQueues.delete(sessionId);
       }
     }
   }

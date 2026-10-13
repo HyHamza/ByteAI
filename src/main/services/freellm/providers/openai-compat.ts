@@ -115,7 +115,7 @@ export class OpenAICompatProvider extends BaseProvider {
         tool_choice: options?.tool_choice,
         parallel_tool_calls: this.resolveParallelToolCalls(options),
       }),
-    }, options?.timeoutMs ?? this.timeoutMs);
+    }, options?.timeoutMs ?? this.timeoutMs, options?.signal);
 
     recordQuotaObservationsFromResponse(res, {
       platform: this.platform,
@@ -188,7 +188,7 @@ export class OpenAICompatProvider extends BaseProvider {
         parallel_tool_calls: this.resolveParallelToolCalls(options),
         stream: true,
       }),
-    }, this.timeoutMs);
+    }, options?.timeoutMs ?? this.timeoutMs, options?.signal);
 
     recordQuotaObservationsFromResponse(res, {
       platform: this.platform,

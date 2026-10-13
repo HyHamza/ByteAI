@@ -239,30 +239,58 @@ export class LLMClient {
     messages: LLMMessage[],
     tools: LLMToolDefinition[] | undefined,
     callbacks: LLMStreamCallbacks,
-    options?: { maxRetries?: number }
+    options?: { maxRetries?: number; signal?: AbortSignal }
   ): Promise<{ content: string; reasoning?: string; toolCalls: any[]; model: string }> {
     const MAX_RETRIES = options?.maxRetries !== undefined ? options.maxRetries : 9;
     let attempt = 0;
 
     let workingMessages = [...messages];
-    const { modelToUse, isAutoModel } = this.getNormalizedConfig();
+    const { baseUrl, apiKey, modelToUse, isAutoModel } = this.getNormalizedConfig();
+    const shouldUseFreeLLM = !apiKey || apiKey.startsWith('freellm') || baseUrl.includes('freellm') || baseUrl.includes('localhost:3000') || !apiKey.startsWith('sk-');
     let activeOverrideModel: string | undefined = undefined;
 
     // Resilient fallback candidate ladder for auto-recovery
-    const staticCandidates = ['auto', 'gpt-4o', 'gpt-4o-mini', 'claude-3-5-sonnet', 'gemini-2.5-flash'];
+    const staticCandidates = shouldUseFreeLLM
+      ? ['auto', 'Meta-Llama-3_3-70B-Instruct', 'gpt-oss-120b', 'codestral-latest', 'Mistral-Small-3.2-24B-Instruct-2506', 'Qwen3-Coder-30B-A3B-Instruct']
+      : ['auto', 'gpt-4o', 'gpt-4o-mini', 'claude-3-5-sonnet', 'gemini-2.5-flash'];
     let fallbackIndex = 0;
     let dynamicCatalog: string[] | null = null;
 
     while (attempt <= MAX_RETRIES) {
+      if (options?.signal?.aborted) {
+        throw new Error('Execution cancelled by user');
+      }
+
       try {
-        return await this.chatStreamOnce(workingMessages, tools, callbacks, activeOverrideModel);
+        return await this.chatStreamOnce(workingMessages, tools, callbacks, activeOverrideModel, options?.signal);
       } catch (err: any) {
+        if (options?.signal?.aborted || err?.message?.includes('cancelled by user')) {
+          throw new Error('Execution cancelled by user');
+        }
+
         attempt++;
         const { isRetriable, reason, suggestedWaitSec, shouldSwitchModel, mustUseAuto, isContextOverflow } = this.isRetriableError(err);
 
         if (attempt > MAX_RETRIES || !isRetriable) {
           console.error(`[LLMClient] Request failed permanently after ${attempt - 1} retries. Error:`, err?.message);
           throw err;
+        }
+
+        // Multimodal image degradation check on retry:
+        // If vision routing failed or models were exhausted, sanitize workingMessages to text
+        const hasImage = workingMessages.some((m) => Array.isArray(m.content) && m.content.some((b: any) => b?.type === 'image_url' || b?.type === 'image'));
+        if (hasImage) {
+          console.warn('[LLMClient] Vision routing error encountered on attempt. Converting attached images to text descriptions for subsequent attempts.');
+          workingMessages = workingMessages.map((m) => {
+            if (!Array.isArray(m.content)) return m;
+            const textParts = m.content.map((p: any) => {
+              if (typeof p === 'string') return p;
+              if (p?.type === 'text') return p.text || '';
+              if (p?.type === 'image_url' || p?.type === 'image') return '[Attached image: Screenshot provided by user. Proceeding based on text instructions.]';
+              return '';
+            }).filter(Boolean);
+            return { ...m, content: textParts.join('\n\n') };
+          });
         }
 
         // Automatic Model Fallback:
@@ -339,8 +367,23 @@ export class LLMClient {
           callbacks.onRetry(attempt, MAX_RETRIES, delayMs, effectiveReason || err?.message || 'Upstream retry');
         }
 
-        // Wait before next attempt
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        // Wait before next attempt with immediate abort awareness
+        await new Promise<void>((resolve, reject) => {
+          if (options?.signal?.aborted) return reject(new Error('Execution cancelled by user'));
+          const timer = setTimeout(() => {
+            cleanup();
+            resolve();
+          }, delayMs);
+          const onAbort = () => {
+            cleanup();
+            reject(new Error('Execution cancelled by user'));
+          };
+          const cleanup = () => {
+            clearTimeout(timer);
+            options?.signal?.removeEventListener('abort', onAbort);
+          };
+          options?.signal?.addEventListener('abort', onAbort);
+        });
       }
     }
 
@@ -351,8 +394,13 @@ export class LLMClient {
     messages: LLMMessage[],
     tools: LLMToolDefinition[] | undefined,
     callbacks: LLMStreamCallbacks,
-    overrideModel?: string
+    overrideModel?: string,
+    signal?: AbortSignal
   ): Promise<{ content: string; reasoning?: string; toolCalls: any[]; model: string }> {
+    if (signal?.aborted) {
+      throw new Error('Execution cancelled by user');
+    }
+
     const { baseUrl, apiKey, modelToUse } = this.getNormalizedConfig();
     const effectiveModel = overrideModel || modelToUse;
 
@@ -380,6 +428,7 @@ export class LLMClient {
             onToolCallDelta: (tc) => callbacks.onToolCallDelta?.(tc),
             onModelResolved: (model) => callbacks.onModelResolved?.(model),
             onRetry: (attempt, maxRetries, delayMs, reason) => callbacks.onRetry?.(attempt, maxRetries, delayMs, reason),
+            signal,
           }
         );
 
@@ -558,6 +607,20 @@ export class LLMClient {
       });
 
       req.on('error', (err) => reject(err));
+
+      if (signal) {
+        if (signal.aborted) {
+          try { req.destroy(); } catch (_) {}
+          return reject(new Error('Execution cancelled by user'));
+        }
+        const onAbort = () => {
+          try { req.destroy(); } catch (_) {}
+          reject(new Error('Execution cancelled by user'));
+        };
+        signal.addEventListener('abort', onAbort, { once: true });
+        req.on('close', () => signal.removeEventListener('abort', onAbort));
+      }
+
       req.write(JSON.stringify(payload));
       req.end();
     });

@@ -244,7 +244,11 @@ export const App: React.FC = () => {
     });
 
     const unsubRetry = api.onStreamRetry?.((payload) => {
-      if (payload.sessionId === activeSessionIdRef.current) {
+      if (
+        payload.sessionId === activeSessionIdRef.current &&
+        !isCancelledRef.current &&
+        runningAgentSessionIds.has(payload.sessionId)
+      ) {
         setRetryStatus({
           attempt: payload.attempt,
           maxRetries: payload.maxRetries,
@@ -531,7 +535,16 @@ export const App: React.FC = () => {
     await api.saveSettings({ selectedModel: model, isAutoModel: isAuto });
   };
 
+  const resetLiveStreamingState = () => {
+    setRetryStatus(null);
+    setIsStreaming(false);
+    setStreamingContent('');
+    setStreamingReasoning('');
+    setStreamingTools([]);
+  };
+
   const handleCreateSession = async (workspacePath?: string) => {
+    resetLiveStreamingState();
     const targetPath = workspacePath || activeSession?.workspacePath || settings.activeWorkspacePath || undefined;
     const newSession = await api.createSession('New Task', settings.mode, targetPath);
     setSessions((prev) => [newSession, ...prev]);
@@ -539,6 +552,7 @@ export const App: React.FC = () => {
   };
 
   const handleCreateSessionInProject = async (folderPath: string, projectName: string) => {
+    resetLiveStreamingState();
     const newSession = await api.createSession('New Conversation', settings.mode, folderPath);
     setSessions((prev) => [newSession, ...prev]);
     setActiveSessionId(newSession.id);
@@ -554,6 +568,7 @@ export const App: React.FC = () => {
   const handleAddProject = async (folderPath?: string) => {
     const proj = await api.addProject(folderPath);
     if (proj) {
+      resetLiveStreamingState();
       setProjects((prev) => {
         const filtered = prev.filter((p) => p.path !== proj.path);
         return [proj, ...filtered];
@@ -580,6 +595,7 @@ export const App: React.FC = () => {
   };
 
   const handleDeleteSession = async (id: string) => {
+    resetLiveStreamingState();
     await api.deleteSession(id);
     setSessions((prev) => prev.filter((s) => s.id !== id));
     if (activeSessionId === id) {
@@ -589,7 +605,11 @@ export const App: React.FC = () => {
   };
 
   const handleSelectSession = async (id: string) => {
+    resetLiveStreamingState();
     setActiveSessionId(id);
+    if (runningAgentSessionIds.has(id)) {
+      setIsStreaming(true);
+    }
     const existing = sessions.find((s) => s.id === id);
     if (!existing || !existing.messages || existing.messages.length === 0) {
       try {
@@ -669,6 +689,8 @@ export const App: React.FC = () => {
       agentIdleTimeoutRef.current = null;
     }
 
+    isCancelledRef.current = false;
+    setRetryStatus(null);
     setIsStreaming(true);
     setStreamingContent('');
     setStreamingReasoning('');
@@ -703,15 +725,20 @@ export const App: React.FC = () => {
 
   const handleCancelExecution = async () => {
     if (!activeSessionId) return;
+    const targetSessionId = activeSessionId;
     isCancelledRef.current = true;
     if (queueDrainTimerRef.current) {
       clearTimeout(queueDrainTimerRef.current);
       queueDrainTimerRef.current = null;
     }
     isDrainingQueueRef.current = false;
-    await api.cancelExecution(activeSessionId);
-    setIsStreaming(false);
-    setStreamingTools([]);
+    resetLiveStreamingState();
+    setRunningAgentSessionIds((prev) => {
+      const next = new Set(prev);
+      next.delete(targetSessionId);
+      return next;
+    });
+    await api.cancelExecution(targetSessionId);
   };
 
   // Persist queued messages across reloads

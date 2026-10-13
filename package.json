@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:helper": "C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\csc.exe /target:exe /optimize+ /out:resources/bin/ByteInputHelper.exe src/main/services/automation/native/ByteInputHelper.cs",
     "build:exe": "npm run build && electron-builder --win",
     "build:portable": "npm run build && electron-builder --win portable",
     "dist": "npm run build && electron-builder --win",

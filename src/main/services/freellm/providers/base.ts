@@ -51,6 +51,7 @@ export interface CompletionOptions {
    * stripped before the request body is built); used by the probe script so
    * NVIDIA's 15-60s serverless cold starts don't read as failures. */
   timeoutMs?: number;
+  signal?: AbortSignal;
 }
 
 export abstract class BaseProvider {
@@ -84,13 +85,20 @@ export abstract class BaseProvider {
     url: string,
     init: RequestInit,
     timeoutMs = 15000,
+    externalSignal?: AbortSignal,
   ): Promise<Response> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    const onAbort = () => controller.abort();
+    if (externalSignal) {
+      if (externalSignal.aborted) controller.abort();
+      else externalSignal.addEventListener('abort', onAbort, { once: true });
+    }
     try {
       return await proxyFetch(url, { ...init, signal: controller.signal }, this.platform);
     } finally {
       clearTimeout(timeout);
+      if (externalSignal) externalSignal.removeEventListener('abort', onAbort);
     }
   }
 

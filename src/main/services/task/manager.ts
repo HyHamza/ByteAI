@@ -84,9 +84,10 @@ export class TaskManager {
     // Initialize log file
     fs.writeFileSync(logPath, `[Task Started] ${new Date().toISOString()}\nCommand: ${command}\nDirectory: ${cwd}\nDaemon: ${isDaemon}\n${'='.repeat(60)}\n\n`, 'utf-8');
 
+    const resolvedCwd = (cwd && fs.existsSync(cwd)) ? cwd : (process.env.USERPROFILE || process.cwd());
     const shell = process.platform === 'win32' ? (process.env.ComSpec || 'cmd.exe') : '/bin/sh';
     const child = spawn(command, [], {
-      cwd,
+      cwd: resolvedCwd,
       shell,
       stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: true,
@@ -365,6 +366,14 @@ ${recentOutput.trim() || '(No output yet)'}`;
     task.endTime = Date.now();
     task.process = undefined;
     return `Successfully killed task "${taskId}" (PID ${pid}).`;
+  }
+
+  public killSessionTasks(sessionId: string): void {
+    for (const [taskId, task] of this.tasks.entries()) {
+      if (task.sessionId === sessionId && task.status === 'running') {
+        this.killTask(taskId);
+      }
+    }
   }
 
   public sendInput(taskId: string, input: string): string {
