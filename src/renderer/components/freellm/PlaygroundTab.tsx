@@ -197,8 +197,8 @@ export const PlaygroundTab: React.FC = () => {
               <div className="whitespace-pre-wrap">{response}</div>
             ) : loading ? (
               <div className="flex items-center space-x-2 text-[var(--text-muted)] animate-pulse">
-                <Sparkles className="w-3.5 h-3.5 text-blue-400" />
-                <span>Generating in-process via FreeLLM...</span>
+                <Sparkles className="w-3.5 h-3.5 text-sky-400" />
+                <span>Generating in-process via Byte AI Labs...</span>
               </div>
             ) : null}
           </div>

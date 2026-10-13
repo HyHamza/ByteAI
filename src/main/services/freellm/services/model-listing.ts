@@ -51,10 +51,12 @@ export function buildModelListing(): ModelListing {
     allListed = getModelGroups().map(g => {
       const infos = g.members.map(m => byId.get(m.model_db_id)).filter(Boolean) as AvailRow[];
       const ctxs = infos.map(i => i.context_window).filter((c): c is number => c != null);
+      const platforms = Array.from(new Set(infos.map(i => i.platform).filter(Boolean)));
+      const providerStr = platforms.length > 0 ? platforms.join(', ') : 'Byte AI';
       return {
         id: g.canonicalId,
         name: g.groupLabel,
-        ownedBy: 'freellmapi',
+        ownedBy: providerStr,
         available: infos.some(i => i.available === 1) ? 1 : 0,
         enabled: infos.some(i => i.enabled === 1) ? 1 : 0,
         contextWindow: ctxs.length ? Math.max(...ctxs) : null,

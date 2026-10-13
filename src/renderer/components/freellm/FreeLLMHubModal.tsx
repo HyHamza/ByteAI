@@ -1,37 +1,18 @@
-import React, { useState } from 'react';
-import { 
-  Key, 
-  BarChart3, 
-  Layers, 
-  GitBranch, 
-  Terminal, 
-  X, 
-  ShieldCheck, 
-  Zap, 
-  Sparkles,
-  ExternalLink
-} from 'lucide-react';
-import { KeysTab } from './KeysTab';
-import { AnalyticsTab } from './AnalyticsTab';
-import { ModelsTab } from './ModelsTab';
-import { FallbackTab } from './FallbackTab';
-import { PlaygroundTab } from './PlaygroundTab';
+import React from 'react';
+import { X, FlaskConical } from 'lucide-react';
+import { AILabsView, type AILabsTabType } from './AILabsView';
 
 interface FreeLLMHubModalProps {
   isOpen: boolean;
   onClose: () => void;
-  defaultTab?: 'keys' | 'analytics' | 'models' | 'fallback' | 'playground';
+  defaultTab?: AILabsTabType;
 }
-
-type TabType = 'keys' | 'analytics' | 'models' | 'fallback' | 'playground';
 
 export const FreeLLMHubModal: React.FC<FreeLLMHubModalProps> = ({
   isOpen,
   onClose,
   defaultTab = 'keys',
 }) => {
-  const [activeTab, setActiveTab] = useState<TabType>(defaultTab);
-
   if (!isOpen) return null;
 
   return (
@@ -40,13 +21,13 @@ export const FreeLLMHubModal: React.FC<FreeLLMHubModalProps> = ({
         {/* Header */}
         <div className="px-6 py-4 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)] flex items-center justify-between shrink-0">
           <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center shadow-md shadow-blue-500/20">
-              <Sparkles className="w-4 h-4 text-white" />
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center shadow-md shadow-sky-500/20">
+              <FlaskConical className="w-4 h-4 text-white" />
             </div>
             <div>
               <div className="flex items-center space-x-2">
                 <h2 className="text-sm font-bold text-white tracking-wide">
-                  Free LLM Engine & Hub
+                  Byte AI Labs
                 </h2>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -54,7 +35,7 @@ export const FreeLLMHubModal: React.FC<FreeLLMHubModalProps> = ({
                 </span>
               </div>
               <p className="text-[11px] text-[var(--text-secondary)]">
-                22+ providers • Auto-failover • Dynamic rate-limit decay • Zero external server required
+                Native Multi-Provider Mesh • Smart Auto-Failover • Cost Analytics • 22+ Providers • Zero External Server
               </p>
             </div>
           </div>
@@ -68,76 +49,9 @@ export const FreeLLMHubModal: React.FC<FreeLLMHubModalProps> = ({
           </button>
         </div>
 
-        {/* Tab Navigation Navigation Bar */}
-        <div className="px-6 pt-2 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)] flex items-center space-x-1 shrink-0 overflow-x-auto">
-          <button
-            onClick={() => setActiveTab('keys')}
-            className={`flex items-center space-x-2 px-3.5 py-2.5 text-xs font-semibold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === 'keys'
-                ? 'border-blue-500 text-blue-400'
-                : 'border-transparent text-[var(--text-secondary)] hover:text-white'
-            }`}
-          >
-            <Key className="w-3.5 h-3.5" />
-            <span>API Keys & Providers</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('analytics')}
-            className={`flex items-center space-x-2 px-3.5 py-2.5 text-xs font-semibold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === 'analytics'
-                ? 'border-blue-500 text-blue-400'
-                : 'border-transparent text-[var(--text-secondary)] hover:text-white'
-            }`}
-          >
-            <BarChart3 className="w-3.5 h-3.5" />
-            <span>Traffic & Cost Analytics</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('models')}
-            className={`flex items-center space-x-2 px-3.5 py-2.5 text-xs font-semibold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === 'models'
-                ? 'border-blue-500 text-blue-400'
-                : 'border-transparent text-[var(--text-secondary)] hover:text-white'
-            }`}
-          >
-            <Layers className="w-3.5 h-3.5" />
-            <span>Model Catalog (85+)</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('fallback')}
-            className={`flex items-center space-x-2 px-3.5 py-2.5 text-xs font-semibold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === 'fallback'
-                ? 'border-blue-500 text-blue-400'
-                : 'border-transparent text-[var(--text-secondary)] hover:text-white'
-            }`}
-          >
-            <GitBranch className="w-3.5 h-3.5" />
-            <span>Routing & Failover Ladder</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('playground')}
-            className={`flex items-center space-x-2 px-3.5 py-2.5 text-xs font-semibold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === 'playground'
-                ? 'border-blue-500 text-blue-400'
-                : 'border-transparent text-[var(--text-secondary)] hover:text-white'
-            }`}
-          >
-            <Terminal className="w-3.5 h-3.5" />
-            <span>Playground</span>
-          </button>
-        </div>
-
-        {/* Tab Content Body */}
-        <div className="flex-1 p-6 overflow-y-auto bg-[var(--bg-sidebar)]">
-          {activeTab === 'keys' && <KeysTab />}
-          {activeTab === 'analytics' && <AnalyticsTab />}
-          {activeTab === 'models' && <ModelsTab />}
-          {activeTab === 'fallback' && <FallbackTab />}
-          {activeTab === 'playground' && <PlaygroundTab />}
+        {/* Modular View */}
+        <div className="flex-1 overflow-hidden flex flex-col">
+          <AILabsView defaultTab={defaultTab} />
         </div>
       </div>
     </div>

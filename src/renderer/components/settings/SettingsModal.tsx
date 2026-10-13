@@ -20,11 +20,13 @@ import {
   Trash2,
   Plus,
   Zap,
-  Power
+  Power,
+  FlaskConical
 } from 'lucide-react';
 import type { AppSettings, ProjectInfo } from '@/shared/types';
 import { api } from '../../api';
 import { byteLogoBw } from '../../assets';
+import { AILabsView } from '../freellm/AILabsView';
 
 interface SettingsModalProps {
   settings: AppSettings;
@@ -40,7 +42,7 @@ interface SettingsModalProps {
   onOpenFreeLLMHub?: () => void;
 }
 
-type SettingsTab = 'general' | 'models' | 'voice' | 'jules' | 'appearance' | `project_${string}`;
+type SettingsTab = 'general' | 'models' | 'ailabs' | 'voice' | 'jules' | 'appearance' | `project_${string}`;
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   settings,
@@ -224,6 +226,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                   <button
                     type="button"
+                    onClick={() => setActiveTab('ailabs')}
+                    className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-medium transition-colors cursor-pointer text-left ${
+                      activeTab === 'ailabs'
+                        ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-xs'
+                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)]'
+                    }`}
+                  >
+                    <FlaskConical className="w-4 h-4 text-sky-400" />
+                    <div className="flex items-center justify-between flex-1">
+                      <span>AI Labs</span>
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30">
+                        Mesh
+                      </span>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={() => setActiveTab('voice')}
                     className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-medium transition-colors cursor-pointer text-left ${
                       activeTab === 'voice'
@@ -340,6 +360,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <h2 className="text-base font-semibold text-[var(--text-primary)]">
                   {activeTab === 'general' && 'General'}
                   {activeTab === 'models' && 'Models & API Gateway'}
+                  {activeTab === 'ailabs' && 'Byte AI Labs (Native Multi-Provider Mesh)'}
                   {activeTab === 'voice' && 'Voice Dictation (Groq Whisper AI)'}
                   {activeTab === 'jules' && 'Jules AI Configuration (Senior Lead)'}
                   {activeTab === 'appearance' && 'Appearance & Workspace'}
@@ -348,6 +369,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <p className="text-[11px] text-[var(--text-secondary)] mt-0.5">
                   {activeTab === 'general' && 'Configure agent execution, queued message delivery, and global permissions.'}
                   {activeTab === 'models' && 'Configure your LLM endpoint, API keys, and default reasoning models.'}
+                  {activeTab === 'ailabs' && 'Manage 22+ multi-provider keys, 85+ models catalog, cost analytics, and auto-failover routing.'}
                   {activeTab === 'voice' && 'Configure ultra-fast Groq Whisper AI voice transcription.'}
                   {activeTab === 'jules' && 'Configure Google Labs Jules supervisor keys and target repository settings.'}
                   {activeTab === 'appearance' && 'Customize theme styling and workspace layout settings.'}
@@ -664,28 +686,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 {/* ─── TAB: MODELS & API ─── */}
                 {activeTab === 'models' && (
                   <div className="space-y-4">
-                    {/* Free LLM In-Process Engine Card */}
-                    <div className="bg-gradient-to-r from-blue-950/40 via-indigo-950/30 to-transparent border border-blue-500/30 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md shadow-blue-500/5">
+                    {/* Byte AI Labs In-Process Mesh Card */}
+                    <div className="bg-gradient-to-r from-sky-950/40 via-indigo-950/30 to-transparent border border-sky-500/30 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md shadow-sky-500/5">
                       <div>
                         <div className="flex items-center space-x-2">
-                          <span className="text-xs font-bold text-white tracking-wide">Free LLM Engine & Hub</span>
+                          <span className="text-xs font-bold text-white tracking-wide">Byte AI Labs Native Mesh</span>
                           <span className="px-1.5 py-0.2 rounded text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-medium">
                             Natively Integrated
                           </span>
                         </div>
                         <p className="text-[11px] text-[var(--text-secondary)] mt-1 max-w-lg">
-                          Built-in zero-latency LLM engine with 22+ providers (Google Gemini, Groq, Cerebras, NVIDIA NIM, Mistral, Ollama, keyless gateways) and automatic 429 failover.
+                          Built-in zero-latency LLM mesh with 22+ providers (Google Gemini, Groq, Cerebras, NVIDIA NIM, Mistral, Ollama, keyless gateways) and automatic 429 failover.
                         </p>
                       </div>
                       <button
                         type="button"
-                        onClick={() => {
-                          onClose();
-                          onOpenFreeLLMHub?.();
-                        }}
-                        className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-md shadow-blue-500/20 transition-all cursor-pointer whitespace-nowrap self-start sm:self-auto"
+                        onClick={() => setActiveTab('ailabs')}
+                        className="px-3.5 py-1.5 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-semibold shadow-md shadow-sky-500/20 transition-all cursor-pointer whitespace-nowrap self-start sm:self-auto"
                       >
-                        Open Free LLM Hub →
+                        Open AI Labs Tab →
                       </button>
                     </div>
 
@@ -699,7 +718,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           placeholder="http://127.0.0.1:31415/v1 or https://api.openai.com/v1"
                           className="w-full bg-[var(--bg-surface)] border border-[var(--border-card)] rounded-lg px-3 py-2 text-[var(--text-primary)] focus:outline-none focus:border-[var(--border-subtle)] font-mono text-xs"
                         />
-                        <span className="text-[10px] text-[var(--text-secondary)] mt-1 block">Supports local FreeLLM proxies, Ollama, vLLM, and OpenAI-compatible gateways.</span>
+                        <span className="text-[10px] text-[var(--text-secondary)] mt-1 block">Supports local AI proxies, Ollama, vLLM, and OpenAI-compatible gateways.</span>
                       </div>
 
                       <div>
@@ -709,7 +728,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             type={showApiKey ? 'text' : 'password'}
                             value={form.apiKey || ''}
                             onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
-                            placeholder="freellmapi-... or sk-..."
+                            placeholder="sk-... or custom key"
                             className="w-full bg-[var(--bg-surface)] border border-[var(--border-card)] rounded-lg pl-3 pr-9 py-2 text-[var(--text-primary)] focus:outline-none focus:border-[var(--border-subtle)] font-mono text-xs"
                           />
                           <button
@@ -762,6 +781,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         )}
                       </div>
                     </div>
+                  </div>
+                )}
+
+                {/* ─── TAB: AI LABS ─── */}
+                {activeTab === 'ailabs' && (
+                  <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl overflow-hidden min-h-[580px] flex flex-col">
+                    <AILabsView />
                   </div>
                 )}
 

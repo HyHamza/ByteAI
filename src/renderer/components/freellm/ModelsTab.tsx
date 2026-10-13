@@ -45,11 +45,22 @@ export const ModelsTab: React.FC = () => {
     loadModels();
   }, []);
 
-  const owners = Array.from(new Set(models.map((m) => m.ownedBy))).filter(Boolean);
+  const owners = Array.from(
+    new Set(
+      models.flatMap((m) =>
+        m.ownedBy
+          .split(',')
+          .map((s) => s.trim().toLowerCase())
+      )
+    )
+  ).filter((o) => o && o !== 'all').sort();
 
   const filtered = models.filter((m) => {
     if (availableOnly && m.available !== 1) return false;
-    if (filterOwner !== 'all' && m.ownedBy !== filterOwner) return false;
+    if (filterOwner !== 'all') {
+      const providers = m.ownedBy.toLowerCase().split(',').map((s) => s.trim());
+      if (!providers.includes(filterOwner.toLowerCase())) return false;
+    }
     if (search.trim()) {
       const q = search.toLowerCase();
       return m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q) || m.ownedBy.toLowerCase().includes(q);

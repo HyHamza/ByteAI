@@ -16,7 +16,8 @@ import {
   AlertCircle,
   XCircle,
   Ban,
-  ChevronDown
+  ChevronDown,
+  FlaskConical
 } from 'lucide-react';
 import type { AppMode, AppSettings, ChatSession, TaskState } from '@/shared/types';
 import { useDutyShift } from '../../hooks/useDutyShift';
@@ -317,13 +318,14 @@ export const Header: React.FC<HeaderProps> = ({
           )}
 
           {/* Free LLM Hub Button */}
+          {/* AI Labs Button */}
           <button
             onClick={onOpenFreeLLMHub}
-            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-gradient-to-r from-blue-900/40 to-indigo-900/40 text-blue-300 hover:text-white hover:from-blue-800/50 hover:to-indigo-800/50 border border-blue-500/30 transition-all cursor-pointer shadow-xs shadow-blue-500/10"
-            title="Open Free LLM Engine & Hub (22+ Providers, Auto-Routing, Analytics)"
+            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-gradient-to-r from-sky-900/40 to-indigo-900/40 text-sky-300 hover:text-white hover:from-sky-800/50 hover:to-indigo-800/50 border border-sky-500/30 transition-all cursor-pointer shadow-xs shadow-sky-500/10"
+            title="Open Byte AI Labs (Multi-Provider Smart Routing, Keys, Catalog & Analytics)"
           >
-            <Sparkles className="w-3.5 h-3.5 text-blue-400" />
-            <span>Free LLM Hub</span>
+            <FlaskConical className="w-3.5 h-3.5 text-sky-400" />
+            <span>AI Labs</span>
           </button>
 
           {/* Antigravity Blue Pill: Jules Mission Control */}
@@ -359,10 +361,10 @@ export const Header: React.FC<HeaderProps> = ({
                     setIsMenuOpen(false);
                     onOpenFreeLLMHub?.();
                   }}
-                  className="w-full text-left px-3 py-1.5 hover:bg-[var(--bg-surface)] text-blue-300 flex items-center space-x-2 transition-colors cursor-pointer"
+                  className="w-full text-left px-3 py-1.5 hover:bg-[var(--bg-surface)] text-sky-300 flex items-center space-x-2 transition-colors cursor-pointer"
                 >
-                  <Sparkles className="w-3.5 h-3.5 text-blue-400" />
-                  <span>Free LLM Hub</span>
+                  <FlaskConical className="w-3.5 h-3.5 text-sky-400" />
+                  <span>AI Labs</span>
                 </button>
                 <button
                   onClick={() => {
