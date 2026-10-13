@@ -245,7 +245,7 @@ export class LLMClient {
     let attempt = 0;
 
     let workingMessages = [...messages];
-    const { modelToUse } = this.getNormalizedConfig();
+    const { modelToUse, isAutoModel } = this.getNormalizedConfig();
     let activeOverrideModel: string | undefined = undefined;
 
     // Resilient fallback candidate ladder for auto-recovery
