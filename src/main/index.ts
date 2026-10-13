@@ -438,8 +438,8 @@ function setupIpcHandlers() {
     return project;
   });
 
-  ipcMain.handle('projects:delete', async (_, { projectPath }: { projectPath: string }) => {
-    return store.deleteProject(projectPath);
+  ipcMain.handle('projects:delete', async (_, { projectPath, projectName }: { projectPath: string; projectName?: string }) => {
+    return store.deleteProject(projectPath, projectName);
   });
 
   // ── Sessions IPC

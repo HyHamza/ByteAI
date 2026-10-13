@@ -37,7 +37,7 @@ interface SidebarProps {
   onCreateSessionInProject?: (folderPath: string, projectName: string) => void;
   onDeleteSession: (sessionId: string) => void;
   onAddProject?: (folderPath?: string) => void;
-  onDeleteProject?: (projectPath: string) => void;
+  onDeleteProject?: (projectPath: string, projectName?: string) => void;
   onOpenSettings: () => void;
   onSelectWorkspace: () => void;
 }
@@ -182,6 +182,13 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
     title: string;
   } | null>(null);
 
+  // Delete Project Confirmation Modal state
+  const [projectToDelete, setProjectToDelete] = useState<{
+    name: string;
+    path: string;
+    sessionCount: number;
+  } | null>(null);
+
   const newProjectMenuRef = useRef<HTMLDivElement>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const isAnyMenuOpenRef = useRef(false);
@@ -308,9 +315,9 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
 
   // Group sessions based on groupBy
   const { groups, sortedFolderNames, folderPathMap } = useMemo(() => {
-    const current = workspaceName || 'SeniorEngineer';
+    const current = workspaceName || '';
     const pathMap: Record<string, string> = {};
-    if (activeWorkspacePath) {
+    if (current && activeWorkspacePath) {
       pathMap[current] = activeWorkspacePath;
     }
 
@@ -359,6 +366,9 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
 
     if (groupBy === 'workspace') {
       const wsMap: Record<string, ChatSession[]> = {};
+      if (current) {
+        wsMap[current] = [];
+      }
       for (const s of filteredSessions) {
         let wsName = current;
         if (s.workspacePath) {
@@ -366,6 +376,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
           wsName = parts.length > 0 ? parts[parts.length - 1] : current;
           if (!pathMap[wsName]) pathMap[wsName] = s.workspacePath;
         }
+        if (!wsName) continue;
         if (!wsMap[wsName]) wsMap[wsName] = [];
         wsMap[wsName].push(s);
       }
@@ -373,17 +384,18 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
         wsMap[k] = sortSessionsList(wsMap[k]);
       }
       const sorted = Object.keys(wsMap).sort((a, b) => {
-        if (a === current) return -1;
-        if (b === current) return 1;
+        if (current && a === current) return -1;
+        if (current && b === current) return 1;
         return a.localeCompare(b);
       });
       return { groups: wsMap, sortedFolderNames: sorted, folderPathMap: pathMap };
     }
 
     // Default: groupBy === 'project'
-    const map: Record<string, ChatSession[]> = {
-      [current]: [],
-    };
+    const map: Record<string, ChatSession[]> = {};
+    if (current) {
+      map[current] = [];
+    }
     for (const p of projects) {
       if (!map[p.name]) map[p.name] = [];
       pathMap[p.name] = p.path;
@@ -395,6 +407,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
         if (parts.length > 0) folder = parts[parts.length - 1];
         if (!pathMap[folder]) pathMap[folder] = s.workspacePath;
       }
+      if (!folder) continue;
       if (!map[folder]) map[folder] = [];
       map[folder].push(s);
     }
@@ -402,8 +415,8 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
       map[k] = sortSessionsList(map[k]);
     }
     const sortedFolders = Object.keys(map).sort((a, b) => {
-      if (a === current) return -1;
-      if (b === current) return 1;
+      if (current && a === current) return -1;
+      if (current && b === current) return 1;
       return a.localeCompare(b);
     });
 
@@ -460,13 +473,19 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
   };
 
   const handleDeleteProjectClick = (folderName: string) => {
-    const pathOnDisk = folderPathMap[folderName] || '';
     setActiveContextMenuFolder(null);
-    if (window.confirm(`Are you sure you want to delete project "${folderName}" and its conversations?`)) {
-      if (onDeleteProject && pathOnDisk) {
-        onDeleteProject(pathOnDisk);
-      }
-    }
+    const pathOnDisk =
+      folderPathMap[folderName] ||
+      projects.find((p) => p.name.toLowerCase() === folderName.toLowerCase() || p.path.toLowerCase() === folderName.toLowerCase())?.path ||
+      sessions.find((s) => s.workspacePath && (s.workspacePath.replace(/\\/g, '/').split('/').filter(Boolean).pop()?.toLowerCase() === folderName.toLowerCase()))?.workspacePath ||
+      (workspaceName && workspaceName.toLowerCase() === folderName.toLowerCase() ? (activeWorkspacePath || '') : '') ||
+      '';
+    const folderSessions = groups[folderName] || [];
+    setProjectToDelete({
+      name: folderName,
+      path: pathOnDisk,
+      sessionCount: folderSessions.length,
+    });
   };
 
   const handleOpenProjectSettings = (folderName: string) => {
@@ -1186,6 +1205,66 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
                     const id = sessionToDelete.id;
                     setSessionToDelete(null);
                     onDeleteSession(id);
+                  }}
+                  className="px-3.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-medium shadow-sm transition-colors cursor-pointer text-xs flex items-center space-x-1.5"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Project Confirmation Modal */}
+      {projectToDelete && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => setProjectToDelete(null)}
+        >
+          <div 
+            className="bg-[var(--bg-surface-hover)] border border-[var(--border-card)] rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden text-[var(--text-primary)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border-subtle)]">
+              <div className="flex items-center space-x-2.5 text-red-400">
+                <Trash2 className="w-4 h-4 shrink-0" />
+                <h3 className="font-semibold text-sm text-[var(--text-primary)]">Delete Project</h3>
+              </div>
+              <button 
+                onClick={() => setProjectToDelete(null)}
+                className="p-1 hover:text-[var(--text-primary)] rounded hover:bg-[var(--bg-surface-hover)] text-[var(--text-secondary)] transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 text-xs">
+              <p className="text-[var(--text-secondary)] leading-relaxed">
+                Are you sure you want to delete project <span className="font-medium text-[var(--text-primary)]">"{projectToDelete.name}"</span>
+                {projectToDelete.sessionCount > 0 ? (
+                  <> and all its conversations (<span className="text-[var(--text-primary)] font-medium">{projectToDelete.sessionCount}</span>)</>
+                ) : null}
+                ? This action cannot be undone.
+              </p>
+
+              <div className="pt-2 flex items-center justify-end space-x-2 border-t border-[var(--border-subtle)]">
+                <button
+                  type="button"
+                  onClick={() => setProjectToDelete(null)}
+                  className="px-3.5 py-1.5 rounded-lg bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-card)] font-medium transition-colors cursor-pointer text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const proj = projectToDelete;
+                    setProjectToDelete(null);
+                    if (onDeleteProject) {
+                      onDeleteProject(proj.path, proj.name);
+                    }
                   }}
                   className="px-3.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-medium shadow-sm transition-colors cursor-pointer text-xs flex items-center space-x-1.5"
                 >

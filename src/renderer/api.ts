@@ -124,7 +124,7 @@ const mockAPI: ElectronAPI = {
     path: folderPath || 'E:\\CODE',
     createdAt: Date.now(),
   }),
-  deleteProject: async () => ({ success: true, deletedSessionsCount: 0 }),
+  deleteProject: async (_projectPath: string, _projectName?: string) => ({ success: true, deletedSessionsCount: 0 }),
 
   getSettings: async () => ({ ...mockSettings }),
   saveSettings: async (settings) => {

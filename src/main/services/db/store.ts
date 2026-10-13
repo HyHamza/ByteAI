@@ -449,13 +449,80 @@ export class DataStore {
     return info;
   }
 
-  public deleteProject(projectPath: string): { success: boolean; deletedSessionsCount: number } {
+  public deleteProject(projectPath: string, projectName?: string): { success: boolean; deletedSessionsCount: number } {
+    const normalize = (p?: string | null) => (p || '').replace(/[/\\]+/g, '/').toLowerCase().replace(/\/$/, '');
+    const targetNorm = normalize(projectPath);
+    const targetBase = targetNorm ? targetNorm.split('/').pop() || '' : '';
+    const nameNorm = (projectName || '').toLowerCase().trim();
+
     this.db.exec('BEGIN TRANSACTION');
     let deletedCount = 0;
     try {
-      this.stmtDeleteProject.run(projectPath);
-      const res = this.db.prepare('DELETE FROM sessions WHERE workspace_path = ?').run(projectPath);
-      deletedCount = res.changes || 0;
+      // 1. Find all matching sessions in DB
+      const allSessions = this.db.prepare('SELECT id, workspace_path FROM sessions').all();
+      const sessionIdsToDelete: string[] = [];
+      for (const row of allSessions) {
+        const wsNorm = normalize(row.workspace_path);
+        const wsBase = wsNorm ? wsNorm.split('/').pop() || '' : '';
+        const matchesPath = targetNorm && (wsNorm === targetNorm || wsBase === targetBase);
+        const matchesName = nameNorm && (wsBase === nameNorm || (row.workspace_path && path.basename(row.workspace_path).toLowerCase() === nameNorm));
+        if (matchesPath || matchesName) {
+          sessionIdsToDelete.push(row.id);
+        }
+      }
+
+      // 2. Delete matching sessions from SQLite (messages cascade delete automatically)
+      for (const sessId of sessionIdsToDelete) {
+        this.stmtDeleteSession.run(sessId);
+        this.sessionsCache.delete(sessId);
+        deletedCount++;
+      }
+
+      // In case any in-memory sessions were not in DB or cached separately
+      for (const [id, sess] of this.sessionsCache.entries()) {
+        const wsNorm = normalize(sess.workspacePath);
+        const wsBase = wsNorm ? wsNorm.split('/').pop() || '' : '';
+        const matchesPath = targetNorm && (wsNorm === targetNorm || wsBase === targetBase);
+        const matchesName = nameNorm && (wsBase === nameNorm || (sess.workspacePath && path.basename(sess.workspacePath).toLowerCase() === nameNorm));
+        if (matchesPath || matchesName) {
+          this.sessionsCache.delete(id);
+        }
+      }
+
+      // 3. Delete from projects table
+      const allProjects = this.db.prepare('SELECT id, name, path FROM projects').all();
+      for (const proj of allProjects) {
+        const pNorm = normalize(proj.path);
+        const pName = (proj.name || '').toLowerCase().trim();
+        const pBase = pNorm ? pNorm.split('/').pop() || '' : '';
+        if (
+          (targetNorm && (pNorm === targetNorm || proj.id === projectPath || pBase === targetBase)) ||
+          (nameNorm && (pName === nameNorm || pBase === nameNorm))
+        ) {
+          this.db.prepare('DELETE FROM projects WHERE id = ?').run(proj.id);
+        }
+      }
+      if (projectPath) {
+        this.db.prepare('DELETE FROM projects WHERE path = ? OR id = ?').run(projectPath, projectPath);
+      }
+
+      // 4. If current activeWorkspacePath in settings matches this project, reset or clear it
+      const currentSettings = this.getSettings();
+      const curWsNorm = normalize(currentSettings.activeWorkspacePath);
+      const curWsBase = curWsNorm ? curWsNorm.split('/').pop() || '' : '';
+      if (
+        (targetNorm && (curWsNorm === targetNorm || curWsBase === targetBase)) ||
+        (nameNorm && curWsBase === nameNorm)
+      ) {
+        const remainingProjects = this.db.prepare('SELECT path FROM projects LIMIT 1').all();
+        const nextPath = remainingProjects.length > 0 ? remainingProjects[0].path : null;
+        if (nextPath) {
+          this.stmtUpsertSetting.run('activeWorkspacePath', nextPath);
+        } else {
+          this.db.prepare('DELETE FROM settings WHERE key = ?').run('activeWorkspacePath');
+        }
+      }
+
       this.db.exec('COMMIT');
     } catch (err) {
       this.db.exec('ROLLBACK');

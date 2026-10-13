@@ -651,15 +651,70 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleDeleteProject = async (projectPath: string) => {
-    await api.deleteProject(projectPath);
-    setProjects((prev) => prev.filter((p) => p.path !== projectPath));
+  const handleDeleteProject = async (projectPath: string, projectName?: string) => {
+    resetLiveStreamingState();
+    await api.deleteProject(projectPath, projectName);
+
+    const normTarget = normalizeWorkspacePath(projectPath);
+    const targetName = (projectName || '').toLowerCase().trim();
+
+    // Filter out deleted project from projects state
+    const remainingProjects = projects.filter((p) => {
+      const pNorm = normalizeWorkspacePath(p.path);
+      const pName = (p.name || '').toLowerCase().trim();
+      if (normTarget && pNorm === normTarget) return false;
+      if (targetName && pName === targetName) return false;
+      return true;
+    });
+    setProjects(remainingProjects);
+
+    // Refresh sessions from backend
     const refreshed = await api.listSessions();
     setSessions(refreshed);
-    if (refreshed.length > 0) {
-      setActiveSessionId(refreshed[0].id);
+
+    // Check if the project being deleted was the active workspace
+    const isActiveDeleted =
+      (normTarget && normalizeWorkspacePath(settings.activeWorkspacePath) === normTarget) ||
+      (targetName && workspaceName.toLowerCase().trim() === targetName);
+
+    if (isActiveDeleted) {
+      if (remainingProjects.length > 0) {
+        const nextProj = remainingProjects[0];
+        setWorkspaceName(nextProj.name);
+        setGitRepo(nextProj.gitRepo || null);
+        setGitBranch(nextProj.gitBranch || null);
+        setSettings((prev) => ({ ...prev, activeWorkspacePath: nextProj.path }));
+        await api.saveSettings({ activeWorkspacePath: nextProj.path });
+
+        // Select first session in new project, or create an empty one
+        const nextNorm = normalizeWorkspacePath(nextProj.path);
+        const nextSession = refreshed.find((s) => normalizeWorkspacePath(s.workspacePath) === nextNorm);
+        if (nextSession) {
+          setActiveSessionId(nextSession.id);
+        } else {
+          const newSession = await api.createSession('New Conversation', settings.mode, nextProj.path);
+          setSessions((prev) => [newSession, ...prev]);
+          setActiveSessionId(newSession.id);
+        }
+      } else {
+        setWorkspaceName('');
+        setGitRepo(null);
+        setGitBranch(null);
+        setSettings((prev) => ({ ...prev, activeWorkspacePath: null }));
+        await api.saveSettings({ activeWorkspacePath: '' });
+
+        if (refreshed.length > 0) {
+          setActiveSessionId(refreshed[0].id);
+        } else {
+          const newSession = await api.createSession('New Conversation', settings.mode, undefined);
+          setSessions([newSession]);
+          setActiveSessionId(newSession.id);
+        }
+      }
     } else {
-      setActiveSessionId(null);
+      if (activeSessionId && !refreshed.some((s) => s.id === activeSessionId)) {
+        setActiveSessionId(refreshed.length > 0 ? refreshed[0].id : null);
+      }
     }
   };
 

@@ -216,7 +216,7 @@ export interface ElectronAPI {
   showInExplorer: (folderPath: string) => Promise<boolean>;
   getProjects: () => Promise<ProjectInfo[]>;
   addProject: (folderPath?: string) => Promise<ProjectInfo | null>;
-  deleteProject: (projectPath: string) => Promise<{ success: boolean; deletedSessionsCount: number }>;
+  deleteProject: (projectPath: string, projectName?: string) => Promise<{ success: boolean; deletedSessionsCount: number }>;
 
   // Settings
   getSettings: () => Promise<AppSettings>;

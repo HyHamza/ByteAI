@@ -87,7 +87,7 @@ const api: ElectronAPI = {
   showInExplorer: (folderPath) => ipcRenderer.invoke('workspace:show-in-explorer', { folderPath }),
   getProjects: () => ipcRenderer.invoke('projects:get'),
   addProject: (folderPath) => ipcRenderer.invoke('projects:add', { folderPath }),
-  deleteProject: (projectPath) => ipcRenderer.invoke('projects:delete', { projectPath }),
+  deleteProject: (projectPath, projectName) => ipcRenderer.invoke('projects:delete', { projectPath, projectName }),
 
   // Settings
   getSettings: () => ipcRenderer.invoke('settings:get'),
