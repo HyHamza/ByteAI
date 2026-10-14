@@ -1,38 +1,171 @@
-# Dependencies
+# ==============================================================================
+# ByteAI / SeniorEngineer - Git Ignore Configuration
+# Comprehensive rules to prevent leaking secrets, credentials, build outputs,
+# caches, runtime databases, OS files, and editor configs to public GitHub.
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. Environment Variables, Keys & Secrets (CRITICAL FOR PUBLIC GITHUB)
+# ------------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+!.env.*.example
+.jules_key
+*.pem
+*.key
+*.cert
+*.crt
+*.pfx
+*.p12
+id_rsa*
+id_ed25519*
+credentials.json
+client_secrets.json
+service-account*.json
+token.json
+tokens.json
+auth.json
+secrets/
+credentials/
+
+# ------------------------------------------------------------------------------
+# 2. Dependencies & Package Managers
+# ------------------------------------------------------------------------------
 node_modules/
 .pnp
 .pnp.js
+.pnp.*
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
 
-# Production builds
+# ------------------------------------------------------------------------------
+# 3. Build & Packaging Outputs
+# ------------------------------------------------------------------------------
 dist/
 dist-electron/
 release/
+out/
+build-artifacts/
 *.tsbuildinfo
+tsconfig.tsbuildinfo
+tsconfig.*.tsbuildinfo
 
-# Environment and secrets
-.env
-.env.local
-.env.*.local
-.jules_key
+# Binaries: ignore arbitrary exe/dll files but preserve checked-in helper
+*.exe
+!resources/bin/ByteInputHelper.exe
+*.dll
+*.dylib
+*.so
+*.obj
+*.o
+*.pdb
+
+# ------------------------------------------------------------------------------
+# 4. Embedded Repositories & Submodules
+# ------------------------------------------------------------------------------
 freellmapi/
 
-# Logs
+# ------------------------------------------------------------------------------
+# 5. Local Databases & Runtime Storage
+# ------------------------------------------------------------------------------
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-wal
+*.db-shm
+store.json
+.seniorengineer/
+
+# ------------------------------------------------------------------------------
+# 6. Caches & Temporary Files
+# ------------------------------------------------------------------------------
+.cache/
+.vite/
+.parcel-cache/
+.eslintcache
+tmp/
+temp/
+*.tmp
+*.temp
+*.zip
+*.tar
+*.tar.gz
+*.rar
+*.7z
+
+# ------------------------------------------------------------------------------
+# 7. Testing & Coverage
+# ------------------------------------------------------------------------------
+coverage/
+.nyc_output/
+test-results/
+playwright-report/
+blob-report/
+*.lcov
+
+# ------------------------------------------------------------------------------
+# 8. Logs & Debugging
+# ------------------------------------------------------------------------------
+logs/
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-# OS metadata
-.DS_Store
-Thumbs.db
-
-# Editor directories
+# ------------------------------------------------------------------------------
+# 9. IDEs & Editors
+# ------------------------------------------------------------------------------
 .vscode/*
 !.vscode/extensions.json
-.idea
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+.idea/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+*.swo
+*.swn
+*.bak
+.vs/
+*.sublime-project
+*.sublime-workspace
+
+# ------------------------------------------------------------------------------
+# 10. AI Agents & Coding Assistant Metadata
+# ------------------------------------------------------------------------------
+.claude/
+.cursor/
+.windsurf/
+.gemini/
+.antigravity/
+
+# ------------------------------------------------------------------------------
+# 11. Operating System Metadata
+# ------------------------------------------------------------------------------
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.fuse_hidden*
+.directory
