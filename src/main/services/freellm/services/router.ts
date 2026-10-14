@@ -424,30 +424,7 @@ const GLOBAL_SORT_ALIASES: Record<string, string> = {
 };
 
 function getActiveChain(db: Database): ChainRow[] {
-  let profileChain: ChainRow[] = [];
-  const activeProfileSetting = db.prepare("SELECT value FROM settings WHERE key = 'active_profile_id'").get() as { value: string } | undefined;
-  if (activeProfileSetting) {
-    const profileId = parseInt(activeProfileSetting.value, 10);
-    profileChain = db.prepare(`
-      SELECT pm.model_db_id, pm.priority, pm.enabled,
-             m.platform, m.model_id, m.display_name, m.intelligence_rank,
-             m.size_label, m.monthly_token_budget,
-             m.rpm_limit, m.rpd_limit, m.tpm_limit, m.tpd_limit, m.supports_vision,
-             m.supports_tools, m.context_window, m.key_id
-      FROM profile_models pm
-      JOIN models m ON m.id = pm.model_db_id AND m.enabled = 1
-      WHERE pm.profile_id = ?
-        AND EXISTS (
-          SELECT 1 FROM api_keys k
-          WHERE k.platform = m.platform
-            AND k.enabled = 1
-            AND (m.key_id IS NULL OR k.id = m.key_id)
-        )
-      ORDER BY pm.priority ASC
-    `).all(profileId) as ChainRow[];
-  }
-
-  const fallbackChain = db.prepare(`
+  return db.prepare(`
     SELECT fc.model_db_id, fc.priority, fc.enabled,
            m.platform, m.model_id, m.display_name, m.intelligence_rank,
            m.size_label, m.monthly_token_budget,
@@ -463,28 +440,6 @@ function getActiveChain(db: Database): ChainRow[] {
     )
     ORDER BY fc.priority ASC
   `).all() as ChainRow[];
-
-  if (profileChain.length === 0) {
-    return fallbackChain;
-  }
-
-  // Merge profile chain with fallback models not present in profile chain
-  const existingModelIds = new Set(profileChain.map((m) => m.model_db_id));
-  const merged = [...profileChain];
-  let maxPriority = profileChain.reduce((max, r) => Math.max(max, r.priority || 0), 0);
-
-  for (const row of fallbackChain) {
-    if (!existingModelIds.has(row.model_db_id)) {
-      existingModelIds.add(row.model_db_id);
-      maxPriority += 10;
-      merged.push({
-        ...row,
-        priority: maxPriority,
-      });
-    }
-  }
-
-  return merged;
 }
 
 function getChainByProfileName(db: Database, name: string): ChainRow[] | null {

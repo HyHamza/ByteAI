@@ -32,4 +32,15 @@ describe('Fallback Reorder and Priority Routing', () => {
       engine.reorderFallbackChain(originalIds);
     }
   });
+
+  it('should route to the top prioritized model in priority strategy', async () => {
+    const { resolveRoutingChain, routeRequest } = await import('../main/services/freellm/services/router');
+    const { chain } = resolveRoutingChain('auto');
+    if (chain.length > 0) {
+      const topModel = chain[0];
+      const route = routeRequest(1000);
+      expect(route.platform).toBe(topModel.platform);
+      expect(route.modelId).toBe(topModel.model_id);
+    }
+  });
 });

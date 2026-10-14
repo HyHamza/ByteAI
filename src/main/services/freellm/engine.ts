@@ -415,6 +415,11 @@ export class FreeLLMEngine {
     db.prepare(`
       UPDATE fallback_config SET priority = ?, enabled = ? WHERE model_db_id = ?
     `).run(priority, enabled ? 1 : 0, modelDbId);
+    try {
+      db.prepare(`
+        UPDATE profile_models SET priority = ?, enabled = ? WHERE model_db_id = ?
+      `).run(priority, enabled ? 1 : 0, modelDbId);
+    } catch (_) {}
     return true;
   }
 
@@ -422,9 +427,32 @@ export class FreeLLMEngine {
     if (!Array.isArray(orderedModelDbIds) || orderedModelDbIds.length === 0) return false;
     const db = getDb();
     const updateStmt = db.prepare('UPDATE fallback_config SET priority = ? WHERE model_db_id = ?');
+    const updateProfileStmt = db.prepare('UPDATE profile_models SET priority = ? WHERE model_db_id = ?');
+
     const updateMany = db.transaction((ids: number[]) => {
+      const assignedSet = new Set(ids);
       for (let i = 0; i < ids.length; i++) {
         updateStmt.run(i + 1, ids[i]);
+        try {
+          updateProfileStmt.run(i + 1, ids[i]);
+        } catch (_) {}
+      }
+
+      // Ensure any remaining rows in fallback_config start strictly after ids.length
+      const remainingRows = db.prepare(`
+        SELECT model_db_id FROM fallback_config
+        ORDER BY priority ASC, id ASC
+      `).all() as { model_db_id: number }[];
+
+      let nextPriority = ids.length + 1;
+      for (const row of remainingRows) {
+        if (!assignedSet.has(row.model_db_id)) {
+          updateStmt.run(nextPriority, row.model_db_id);
+          try {
+            updateProfileStmt.run(nextPriority, row.model_db_id);
+          } catch (_) {}
+          nextPriority++;
+        }
       }
     });
     updateMany(orderedModelDbIds);
