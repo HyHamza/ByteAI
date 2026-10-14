@@ -15,7 +15,8 @@ import {
   GripVertical,
   ChevronsUp,
   Search,
-  ListOrdered
+  ListOrdered,
+  Key
 } from 'lucide-react';
 import { api } from '../../api';
 
@@ -372,7 +373,21 @@ export const FallbackTab: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border-subtle)]">
-              {filteredChain.length === 0 ? (
+              {chain.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-6 py-12 text-center">
+                    <div className="max-w-md mx-auto space-y-2.5">
+                      <div className="w-10 h-10 rounded-full bg-blue-500/10 text-blue-400 flex items-center justify-center mx-auto border border-blue-500/20">
+                        <Key className="w-4 h-4" />
+                      </div>
+                      <h5 className="text-xs font-semibold text-white">No Configured Providers or Models</h5>
+                      <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
+                        The priority ladder only displays and routes models from providers you have actually set up. Go to the <strong className="text-white">API Keys</strong> tab to add your provider keys (e.g. Google Gemini, Groq, OpenRouter, Cerebras), and their models will automatically appear here.
+                      </p>
+                    </div>
+                  </td>
+                </tr>
+              ) : filteredChain.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="px-4 py-8 text-center text-xs text-[var(--text-muted)]">
                     No models found matching "{searchQuery}"

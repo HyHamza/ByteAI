@@ -96,11 +96,26 @@ export class FreeLLMEngine {
   public init() {
     if (this.initialized) return;
     initDb();
-    this.seedKeylessProviders();
+    this.cleanAutoSeededKeylessProviders();
     startHealthChecker();
     startCatalogSync();
     this.initialized = true;
-    console.log('[FreeLLMEngine] Engine initialized with all 22+ providers and smart routing.');
+    console.log('[FreeLLMEngine] Engine initialized with user-configured providers and smart routing.');
+  }
+
+  private cleanAutoSeededKeylessProviders() {
+    try {
+      const db = getDb();
+      // Remove any previously auto-seeded unverified dummy keyless sentinel rows so only user-added providers are kept
+      db.prepare(`
+        DELETE FROM api_keys 
+        WHERE (encrypted_key = 'no-key' OR label LIKE '%(Keyless)%') 
+          AND status = 'unknown' 
+          AND last_checked_at IS NULL
+      `).run();
+    } catch {
+      // Ignore
+    }
   }
 
   private seedKeylessProviders() {
@@ -364,7 +379,7 @@ export class FreeLLMEngine {
 
   public getFallbackChain(): any[] {
     const db = getDb();
-    return db.prepare(`
+    const rows = db.prepare(`
       SELECT 
         fc.priority, 
         fc.enabled as chain_enabled, 
@@ -379,8 +394,20 @@ export class FreeLLMEngine {
         m.supports_tools
       FROM fallback_config fc
       JOIN models m ON fc.model_db_id = m.id
+      WHERE m.enabled = 1
+        AND EXISTS (
+          SELECT 1 FROM api_keys k
+          WHERE k.platform = m.platform
+            AND k.enabled = 1
+            AND (m.key_id IS NULL OR k.id = m.key_id)
+        )
       ORDER BY fc.priority ASC
     `).all() as any[];
+
+    return rows.map((r, idx) => ({
+      ...r,
+      priority: idx + 1,
+    }));
   }
 
   public updateFallbackPriority(modelDbId: number, priority: number, enabled: boolean): boolean {

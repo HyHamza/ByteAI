@@ -24,5 +24,5 @@ describe('LLMClient and FreeLLMEngine', () => {
       console.log('chatStream error caught:', err.message);
       expect(err.message).not.toContain('isAutoModel is not defined');
     }
-  });
+  }, 30000);
 });

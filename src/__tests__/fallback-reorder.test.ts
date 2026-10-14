@@ -4,6 +4,8 @@ import { FreeLLMEngine } from '../main/services/freellm/engine';
 describe('Fallback Reorder and Priority Routing', () => {
   it('should reorder fallback chain atomically and retrieve in sorted priority order', async () => {
     const engine = FreeLLMEngine.getInstance();
+    const keys = await engine.listKeys();
+    console.log('ACTIVE KEYS IN DB:', keys.map(k => ({ id: k.id, platform: k.platform, enabled: k.enabled, status: k.status })));
     const chain = await engine.getFallbackChain();
 
     expect(Array.isArray(chain)).toBe(true);

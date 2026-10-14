@@ -27,7 +27,7 @@ export const ModelsTab: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filterOwner, setFilterOwner] = useState('all');
-  const [availableOnly, setAvailableOnly] = useState(false);
+  const [availableOnly, setAvailableOnly] = useState(true);
 
   const loadModels = async () => {
     try {

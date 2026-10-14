@@ -437,6 +437,12 @@ function getActiveChain(db: Database): ChainRow[] {
       FROM profile_models pm
       JOIN models m ON m.id = pm.model_db_id AND m.enabled = 1
       WHERE pm.profile_id = ?
+        AND EXISTS (
+          SELECT 1 FROM api_keys k
+          WHERE k.platform = m.platform
+            AND k.enabled = 1
+            AND (m.key_id IS NULL OR k.id = m.key_id)
+        )
       ORDER BY pm.priority ASC
     `).all(profileId) as ChainRow[];
   }
@@ -449,6 +455,12 @@ function getActiveChain(db: Database): ChainRow[] {
            m.supports_tools, m.context_window, m.key_id
     FROM fallback_config fc
     JOIN models m ON m.id = fc.model_db_id AND m.enabled = 1
+    WHERE EXISTS (
+      SELECT 1 FROM api_keys k
+      WHERE k.platform = m.platform
+        AND k.enabled = 1
+        AND (m.key_id IS NULL OR k.id = m.key_id)
+    )
     ORDER BY fc.priority ASC
   `).all() as ChainRow[];
 
@@ -488,6 +500,12 @@ function getChainByProfileName(db: Database, name: string): ChainRow[] | null {
     FROM profile_models pm
     JOIN models m ON m.id = pm.model_db_id AND m.enabled = 1
     WHERE pm.profile_id = ?
+      AND EXISTS (
+        SELECT 1 FROM api_keys k
+        WHERE k.platform = m.platform
+          AND k.enabled = 1
+          AND (m.key_id IS NULL OR k.id = m.key_id)
+      )
     ORDER BY pm.priority ASC
   `).all(profile.id) as ChainRow[];
 }
@@ -501,6 +519,12 @@ function getChainByGlobalSort(db: Database, globalAxis: string): ChainRow[] {
            m.supports_tools, m.context_window, m.key_id
     FROM models m
     WHERE m.enabled = 1
+      AND EXISTS (
+        SELECT 1 FROM api_keys k
+        WHERE k.platform = m.platform
+          AND k.enabled = 1
+          AND (m.key_id IS NULL OR k.id = m.key_id)
+      )
   `).all() as ChainRow[];
 
   const strategyMap: Record<string, RoutingStrategy> = {
@@ -703,6 +727,12 @@ export function resolveModelGroupCandidates(memberDbIds: number[]): ChainRow[] {
     FROM models m
     LEFT JOIN fallback_config fc ON fc.model_db_id = m.id
     WHERE m.id = ? AND m.enabled = 1
+      AND EXISTS (
+        SELECT 1 FROM api_keys k
+        WHERE k.platform = m.platform
+          AND k.enabled = 1
+          AND (m.key_id IS NULL OR k.id = m.key_id)
+      )
   `);
 
   const rows: ChainRow[] = [];
@@ -854,6 +884,12 @@ export function routeRequest(estimatedTokens = 1000, skipKeys?: Set<string>, pre
              m.supports_tools, m.context_window, m.key_id
       FROM models m
       WHERE m.enabled = 1 AND m.supports_vision = 1
+        AND EXISTS (
+          SELECT 1 FROM api_keys k
+          WHERE k.platform = m.platform
+            AND k.enabled = 1
+            AND (m.key_id IS NULL OR k.id = m.key_id)
+        )
     `).all() as ChainRow[];
     chain = [...chain, ...visionModels];
   }

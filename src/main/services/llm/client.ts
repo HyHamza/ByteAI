@@ -65,7 +65,7 @@ export class LLMClient {
     try {
       const listing = FreeLLMEngine.getInstance().getModelListing();
       if (listing && listing.length > 0) {
-        const freeModels = listing.map((m) => m.id);
+        const freeModels = listing.filter((m) => m.available === 1).map((m) => m.id);
         const shouldUseFreeLLM = !apiKey || apiKey.startsWith('freellm') || baseUrl.includes('freellm') || !apiKey.startsWith('sk-');
         if (shouldUseFreeLLM) {
           return Array.from(new Set(['auto', ...freeModels]));
