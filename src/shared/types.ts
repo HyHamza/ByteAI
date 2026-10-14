@@ -278,6 +278,7 @@ export interface ElectronAPI {
     getModelListing: () => Promise<any[]>;
     getFallbackChain: () => Promise<any[]>;
     updateFallbackPriority: (modelDbId: number, priority: number, enabled: boolean) => Promise<boolean>;
+    reorderFallbackChain: (orderedModelDbIds: number[]) => Promise<boolean>;
     getRoutingStrategy: () => Promise<string>;
     setRoutingStrategy: (strategy: string) => Promise<void>;
     getModelUnification: () => Promise<boolean>;

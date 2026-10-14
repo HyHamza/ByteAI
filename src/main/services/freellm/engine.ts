@@ -391,6 +391,19 @@ export class FreeLLMEngine {
     return true;
   }
 
+  public reorderFallbackChain(orderedModelDbIds: number[]): boolean {
+    if (!Array.isArray(orderedModelDbIds) || orderedModelDbIds.length === 0) return false;
+    const db = getDb();
+    const updateStmt = db.prepare('UPDATE fallback_config SET priority = ? WHERE model_db_id = ?');
+    const updateMany = db.transaction((ids: number[]) => {
+      for (let i = 0; i < ids.length; i++) {
+        updateStmt.run(i + 1, ids[i]);
+      }
+    });
+    updateMany(orderedModelDbIds);
+    return true;
+  }
+
   public getRoutingStrategy(): RoutingStrategy {
     const db = getDb();
     const row = db.prepare("SELECT value FROM settings WHERE key = 'routing_strategy'").get() as any;

@@ -162,6 +162,7 @@ const api: ElectronAPI = {
     getModelListing: () => ipcRenderer.invoke('freellm:models:list'),
     getFallbackChain: () => ipcRenderer.invoke('freellm:fallback:list'),
     updateFallbackPriority: (modelDbId, priority, enabled) => ipcRenderer.invoke('freellm:fallback:update', { modelDbId, priority, enabled }),
+    reorderFallbackChain: (orderedModelDbIds) => ipcRenderer.invoke('freellm:fallback:reorder', { orderedModelDbIds }),
     getRoutingStrategy: () => ipcRenderer.invoke('freellm:strategy:get'),
     setRoutingStrategy: (strategy) => ipcRenderer.invoke('freellm:strategy:set', { strategy }),
     getModelUnification: () => ipcRenderer.invoke('freellm:unify:get'),

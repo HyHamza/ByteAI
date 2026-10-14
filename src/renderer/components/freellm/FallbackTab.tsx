@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   GitBranch, 
   ArrowUp, 
@@ -11,7 +11,11 @@ import {
   Check,
   RefreshCw,
   ToggleLeft,
-  ToggleRight
+  ToggleRight,
+  GripVertical,
+  ChevronsUp,
+  Search,
+  ListOrdered
 } from 'lucide-react';
 import { api } from '../../api';
 
@@ -30,6 +34,13 @@ interface ChainItem {
 }
 
 const STRATEGIES = [
+  {
+    id: 'priority',
+    name: 'Strict Priority Ladder',
+    desc: 'Strictly routes top-to-bottom honoring your exact manual drag-and-drop order below.',
+    icon: ListOrdered,
+    color: 'text-indigo-400',
+  },
   {
     id: 'balanced',
     name: 'Balanced',
@@ -65,6 +76,10 @@ export const FallbackTab: React.FC = () => {
   const [strategy, setStrategy] = useState('balanced');
   const [unification, setUnification] = useState(true);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [draggedModelId, setDraggedModelId] = useState<number | null>(null);
+  const [dragOverModelId, setDragOverModelId] = useState<number | null>(null);
+  const [isSavingOrder, setIsSavingOrder] = useState(false);
 
   const loadData = async () => {
     try {
@@ -119,26 +134,109 @@ export const FallbackTab: React.FC = () => {
     }
   };
 
-  const handleMovePriority = async (index: number, direction: 'up' | 'down') => {
-    const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    if (targetIndex < 0 || targetIndex >= chain.length) return;
+  // Reorders the full chain by moving item with modelId to targetIndex
+  const reorderAndPersist = async (newChain: ChainItem[]) => {
+    const reordered = newChain.map((item, idx) => ({
+      ...item,
+      priority: idx + 1,
+    }));
 
-    const currentItem = chain[index];
-    const targetItem = chain[targetIndex];
-
-    const currentPriority = currentItem.priority;
-    const targetPriority = targetItem.priority;
+    setChain(reordered);
 
     try {
-      await Promise.all([
-        api.freellm.updateFallbackPriority(currentItem.model_id, targetPriority, currentItem.chain_enabled === 1),
-        api.freellm.updateFallbackPriority(targetItem.model_id, currentPriority, targetItem.chain_enabled === 1),
-      ]);
-      await loadData();
+      setIsSavingOrder(true);
+      await api.freellm.reorderFallbackChain(reordered.map((c) => c.model_id));
     } catch (err) {
-      console.error('Failed to reorder priority:', err);
+      console.error('Failed to save fallback chain order:', err);
+      loadData();
+    } finally {
+      setIsSavingOrder(false);
     }
   };
+
+  // Instant Move-to-Top (#1 priority)
+  const handleMoveToTop = async (modelId: number) => {
+    const fromIndex = chain.findIndex((c) => c.model_id === modelId);
+    if (fromIndex <= 0) return;
+
+    const newChain = [...chain];
+    const [moved] = newChain.splice(fromIndex, 1);
+    newChain.unshift(moved);
+
+    await reorderAndPersist(newChain);
+  };
+
+  // Single-step reordering
+  const handleMovePriority = async (modelId: number, direction: 'up' | 'down') => {
+    const fromIndex = chain.findIndex((c) => c.model_id === modelId);
+    if (fromIndex === -1) return;
+
+    const toIndex = direction === 'up' ? fromIndex - 1 : fromIndex + 1;
+    if (toIndex < 0 || toIndex >= chain.length) return;
+
+    const newChain = [...chain];
+    const [moved] = newChain.splice(fromIndex, 1);
+    newChain.splice(toIndex, 0, moved);
+
+    await reorderAndPersist(newChain);
+  };
+
+  // HTML5 Drag and Drop handlers
+  const handleDragStart = (e: React.DragEvent, modelId: number) => {
+    e.dataTransfer.setData('text/plain', String(modelId));
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggedModelId(modelId);
+  };
+
+  const handleDragOver = (e: React.DragEvent, modelId: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverModelId !== modelId) {
+      setDragOverModelId(modelId);
+    }
+  };
+
+  const handleDragLeave = () => {
+    // Only clear if we actually left
+  };
+
+  const handleDrop = async (e: React.DragEvent, targetModelId: number) => {
+    e.preventDefault();
+    setDragOverModelId(null);
+
+    const sourceIdStr = e.dataTransfer.getData('text/plain');
+    const sourceModelId = sourceIdStr ? parseInt(sourceIdStr, 10) : draggedModelId;
+    setDraggedModelId(null);
+
+    if (!sourceModelId || sourceModelId === targetModelId) return;
+
+    const fromIndex = chain.findIndex((c) => c.model_id === sourceModelId);
+    const toIndex = chain.findIndex((c) => c.model_id === targetModelId);
+    if (fromIndex === -1 || toIndex === -1) return;
+
+    const newChain = [...chain];
+    const [moved] = newChain.splice(fromIndex, 1);
+    newChain.splice(toIndex, 0, moved);
+
+    await reorderAndPersist(newChain);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedModelId(null);
+    setDragOverModelId(null);
+  };
+
+  // Filtered chain for search/filtering
+  const filteredChain = useMemo(() => {
+    if (!searchQuery.trim()) return chain;
+    const query = searchQuery.toLowerCase().trim();
+    return chain.filter(
+      (item) =>
+        item.platform.toLowerCase().includes(query) ||
+        item.raw_model_id.toLowerCase().includes(query) ||
+        (item.display_name && item.display_name.toLowerCase().includes(query))
+    );
+  }, [chain, searchQuery]);
 
   return (
     <div className="space-y-6">
@@ -154,7 +252,7 @@ export const FallbackTab: React.FC = () => {
           </span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
           {STRATEGIES.map((s) => {
             const Icon = s.icon;
             const isSelected = strategy === s.id;
@@ -162,7 +260,7 @@ export const FallbackTab: React.FC = () => {
               <button
                 key={s.id}
                 onClick={() => handleSelectStrategy(s.id)}
-                className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
                   isSelected
                     ? 'bg-blue-600/15 border-blue-500 shadow-md shadow-blue-500/10'
                     : 'bg-[var(--bg-surface)] border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)]'
@@ -211,90 +309,191 @@ export const FallbackTab: React.FC = () => {
 
       {/* Fallback Priority Ladder Table */}
       <div className="border border-[var(--border-subtle)] rounded-xl overflow-hidden bg-[var(--bg-surface)]">
-        <div className="px-4 py-3 bg-[var(--bg-surface-hover)] border-b border-[var(--border-subtle)] flex items-center justify-between">
+        <div className="px-4 py-3 bg-[var(--bg-surface-hover)] border-b border-[var(--border-subtle)] flex flex-wrap items-center justify-between gap-3">
           <div>
             <h4 className="text-xs font-semibold text-white flex items-center gap-2">
               <GitBranch className="w-3.5 h-3.5 text-purple-400" />
               Auto-Failover Priority Ladder
+              {isSavingOrder && (
+                <span className="text-[10px] text-blue-400 font-normal animate-pulse">
+                  Saving priorities...
+                </span>
+              )}
             </h4>
             <span className="text-[10px] text-[var(--text-muted)]">
-              When a provider hits a 429 error or runs out of quota, requests cascade down this ladder.
+              Drag and drop any model or click "Top" to reorder. When a provider hits 429 or quota limit, requests cascade down this ladder.
             </span>
           </div>
-          <button
-            onClick={loadData}
-            disabled={loading}
-            className="p-1 rounded text-[var(--text-muted)] hover:text-white transition-colors cursor-pointer"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-          </button>
+
+          <div className="flex items-center gap-2.5">
+            {/* Search filter input */}
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 text-[var(--text-muted)] absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Filter provider or model..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg pl-8 pr-3 py-1 text-xs text-white placeholder-[var(--text-muted)] focus:outline-none focus:border-blue-500 w-48 sm:w-56"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-[var(--text-muted)] hover:text-white"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+
+            <button
+              onClick={loadData}
+              disabled={loading}
+              className="p-1.5 rounded-lg border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-white hover:bg-[var(--bg-surface)] transition-colors cursor-pointer"
+              title="Refresh ladder"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-[var(--bg-surface)]/50 border-b border-[var(--border-subtle)] text-[var(--text-muted)]">
+            <thead className="sticky top-0 z-10 bg-[var(--bg-surface)] border-b border-[var(--border-subtle)] text-[var(--text-muted)] shadow-sm">
               <tr>
-                <th className="px-3.5 py-2">Priority</th>
+                <th className="px-3 py-2 w-10 text-center">Drag</th>
+                <th className="px-3 py-2 w-16">Priority</th>
                 <th className="px-3.5 py-2">Provider</th>
                 <th className="px-3.5 py-2">Model</th>
                 <th className="px-3.5 py-2">Intelligence</th>
                 <th className="px-3.5 py-2">Speed</th>
                 <th className="px-3.5 py-2">Status</th>
-                <th className="px-3.5 py-2 text-right">Reorder</th>
+                <th className="px-3.5 py-2 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border-subtle)]">
-              {chain.map((item, idx) => (
-                <tr key={item.model_id} className="hover:bg-[var(--bg-surface-hover)]/40 transition-colors">
-                  <td className="px-3.5 py-2.5 font-bold text-white text-[11px]">
-                    #{item.priority}
-                  </td>
-                  <td className="px-3.5 py-2.5 font-medium text-white capitalize">
-                    {item.platform}
-                  </td>
-                  <td className="px-3.5 py-2.5 text-[var(--text-secondary)] font-mono text-[11px]">
-                    {item.raw_model_id}
-                  </td>
-                  <td className="px-3.5 py-2.5 text-purple-400 font-semibold text-[11px]">
-                    {item.intelligence_rank}/10
-                  </td>
-                  <td className="px-3.5 py-2.5 text-amber-400 font-semibold text-[11px]">
-                    {item.speed_rank}/10
-                  </td>
-                  <td className="px-3.5 py-2.5">
-                    <button
-                      onClick={() => handleToggleChainItem(item)}
-                      className={`text-[10px] px-2 py-0.5 rounded border transition-colors cursor-pointer ${
-                        item.chain_enabled === 1
-                          ? 'border-emerald-500/30 text-emerald-400 bg-emerald-500/10'
-                          : 'border-gray-600 text-gray-500 bg-gray-800'
-                      }`}
-                    >
-                      {item.chain_enabled === 1 ? 'Enabled' : 'Disabled'}
-                    </button>
-                  </td>
-                  <td className="px-3.5 py-2.5 text-right">
-                    <div className="flex items-center justify-end space-x-1">
-                      <button
-                        onClick={() => handleMovePriority(idx, 'up')}
-                        disabled={idx === 0}
-                        className="p-1 rounded hover:bg-[var(--bg-surface-hover)] text-[var(--text-secondary)] hover:text-white disabled:opacity-30 cursor-pointer"
-                        title="Move Up"
-                      >
-                        <ArrowUp className="w-3 h-3" />
-                      </button>
-                      <button
-                        onClick={() => handleMovePriority(idx, 'down')}
-                        disabled={idx === chain.length - 1}
-                        className="p-1 rounded hover:bg-[var(--bg-surface-hover)] text-[var(--text-secondary)] hover:text-white disabled:opacity-30 cursor-pointer"
-                        title="Move Down"
-                      >
-                        <ArrowDown className="w-3 h-3" />
-                      </button>
-                    </div>
+              {filteredChain.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-8 text-center text-xs text-[var(--text-muted)]">
+                    No models found matching "{searchQuery}"
                   </td>
                 </tr>
-              ))}
+              ) : (
+                filteredChain.map((item) => {
+                  const isTop = item.priority === 1;
+                  const isDragging = draggedModelId === item.model_id;
+                  const isOver = dragOverModelId === item.model_id;
+
+                  return (
+                    <tr
+                      key={item.model_id}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, item.model_id)}
+                      onDragOver={(e) => handleDragOver(e, item.model_id)}
+                      onDragLeave={handleDragLeave}
+                      onDrop={(e) => handleDrop(e, item.model_id)}
+                      onDragEnd={handleDragEnd}
+                      className={`transition-colors select-none ${
+                        isDragging
+                          ? 'opacity-30 bg-blue-500/10'
+                          : isOver
+                          ? 'border-t-2 border-blue-500 bg-blue-500/10'
+                          : 'hover:bg-[var(--bg-surface-hover)]/40'
+                      }`}
+                    >
+                      {/* Drag Handle */}
+                      <td className="px-2 py-2.5 text-center">
+                        <div
+                          className="inline-flex p-1 rounded text-[var(--text-muted)] hover:text-white cursor-grab active:cursor-grabbing hover:bg-[var(--bg-surface-hover)]"
+                          title="Drag to reorder priority"
+                        >
+                          <GripVertical className="w-3.5 h-3.5" />
+                        </div>
+                      </td>
+
+                      {/* Priority Rank */}
+                      <td className="px-3 py-2.5">
+                        <span
+                          className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-bold ${
+                            isTop
+                              ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-sm shadow-amber-500/10'
+                              : item.priority <= 3
+                              ? 'bg-blue-500/15 text-blue-400 border border-blue-500/30'
+                              : 'text-white'
+                          }`}
+                        >
+                          #{item.priority}
+                        </span>
+                      </td>
+
+                      {/* Provider */}
+                      <td className="px-3.5 py-2.5 font-medium text-white capitalize">
+                        {item.platform}
+                      </td>
+
+                      {/* Model Raw ID */}
+                      <td className="px-3.5 py-2.5 text-[var(--text-secondary)] font-mono text-[11px]">
+                        {item.raw_model_id}
+                      </td>
+
+                      {/* Intelligence */}
+                      <td className="px-3.5 py-2.5 text-purple-400 font-semibold text-[11px]">
+                        {item.intelligence_rank}/10
+                      </td>
+
+                      {/* Speed */}
+                      <td className="px-3.5 py-2.5 text-amber-400 font-semibold text-[11px]">
+                        {item.speed_rank}/10
+                      </td>
+
+                      {/* Status Toggle */}
+                      <td className="px-3.5 py-2.5">
+                        <button
+                          onClick={() => handleToggleChainItem(item)}
+                          className={`text-[10px] px-2 py-0.5 rounded border transition-colors cursor-pointer ${
+                            item.chain_enabled === 1
+                              ? 'border-emerald-500/30 text-emerald-400 bg-emerald-500/10'
+                              : 'border-gray-600 text-gray-500 bg-gray-800'
+                          }`}
+                        >
+                          {item.chain_enabled === 1 ? 'Enabled' : 'Disabled'}
+                        </button>
+                      </td>
+
+                      {/* Actions: Move to Top + Step Up/Down */}
+                      <td className="px-3.5 py-2.5 text-right">
+                        <div className="flex items-center justify-end space-x-1">
+                          <button
+                            onClick={() => handleMoveToTop(item.model_id)}
+                            disabled={isTop}
+                            className="px-1.5 py-1 rounded hover:bg-blue-600/20 hover:text-blue-400 text-[var(--text-secondary)] disabled:opacity-20 cursor-pointer flex items-center gap-1 text-[10px] font-semibold transition-colors"
+                            title="Move directly to Priority #1"
+                          >
+                            <ChevronsUp className="w-3.5 h-3.5" />
+                            <span>Top</span>
+                          </button>
+                          <button
+                            onClick={() => handleMovePriority(item.model_id, 'up')}
+                            disabled={isTop}
+                            className="p-1 rounded hover:bg-[var(--bg-surface-hover)] text-[var(--text-secondary)] hover:text-white disabled:opacity-20 cursor-pointer transition-colors"
+                            title="Move Up One"
+                          >
+                            <ArrowUp className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={() => handleMovePriority(item.model_id, 'down')}
+                            disabled={item.priority >= chain.length}
+                            className="p-1 rounded hover:bg-[var(--bg-surface-hover)] text-[var(--text-secondary)] hover:text-white disabled:opacity-20 cursor-pointer transition-colors"
+                            title="Move Down One"
+                          >
+                            <ArrowDown className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>

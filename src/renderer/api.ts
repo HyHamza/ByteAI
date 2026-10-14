@@ -232,6 +232,7 @@ const mockAPI: ElectronAPI = {
     getModelListing: async () => [],
     getFallbackChain: async () => [],
     updateFallbackPriority: async () => true,
+    reorderFallbackChain: async () => true,
     getRoutingStrategy: async () => 'balanced',
     setRoutingStrategy: async () => {},
     getModelUnification: async () => true,

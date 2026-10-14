@@ -382,7 +382,13 @@ function orderChain(chain: ChainRow[], strategy: RoutingStrategy, sampled = true
   const intelMax = composites.length ? Math.max(...composites) : 0;
 
   return chain
-    .map(e => ({ e, s: scoreChainEntry(e, weights, intelMin, intelMax, sampled).score }))
+    .map(e => {
+      const baseScore = scoreChainEntry(e, weights, intelMin, intelMax, sampled).score;
+      // When user manually reorders models to the top (priority 1..20), apply an explicit priority boost
+      // so top-prioritized models are strongly preferred across all routing strategies
+      const priorityBoost = e.priority > 0 && e.priority <= 20 ? (21 - e.priority) * 0.05 : 0;
+      return { e, s: baseScore + priorityBoost };
+    })
     // Higher score first; manual priority breaks ties so the chain still matters.
     .sort((a, b) => b.s - a.s || a.e.priority - b.e.priority)
     .map(x => x.e);

@@ -736,6 +736,10 @@ function setupIpcHandlers() {
     return FreeLLMEngine.getInstance().updateFallbackPriority(modelDbId, priority, enabled);
   });
 
+  ipcMain.handle('freellm:fallback:reorder', async (_, { orderedModelDbIds }) => {
+    return FreeLLMEngine.getInstance().reorderFallbackChain(orderedModelDbIds);
+  });
+
   ipcMain.handle('freellm:strategy:get', async () => {
     return FreeLLMEngine.getInstance().getRoutingStrategy();
   });
