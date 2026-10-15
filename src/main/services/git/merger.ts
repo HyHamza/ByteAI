@@ -4,6 +4,7 @@ import path from 'path';
 import { detectGitRepo } from './detector';
 import { JulesClient } from '../jules/client';
 import { DataStore } from '../db/store';
+import { applyResilientPatch } from './patcher';
 
 export interface MergeResult {
   success: boolean;
@@ -188,47 +189,10 @@ export async function syncAndMergeJulesSession(
     // ── PATHWAY A: Direct Git Patch (unidiffPatch) ──────────────────────────
     if (gitPatch && gitPatch.unidiffPatch) {
       console.log(`[merger] Applying Jules git patch (${gitPatch.unidiffPatch.length} bytes) to ${dir}...`);
-      const patchFileName = `.jules_patch_${sessionId.slice(0, 10)}.patch`;
-      const patchFilePath = path.join(dir, patchFileName);
-      fs.writeFileSync(patchFilePath, gitPatch.unidiffPatch, 'utf-8');
-
-      let applied = false;
-      let alreadyIntegrated = false;
-      let applyError = '';
-
-      // 1. Check if patch is already integrated into the working tree/HEAD
-      try {
-        runGit(`git apply --reverse --check --ignore-whitespace "${patchFileName}"`);
-        alreadyIntegrated = true;
-        applied = true;
-      } catch (_) {}
-
-      // 2. If not already integrated, attempt progressive patch application flags
-      if (!alreadyIntegrated) {
-        const applyCandidates = [
-          `git apply --ignore-whitespace --whitespace=nowarn "${patchFileName}"`,
-          `git apply --3way --ignore-whitespace --whitespace=nowarn "${patchFileName}"`,
-          `git apply --whitespace=fix "${patchFileName}"`,
-          `git apply -C1 --ignore-whitespace --whitespace=nowarn "${patchFileName}"`,
-          `git apply -C0 --ignore-whitespace --whitespace=nowarn "${patchFileName}"`,
-        ];
-
-        for (const cmd of applyCandidates) {
-          try {
-            runGit(cmd);
-            applied = true;
-            break;
-          } catch (err: any) {
-            applyError = err.message || String(err);
-          }
-        }
-      }
-
-      // Cleanup temporary patch file and any reject files
-      try {
-        if (fs.existsSync(patchFilePath)) fs.unlinkSync(patchFilePath);
-      } catch (_) {}
-      cleanRejFiles();
+      const patchResult = applyResilientPatch(gitPatch.unidiffPatch, dir, sessionId);
+      const alreadyIntegrated = patchResult.appliedVia === 'already_integrated';
+      const applied = patchResult.success;
+      const applyError = patchResult.error || 'Failed to apply patch';
 
       if (alreadyIntegrated) {
         if (stashed) {
