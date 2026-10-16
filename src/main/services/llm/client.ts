@@ -320,10 +320,8 @@ export class LLMClient {
             activeOverrideModel = picked;
             console.log(`[LLMClient] Auto-healing: selecting verified available model: ${picked}`);
             callbacks.onModelResolved?.(picked);
-          } else if (fallbackIndex < staticCandidates.length) {
-            activeOverrideModel = staticCandidates[fallbackIndex++];
-            console.log(`[LLMClient] Auto-healing from static candidates: ${activeOverrideModel}`);
-            callbacks.onModelResolved?.(activeOverrideModel);
+          } else {
+            throw new Error('All models exhausted or no active enabled providers available to serve requests. Please check your enabled providers in Settings > API Keys.');
           }
         }
 

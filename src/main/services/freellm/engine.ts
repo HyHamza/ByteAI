@@ -1,4 +1,6 @@
 import crypto from 'crypto';
+import http from 'http';
+import https from 'https';
 import type { 
   Platform, 
   ApiKey, 
@@ -99,6 +101,7 @@ export class FreeLLMEngine {
     this.cleanAutoSeededKeylessProviders();
     startHealthChecker();
     startCatalogSync();
+    void this.syncCustomEndpointModels();
     this.initialized = true;
     console.log('[FreeLLMEngine] Engine initialized with user-configured providers and smart routing.');
   }
@@ -206,6 +209,9 @@ export class FreeLLMEngine {
     `).run(platform, encrypted, iv, authTag, label, baseUrl);
 
     const newId = Number(res.lastInsertRowid);
+    if (platform === 'custom') {
+      void this.syncCustomEndpointModels(newId);
+    }
     // Background validation
     void this.testKey(newId);
 
@@ -216,18 +222,39 @@ export class FreeLLMEngine {
     const db = getDb();
     if (data.enabled !== undefined) {
       db.prepare('UPDATE api_keys SET enabled = ? WHERE id = ?').run(data.enabled ? 1 : 0, id);
+      const row = db.prepare('SELECT platform FROM api_keys WHERE id = ?').get(id) as { platform: string } | undefined;
+      if (row?.platform === 'custom') {
+        db.prepare('UPDATE models SET enabled = ? WHERE key_id = ?').run(data.enabled ? 1 : 0, id);
+        db.prepare(`
+          UPDATE fallback_config SET enabled = ? WHERE model_db_id IN (
+            SELECT id FROM models WHERE key_id = ?
+          )
+        `).run(data.enabled ? 1 : 0, id);
+        if (data.enabled) {
+          void this.syncCustomEndpointModels(id);
+        }
+      }
     }
     if (data.label !== undefined) {
       db.prepare('UPDATE api_keys SET label = ? WHERE id = ?').run(data.label, id);
     }
     if (data.baseUrl !== undefined) {
       db.prepare('UPDATE api_keys SET base_url = ? WHERE id = ?').run(data.baseUrl, id);
+      void this.syncCustomEndpointModels(id);
     }
     return { success: true };
   }
 
   public deleteKey(id: number): { success: boolean } {
     const db = getDb();
+    const row = db.prepare('SELECT platform FROM api_keys WHERE id = ?').get(id) as { platform: string } | undefined;
+    if (row?.platform === 'custom') {
+      const customModelIds = db.prepare('SELECT id FROM models WHERE key_id = ?').all(id) as { id: number }[];
+      for (const m of customModelIds) {
+        db.prepare('DELETE FROM fallback_config WHERE model_db_id = ?').run(m.id);
+      }
+      db.prepare('DELETE FROM models WHERE key_id = ?').run(id);
+    }
     db.prepare('DELETE FROM api_keys WHERE id = ?').run(id);
     return { success: true };
   }
@@ -255,6 +282,9 @@ export class FreeLLMEngine {
       const isValid = await provider.validateKey(realKey);
       const newStatus = isValid ? 'healthy' : 'invalid';
       db.prepare("UPDATE api_keys SET status = ?, last_checked_at = datetime('now') WHERE id = ?").run(newStatus, id);
+      if (isValid && row.platform === 'custom') {
+        void this.syncCustomEndpointModels(id);
+      }
       return { success: isValid, status: newStatus };
     } catch (err: any) {
       const is429 = err?.status === 429 || /429|rate limit/i.test(err?.message || '');
@@ -262,6 +292,146 @@ export class FreeLLMEngine {
       db.prepare("UPDATE api_keys SET status = ?, last_checked_at = datetime('now') WHERE id = ?").run(newStatus, id);
       return { success: false, status: newStatus, error: err?.message };
     }
+  }
+
+  /**
+   * Automatically discovers and registers models from custom (or other OpenAI-compatible) endpoints.
+   * Reads from ${baseUrl}/models or ${baseUrl}/v1/models, extracts all advertised models,
+   * upserts them into `models` bound to the key, and appends them to `fallback_config`.
+   */
+  public async syncCustomEndpointModels(keyId?: number): Promise<{ synced: number; models: string[] }> {
+    const db = getDb();
+    const query = keyId
+      ? (db.prepare("SELECT * FROM api_keys WHERE id = ? AND platform = 'custom'").all(keyId) as any[])
+      : (db.prepare("SELECT * FROM api_keys WHERE platform = 'custom' AND enabled = 1 AND base_url IS NOT NULL").all() as any[]);
+
+    if (!query || query.length === 0) {
+      return { synced: 0, models: [] };
+    }
+
+    const allDiscovered: string[] = [];
+
+    for (const row of query) {
+      let baseUrl = (row.base_url || '').trim().replace(/\/+$/, '');
+      if (!baseUrl) continue;
+
+      let rawKey = '';
+      try {
+        rawKey = decrypt(row.encrypted_key, row.iv, row.auth_tag);
+      } catch (_) {}
+
+      const candidates: string[] = [];
+      if (baseUrl.endsWith('/v1')) {
+        candidates.push(`${baseUrl}/models`);
+        candidates.push(`${baseUrl.slice(0, -3)}/models`);
+      } else {
+        candidates.push(`${baseUrl}/v1/models`);
+        candidates.push(`${baseUrl}/models`);
+      }
+
+      let fetchedData: any = null;
+
+      for (const endpointUrl of candidates) {
+        try {
+          const resp = await new Promise<{ status: number; body: string }>((resolve, reject) => {
+            const parsed = new URL(endpointUrl);
+            const isHttps = parsed.protocol === 'https:';
+            const transport = isHttps ? https : http;
+            const req = transport.request(
+              {
+                hostname: parsed.hostname,
+                port: parsed.port || (isHttps ? 443 : 80),
+                path: parsed.pathname + parsed.search,
+                method: 'GET',
+                headers: {
+                  ...(rawKey && rawKey !== 'no-key' ? { Authorization: `Bearer ${rawKey}` } : {}),
+                  'User-Agent': 'ByteAI/1.0',
+                  Accept: 'application/json',
+                },
+              },
+              (res) => {
+                let body = '';
+                res.on('data', (c) => (body += c));
+                res.on('end', () => resolve({ status: res.statusCode || 200, body }));
+              }
+            );
+            req.setTimeout(8000, () => {
+              req.destroy(new Error('Timeout fetching models'));
+            });
+            req.on('error', reject);
+            req.end();
+          });
+
+          if (resp.status >= 200 && resp.status < 300 && resp.body) {
+            const parsed = JSON.parse(resp.body);
+            if (parsed && (Array.isArray(parsed.data) || Array.isArray(parsed.models) || Array.isArray(parsed))) {
+              fetchedData = parsed;
+              break;
+            }
+          }
+        } catch (_) {}
+      }
+
+      if (!fetchedData) continue;
+
+      const rawList = Array.isArray(fetchedData.data)
+        ? fetchedData.data
+        : Array.isArray(fetchedData.models)
+        ? fetchedData.models
+        : Array.isArray(fetchedData)
+        ? fetchedData
+        : [];
+
+      for (const item of rawList) {
+        const modelId = String(item.id || item.model || item.name || '').trim();
+        if (!modelId) continue;
+
+        const displayName = String(item.display_name || item.name || item.id || modelId).trim();
+        const caps = Array.isArray(item.capabilities) ? item.capabilities.map((c: any) => String(c).toLowerCase()) : [];
+        const isVision = caps.includes('vision') || caps.includes('image') || caps.includes('multimodal') || /vision|vl/i.test(modelId) ? 1 : 0;
+        const isTools = caps.includes('tools') || caps.includes('code') || caps.includes('math') || /thinking|instruct|chat|gemini|gpt|claude|qwen|coder/i.test(modelId) ? 1 : 0;
+        const contextWindow = typeof item.context_window === 'number' ? item.context_window : (typeof item.max_tokens === 'number' ? item.max_tokens : 128000);
+
+        db.prepare(`
+          INSERT INTO models (
+            platform, model_id, display_name, intelligence_rank, speed_rank, size_label,
+            rpm_limit, rpd_limit, tpm_limit, tpd_limit, monthly_token_budget, context_window,
+            supports_vision, supports_tools, enabled, key_id
+          ) VALUES (
+            'custom', ?, ?, 35, 75, 'Custom',
+            NULL, NULL, NULL, NULL, '', ?,
+            ?, ?, 1, ?
+          )
+          ON CONFLICT(platform, model_id)
+          DO UPDATE SET
+            display_name = excluded.display_name,
+            key_id = excluded.key_id,
+            enabled = 1,
+            context_window = COALESCE(excluded.context_window, models.context_window),
+            supports_vision = excluded.supports_vision,
+            supports_tools = excluded.supports_tools
+        `).run(modelId, displayName, contextWindow, isVision, isTools, row.id);
+
+        const modelRow = db.prepare("SELECT id FROM models WHERE platform = 'custom' AND model_id = ?").get(modelId) as { id: number } | undefined;
+        if (modelRow) {
+          const inChain = db.prepare('SELECT 1 FROM fallback_config WHERE model_db_id = ?').get(modelRow.id);
+          if (!inChain) {
+            const maxPriority = (db.prepare('SELECT COALESCE(MAX(priority), 0) as m FROM fallback_config').get() as any)?.m || 0;
+            db.prepare('INSERT INTO fallback_config (model_db_id, priority, enabled) VALUES (?, ?, 1)').run(modelRow.id, maxPriority + 1);
+          } else {
+            db.prepare('UPDATE fallback_config SET enabled = 1 WHERE model_db_id = ?').run(modelRow.id);
+          }
+        }
+
+        allDiscovered.push(modelId);
+      }
+    }
+
+    if (allDiscovered.length > 0) {
+      console.log(`[FreeLLMEngine] Successfully synced ${allDiscovered.length} custom models: ${allDiscovered.join(', ')}`);
+    }
+
+    return { synced: allDiscovered.length, models: allDiscovered };
   }
 
   // ─── Analytics & Metrics ──────────────────────────────────────────────────
@@ -374,6 +544,14 @@ export class FreeLLMEngine {
   // ─── Models, Fallback & Strategy ──────────────────────────────────────────
 
   public getModelListing(): NormalizedModel[] {
+    try {
+      const db = getDb();
+      const customKeys = db.prepare("SELECT id FROM api_keys WHERE platform = 'custom' AND enabled = 1 AND base_url IS NOT NULL").all() as { id: number }[];
+      const customModelsCount = (db.prepare("SELECT COUNT(*) as c FROM models WHERE platform = 'custom' AND enabled = 1").get() as any)?.c || 0;
+      if (customKeys.length > 0 && customModelsCount === 0) {
+        void this.syncCustomEndpointModels();
+      }
+    } catch (_) {}
     return buildModelListing().models;
   }
 
@@ -515,7 +693,17 @@ export class FreeLLMEngine {
       if (members && members.length > 0) {
         groupChain = resolveModelGroupCandidates(members);
       } else {
-        const found = db.prepare('SELECT id FROM models WHERE model_id = ? AND enabled = 1 LIMIT 1').get(requestedModel) as { id: number } | undefined;
+        const found = db.prepare(`
+          SELECT m.id FROM models m
+          WHERE m.model_id = ? AND m.enabled = 1
+            AND EXISTS (
+              SELECT 1 FROM api_keys k
+              WHERE k.platform = m.platform
+                AND k.enabled = 1
+                AND (m.key_id IS NULL OR k.id = m.key_id)
+            )
+          LIMIT 1
+        `).get(requestedModel) as { id: number } | undefined;
         if (found) {
           preferredModel = found.id;
         }

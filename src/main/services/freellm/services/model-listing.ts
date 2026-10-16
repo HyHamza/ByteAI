@@ -63,6 +63,29 @@ export function buildModelListing(): ModelListing {
         intel: infos.length ? Math.min(...infos.map(i => i.intelligence_rank)) : Number.MAX_SAFE_INTEGER,
       };
     });
+
+    const groupedMemberDbIds = new Set<number>();
+    for (const g of getModelGroups()) {
+      for (const m of g.members) {
+        groupedMemberDbIds.add(m.model_db_id);
+      }
+    }
+
+    const standaloneRows = rows.filter(r => !groupedMemberDbIds.has(r.id));
+    for (const s of standaloneRows) {
+      const modelRow = db.prepare('SELECT model_id, display_name FROM models WHERE id = ?').get(s.id) as { model_id: string; display_name: string } | undefined;
+      if (modelRow) {
+        allListed.push({
+          id: modelRow.model_id,
+          name: modelRow.display_name,
+          ownedBy: s.platform === 'custom' ? 'Custom' : s.platform,
+          available: s.available,
+          enabled: s.enabled,
+          contextWindow: s.context_window,
+          intel: s.intelligence_rank,
+        });
+      }
+    }
   } else {
     // Unify OFF: one entry per model_id (dedup picks the available, smartest
     // representative row).
@@ -81,7 +104,7 @@ export function buildModelListing(): ModelListing {
       WHERE rn = 1
     `).all() as (ModelListRow & { intelligence_rank: number; id: number })[];
     allListed = models.map(m => ({
-      id: m.model_id, name: m.display_name, ownedBy: m.platform,
+      id: m.model_id, name: m.display_name, ownedBy: m.platform === 'custom' ? 'Custom' : m.platform,
       available: m.available, enabled: m.enabled, contextWindow: m.context_window,
       intel: m.intelligence_rank,
     }));

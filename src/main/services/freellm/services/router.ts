@@ -871,6 +871,12 @@ export function routeRequest(estimatedTokens = 1000, skipKeys?: Set<string>, pre
                m.supports_tools, m.context_window, m.key_id
         FROM models m
         WHERE m.id = ? AND m.enabled = 1
+          AND EXISTS (
+            SELECT 1 FROM api_keys k
+            WHERE k.platform = m.platform
+              AND k.enabled = 1
+              AND (m.key_id IS NULL OR k.id = m.key_id)
+          )
       `).get(preferredModelDbId) as ChainRow | undefined;
       
       if (pinnedRow) {
