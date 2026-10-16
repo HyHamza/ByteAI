@@ -28,7 +28,8 @@ interface ApiKeyRow {
 }
 
 const PROVIDERS = [
-  { id: 'google', name: 'Google Gemini', url: 'https://aistudio.google.com/app/apikey', keyless: false, freeQuota: '15 RPM / 1M TPM free tier' },
+  { id: 'gemini-free', name: 'Google Gemini Free (Web)', url: 'https://gemini.google.com', keyless: true, freeQuota: '100% Free Gemini 3.8 / 4 Argon (No API Key Needed)' },
+  { id: 'google', name: 'Google Gemini (API Studio)', url: 'https://aistudio.google.com/app/apikey', keyless: false, freeQuota: '15 RPM / 1M TPM free tier' },
   { id: 'groq', name: 'Groq', url: 'https://console.groq.com/keys', keyless: false, freeQuota: 'Ultra-fast Llama-3.3 & Whisper free' },
   { id: 'cerebras', name: 'Cerebras', url: 'https://cloud.cerebras.ai', keyless: false, freeQuota: 'Up to 2,000 tokens/sec free' },
   { id: 'nvidia', name: 'NVIDIA NIM', url: 'https://build.nvidia.com', keyless: false, freeQuota: '1,000 free inference credits' },
@@ -362,7 +363,13 @@ export const KeysTab: React.FC = () => {
                   type="password"
                   value={keyInput}
                   onChange={(e) => setKeyInput(e.target.value)}
-                  placeholder={selectedProviderMeta?.keyless ? 'Not required (keyless)' : 'Enter API Key (e.g. AIzaSy..., gsk_...)'}
+                  placeholder={
+                    platform === 'gemini-free'
+                      ? 'Not required (100% Free). Optional: Paste Google cookies for Gemini Advanced'
+                      : selectedProviderMeta?.keyless
+                      ? 'Not required (keyless)'
+                      : 'Enter API Key (e.g. AIzaSy..., gsk_...)'
+                  }
                   className="w-full px-3 py-2 bg-[var(--bg-sidebar)] border border-[var(--border-subtle)] rounded-lg text-white font-mono placeholder-[var(--text-muted)] focus:outline-none focus:border-blue-500"
                 />
               </div>

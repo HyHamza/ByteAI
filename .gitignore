@@ -67,6 +67,7 @@ tsconfig.*.tsbuildinfo
 # 4. Embedded Repositories & Submodules
 # ------------------------------------------------------------------------------
 freellmapi/
+node-gemini-api/
 
 # ------------------------------------------------------------------------------
 # 5. Local Databases & Runtime Storage

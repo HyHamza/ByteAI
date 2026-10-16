@@ -731,6 +731,19 @@ Call 'jules_continue_session' (or 'jules_create_task' if starting a new phase) w
           continue;
         }
 
+        // If the model returned without substantive text after executing tools, nudge it to provide the final answer
+        if ((!result.content || !result.content.trim() || result.content === '(No response text returned by model)') && turnCount < 4) {
+          const executedTools = llmMessages.filter((m) => m.role === 'tool');
+          if (executedTools.length > 0) {
+            console.log(`[orchestrator] Empty completion received after tool execution on turn ${turnCount}. Prompting model for synthesis...`);
+            llmMessages.push({
+              role: 'user',
+              content: 'Based on the tool results above, please provide your complete analysis and response to the user request now.',
+            });
+            continue;
+          }
+        }
+
         // Ensure final output has substantive conclusion text (never left blank or default placeholder)
         if (!result.content || !result.content.trim() || result.content === '(No response text returned by model)') {
           if (result.reasoning && result.reasoning.trim()) {

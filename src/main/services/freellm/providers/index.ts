@@ -1,6 +1,7 @@
 import type { Platform } from '@/shared/freellm';
 import type { BaseProvider } from './base.js';
 import { GoogleProvider } from './google.js';
+import { GeminiWebProvider } from './gemini-web.js';
 import { OpenAICompatProvider } from './openai-compat.js';
 import { CohereProvider } from './cohere.js';
 import { CloudflareProvider } from './cloudflare.js';
@@ -11,8 +12,11 @@ function register(provider: BaseProvider) {
   providers.set(provider.platform, provider);
 }
 
-// Google - unique Gemini API format
+// Google - unique Gemini API format (API Studio keys)
 register(new GoogleProvider());
+
+// Google Gemini Free (Web) - 100% free keyless reverse-engineered interface
+register(new GeminiWebProvider());
 
 // Groq - OpenAI-compatible
 register(new OpenAICompatProvider({

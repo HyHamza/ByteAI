@@ -52,7 +52,9 @@ export function buildModelListing(): ModelListing {
       const infos = g.members.map(m => byId.get(m.model_db_id)).filter(Boolean) as AvailRow[];
       const ctxs = infos.map(i => i.context_window).filter((c): c is number => c != null);
       const platforms = Array.from(new Set(infos.map(i => i.platform).filter(Boolean)));
-      const providerStr = platforms.length > 0 ? platforms.join(', ') : 'Byte AI';
+      const providerStr = platforms.length > 0
+        ? platforms.map(p => p === 'gemini-free' ? 'Google (Free)' : p === 'custom' ? 'Custom' : p).join(', ')
+        : 'Byte AI';
       return {
         id: g.canonicalId,
         name: g.groupLabel,
@@ -78,7 +80,7 @@ export function buildModelListing(): ModelListing {
         allListed.push({
           id: modelRow.model_id,
           name: modelRow.display_name,
-          ownedBy: s.platform === 'custom' ? 'Custom' : s.platform,
+          ownedBy: s.platform === 'custom' ? 'Custom' : s.platform === 'gemini-free' ? 'Google (Free)' : s.platform,
           available: s.available,
           enabled: s.enabled,
           contextWindow: s.context_window,
@@ -104,7 +106,7 @@ export function buildModelListing(): ModelListing {
       WHERE rn = 1
     `).all() as (ModelListRow & { intelligence_rank: number; id: number })[];
     allListed = models.map(m => ({
-      id: m.model_id, name: m.display_name, ownedBy: m.platform === 'custom' ? 'Custom' : m.platform,
+      id: m.model_id, name: m.display_name, ownedBy: m.platform === 'custom' ? 'Custom' : m.platform === 'gemini-free' ? 'Google (Free)' : m.platform,
       available: m.available, enabled: m.enabled, contextWindow: m.context_window,
       intel: m.intelligence_rank,
     }));

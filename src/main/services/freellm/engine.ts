@@ -99,11 +99,29 @@ export class FreeLLMEngine {
     if (this.initialized) return;
     initDb();
     this.cleanAutoSeededKeylessProviders();
+    this.seedGeminiFreeProvider();
     startHealthChecker();
     startCatalogSync();
     void this.syncCustomEndpointModels();
+    void this.syncGeminiWebModels();
     this.initialized = true;
     console.log('[FreeLLMEngine] Engine initialized with user-configured providers and smart routing.');
+  }
+
+  private seedGeminiFreeProvider() {
+    try {
+      const db = getDb();
+      const existing = db.prepare("SELECT id FROM api_keys WHERE platform = 'gemini-free' LIMIT 1").get();
+      if (!existing) {
+        const { encrypted, iv, authTag } = encrypt('no-key');
+        db.prepare(`
+          INSERT INTO api_keys (platform, encrypted_key, iv, auth_tag, label, status, enabled, last_checked_at)
+          VALUES ('gemini-free', ?, ?, ?, 'Google Gemini Free (Web)', 'healthy', 1, datetime('now'))
+        `).run(encrypted, iv, authTag);
+      }
+    } catch (err) {
+      console.warn('[FreeLLMEngine] seedGeminiFreeProvider notice:', err);
+    }
   }
 
   private cleanAutoSeededKeylessProviders() {
@@ -112,7 +130,8 @@ export class FreeLLMEngine {
       // Remove any previously auto-seeded unverified dummy keyless sentinel rows so only user-added providers are kept
       db.prepare(`
         DELETE FROM api_keys 
-        WHERE (encrypted_key = 'no-key' OR label LIKE '%(Keyless)%') 
+        WHERE platform != 'gemini-free'
+          AND (encrypted_key = 'no-key' OR label LIKE '%(Keyless)%') 
           AND status = 'unknown' 
           AND last_checked_at IS NULL
       `).run();
@@ -183,7 +202,7 @@ export class FreeLLMEngine {
 
     // Check for keyless platforms
     const provider = resolveProvider(platform as Platform, baseUrl);
-    const isKeyless = ['kilo', 'pollinations', 'ovh', 'llm7', 'ollama'].includes(platform) || provider?.keyless === true;
+    const isKeyless = ['kilo', 'pollinations', 'ovh', 'llm7', 'ollama', 'gemini-free'].includes(platform) || provider?.keyless === true;
     if (!isKeyless && !key) {
       throw new Error(`API Key is required for provider: ${platform}`);
     }
@@ -196,6 +215,9 @@ export class FreeLLMEngine {
       const existing = db.prepare('SELECT id FROM api_keys WHERE platform = ? LIMIT 1').get(platform) as { id: number } | undefined;
       if (existing) {
         db.prepare("UPDATE api_keys SET enabled = 1, status = 'unknown', label = ?, base_url = ? WHERE id = ?").run(label, baseUrl, existing.id);
+        if (platform === 'gemini-free') {
+          void this.syncGeminiWebModels(existing.id);
+        }
         void this.testKey(existing.id);
         return { success: true, id: existing.id };
       }
@@ -211,6 +233,8 @@ export class FreeLLMEngine {
     const newId = Number(res.lastInsertRowid);
     if (platform === 'custom') {
       void this.syncCustomEndpointModels(newId);
+    } else if (platform === 'gemini-free') {
+      void this.syncGeminiWebModels(newId);
     }
     // Background validation
     void this.testKey(newId);
@@ -233,6 +257,16 @@ export class FreeLLMEngine {
         if (data.enabled) {
           void this.syncCustomEndpointModels(id);
         }
+      } else if (row?.platform === 'gemini-free') {
+        db.prepare("UPDATE models SET enabled = ? WHERE platform = 'gemini-free'").run(data.enabled ? 1 : 0);
+        db.prepare(`
+          UPDATE fallback_config SET enabled = ? WHERE model_db_id IN (
+            SELECT id FROM models WHERE platform = 'gemini-free'
+          )
+        `).run(data.enabled ? 1 : 0);
+        if (data.enabled) {
+          void this.syncGeminiWebModels(id);
+        }
       }
     }
     if (data.label !== undefined) {
@@ -254,6 +288,9 @@ export class FreeLLMEngine {
         db.prepare('DELETE FROM fallback_config WHERE model_db_id = ?').run(m.id);
       }
       db.prepare('DELETE FROM models WHERE key_id = ?').run(id);
+    } else if (row?.platform === 'gemini-free') {
+      db.prepare("DELETE FROM fallback_config WHERE model_db_id IN (SELECT id FROM models WHERE platform = 'gemini-free')").run();
+      db.prepare("DELETE FROM models WHERE platform = 'gemini-free'").run();
     }
     db.prepare('DELETE FROM api_keys WHERE id = ?').run(id);
     return { success: true };
@@ -284,6 +321,8 @@ export class FreeLLMEngine {
       db.prepare("UPDATE api_keys SET status = ?, last_checked_at = datetime('now') WHERE id = ?").run(newStatus, id);
       if (isValid && row.platform === 'custom') {
         void this.syncCustomEndpointModels(id);
+      } else if (isValid && row.platform === 'gemini-free') {
+        void this.syncGeminiWebModels(id);
       }
       return { success: isValid, status: newStatus };
     } catch (err: any) {
@@ -292,6 +331,72 @@ export class FreeLLMEngine {
       db.prepare("UPDATE api_keys SET status = ?, last_checked_at = datetime('now') WHERE id = ?").run(newStatus, id);
       return { success: false, status: newStatus, error: err?.message };
     }
+  }
+
+  /**
+   * Automatically registers built-in Google Gemini Free (Web) models into `models`
+   * and appends them to `fallback_config`.
+   */
+  public async syncGeminiWebModels(keyId?: number): Promise<{ synced: number; models: string[] }> {
+    const db = getDb();
+    const keyRow = keyId
+      ? (db.prepare("SELECT * FROM api_keys WHERE id = ? AND platform = 'gemini-free'").get(keyId) as any)
+      : (db.prepare("SELECT * FROM api_keys WHERE platform = 'gemini-free'").get() as any);
+
+    if (!keyRow) {
+      return { synced: 0, models: [] };
+    }
+
+    const modelsToSync = [
+      { id: 'gemini-3.8-flash', name: 'Google Gemini 3.8 Flash', intel: 88, speed: 95, size: 'Medium' },
+      { id: 'gemini-3.5-flash-lite', name: 'Google Gemini 3.5 Flash-Lite', intel: 82, speed: 99, size: 'Small' },
+      { id: 'gemini-4-argon', name: 'Google Gemini 4 Argon', intel: 96, speed: 90, size: 'Large' },
+      { id: 'gemini-4-argon-thinking-high', name: 'Google Gemini 4 Argon (Thinking High)', intel: 98, speed: 80, size: 'Large' },
+      { id: 'gemini-4-argon-thinking-medium', name: 'Google Gemini 4 Argon (Thinking Medium)', intel: 97, speed: 85, size: 'Large' },
+      { id: 'gemini-3.1-pro', name: 'Google Gemini 3.1 Pro', intel: 99, speed: 75, size: 'Large' },
+    ];
+
+    const synced: string[] = [];
+    for (const m of modelsToSync) {
+      const existing = db.prepare('SELECT id, enabled FROM models WHERE platform = ? AND model_id = ?').get('gemini-free', m.id) as any;
+      let modelDbId: number;
+      if (existing) {
+        modelDbId = existing.id;
+        db.prepare(`
+          UPDATE models
+          SET display_name = ?, intelligence_rank = ?, speed_rank = ?, size_label = ?,
+              context_window = 1048576, supports_tools = 1, supports_vision = 1, key_id = ?, enabled = ?
+          WHERE id = ?
+        `).run(m.name, m.intel, m.speed, m.size, keyRow.id, keyRow.enabled, modelDbId);
+      } else {
+        const ins = db.prepare(`
+          INSERT INTO models (
+            platform, model_id, display_name, intelligence_rank, speed_rank,
+            size_label, rpm_limit, rpd_limit, tpm_limit, tpd_limit,
+            context_window, supports_tools, supports_vision, key_id, enabled
+          ) VALUES (
+            'gemini-free', ?, ?, ?, ?,
+            ?, 60, 2000, 1000000, 50000000,
+            1048576, 1, 1, ?, ?
+          )
+        `).run(m.id, m.name, m.intel, m.speed, m.size, keyRow.id, keyRow.enabled);
+        modelDbId = Number(ins.lastInsertRowid);
+      }
+
+      const inFallback = db.prepare('SELECT priority FROM fallback_config WHERE model_db_id = ?').get(modelDbId) as any;
+      if (!inFallback) {
+        const maxPri = db.prepare('SELECT COALESCE(MAX(priority), 0) AS max_p FROM fallback_config').get() as { max_p: number };
+        db.prepare(`
+          INSERT INTO fallback_config (priority, model_db_id, enabled)
+          VALUES (?, ?, ?)
+        `).run(maxPri.max_p + 1, modelDbId, keyRow.enabled);
+      } else {
+        db.prepare('UPDATE fallback_config SET enabled = ? WHERE model_db_id = ?').run(keyRow.enabled, modelDbId);
+      }
+      synced.push(m.id);
+    }
+
+    return { synced: synced.length, models: synced };
   }
 
   /**

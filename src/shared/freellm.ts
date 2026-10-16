@@ -42,6 +42,8 @@ export type Platform =
   // models (FLUX.1-schnell image, CosyVoice2 TTS) routed via services/media.ts;
   // chat is supported too. Key from siliconflow.com (no card).
   | 'siliconflow'
+  // Google Gemini Free (Web / Keyless reverse-engineered client)
+  | 'gemini-free'
   // User-configured OpenAI-compatible endpoint (llama.cpp, LM Studio, vLLM,
   // Ollama, any base_url). The endpoint URL lives on the api_keys row; see #117.
   | 'custom';
